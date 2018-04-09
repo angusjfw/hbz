@@ -1,0 +1,72 @@
+typeset -U path
+path=(~/bin $path[@])
+
+alias slay='~/start-sway'
+alias stway='~/start-sway external'
+alias ksway='pkill -15 sway'
+alias lock='swaylock -c 444444'
+alias chbg='feh --bg-fill "$(find /home/angus/.config/wallpapers/chromecast-bgs | shuf | head -n 1)"'
+
+alias pacin='sudo pacman -S'
+alias pacup='sudo pacman -Syu'
+
+alias xclip='xclip -selection clipboard'
+alias say='echo "$1" | espeak -s 120 2>/dev/null'
+alias sudo='sudo '
+alias vim='nvim'
+alias pls='sudo $(fc -ln -1)'
+alias clr='clear'
+alias ls='ls -a --color'
+alias lls='ls -Alhtr'
+alias lss='ls -lhta'
+alias findls='find . -type l -exec ls -l {} \; | grep'
+alias :q='exit'
+alias pingg='ping 8.8.8.8'
+alias bonsai="tree -I 'tmp|node_modules|bower_components'"
+
+alias gs='git status '
+alias ga='git add '
+alias gb='git branch '
+alias gco='git commit'
+alias gd='git diff'
+alias gch='git checkout '
+alias glog="git log --graph --abbrev-commit --decorate --date=relative --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)' --all"
+alias gk='gitk --all&'
+
+git() {
+    if [[ $1 == "reset" && $2 == "--hard" ]]; then
+        while true; do
+          read '?Are you sure?' answer
+          case $answer in
+            hard* ) command git "$@"; break;;
+            [Nn]* ) break;;
+            * ) echo -e "Type 'hard' to confirm or n.";;
+          esac
+        done
+    else
+        command git "$@"
+    fi
+}
+
+v() {
+  if [[ $@ == "" ]]; then
+    command nvim .;
+  else
+    command nvim "$@";
+  fi
+}
+
+
+post-json() {
+  url=$1; data=$2
+  if [[ -z $url || -z $data ]]; then
+    echo 'usage: post-json <url> <json file or string>'
+    exit 1
+  fi
+
+  if [[ ${data: -5} == ".json" ]]; then
+    curl $url -X POST -H 'Content-Type: application/json' -d @$data
+  else
+    curl $url -X POST -H 'Content-Type: application/json' -d $data
+  fi
+}

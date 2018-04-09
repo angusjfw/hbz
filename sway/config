@@ -1,0 +1,187 @@
+set $mod Mod4
+set $term konsole
+set $menu dmenu_run
+set $browser chromium
+set $file_manger thunar
+
+font pango:FiraSans 10, DejaVu Sans Mono 9
+output * bg ~/.config/wallpapers/darkgrey.png fill
+default_border none
+
+set $ws1 1
+set $ws2 2
+set $ws3 3
+set $ws4 4
+set $ws5 5
+set $ws6 6
+set $ws7 7
+set $ws8 8
+set $ws9 9
+set $ws10 10
+
+# Move window with mod+mouse drag
+floating_modifier $mod
+# Toggle floating with mod+shift+space
+bindsym $mod+Shift+space floating toggle
+# Swap focus between the tiling area and the floating area
+bindsym $mod+space focus mode_toggle
+# move focus to the parent container
+bindsym $mod+a focus parent
+
+# Change layouts with mod+,./
+bindsym $mod+comma layout stacking
+bindsym $mod+period layout tabbed
+bindsym $mod+slash layout toggle split
+
+# Move windows in and out of the scratchpad with mod+(shift)+t
+bindsym $mod+Shift+t move scratchpad
+bindsym $mod+t scratchpad show
+# Change split directions
+bindsym $mod+s splith
+bindsym $mod+v splitv
+# Toggle fullscreen with mod+f
+bindsym $mod+f fullscreen
+
+# change focus with mod+hjkl or mod+arrow
+bindsym $mod+h focus left
+bindsym $mod+j focus down
+bindsym $mod+k focus up
+bindsym $mod+l focus right
+bindsym $mod+Left focus left
+bindsym $mod+Down focus down
+bindsym $mod+Up focus up
+bindsym $mod+Right focus right
+bindsym $mod+g focus next
+bindsym $mod+Shift+g focus prev
+
+bindsym $mod+Mod1+h workspace prev_on_output
+bindsym $mod+Mod1+l workspace next_on_output
+bindsym $mod+Mod1+Left workspace prev_on_output
+bindsym $mod+Mod1+Right workspace next_on_output
+# move focused window with mod+shift+hjkl
+bindsym $mod+Shift+h move left
+bindsym $mod+Shift+j move down
+bindsym $mod+Shift+k move up
+bindsym $mod+Shift+l move right
+bindsym $mod+Shift+Left move left
+bindsym $mod+Shift+Down move down
+bindsym $mod+Shift+Up move up
+bindsym $mod+Shift+Right move right
+# switch to workspace with mod+1234567890
+bindsym $mod+1 workspace $ws1
+bindsym $mod+2 workspace $ws2
+bindsym $mod+3 workspace $ws3
+bindsym $mod+4 workspace $ws4
+bindsym $mod+5 workspace $ws5
+bindsym $mod+6 workspace $ws6
+bindsym $mod+7 workspace $ws7
+bindsym $mod+8 workspace $ws8
+bindsym $mod+9 workspace $ws9
+bindsym $mod+0 workspace $ws10
+
+# move container to workspace with meta+shift+1234567890
+bindsym $mod+Shift+1 move container to workspace $ws1
+bindsym $mod+Shift+2 move container to workspace $ws2
+bindsym $mod+Shift+3 move container to workspace $ws3
+bindsym $mod+Shift+4 move container to workspace $ws4
+bindsym $mod+Shift+5 move container to workspace $ws5
+bindsym $mod+Shift+6 move container to workspace $ws6
+bindsym $mod+Shift+7 move container to workspace $ws7
+bindsym $mod+Shift+8 move container to workspace $ws8
+bindsym $mod+Shift+9 move container to workspace $ws9
+bindsym $mod+Shift+0 move container to workspace $ws10
+
+bindsym $mod+Control+Mod1+h move container to workspace prev_on_output
+bindsym $mod+Control+Mod1+l move container to workspace next_on_output
+bindsym $mod+Control+Mod1+Left move container to workspace prev_on_output
+bindsym $mod+Control+Mod1+Right move container to workspace next_on_output
+
+bindsym $mod+Tab exec aworkspace switch
+bindsym $mod+Shift+Tab exec aworkspace move
+
+# vim-style window splits and resizing after hitting mod+w
+mode "window" {
+    bindsym s split v; mode "default"
+    bindsym v split h; mode "default"
+    bindsym Shift+comma resize shrink width 10 px or 10 ppt
+    bindsym Shift+period resize grow width 10 px or 10 ppt
+    bindsym Shift+equal resize grow height 10 px or 10 ppt
+    bindsym minus resize shrink height 10 px or 10 ppt
+# Leave window mode with return/escape
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+bindsym $mod+w mode "window"
+
+# Kill focused window with mod+shift+q
+bindsym $mod+q kill
+bindsym $mod+Escape exec xkill
+# reload the configuration file
+bindsym $mod+Shift+c reload
+# restart i3 inplace with mod+shift+r
+bindsym $mod+Shift+r restart
+# exit i3 with mod+shift+e
+bindsym $mod+Shift+e exit
+# Run terminal with mod+enter
+bindsym $mod+Return exec konsole -e tmux
+# Run browser with mod+n
+bindsym $mod+n exec $browser
+# File manager with mod+e
+bindsym $mod+e exec $file_manager
+# Screenshots
+bindsym Print exec swaygrab ~/pictures/screenshots/$(date +"%Y-%m-%d_%H:%M:%S.png")
+
+bindsym $mod+Print exec sleep 0.1 && srht
+# dmenu with mod+d for arbituary programs
+bindsym $mod+d exec dmenu_path | dmenu -p "Run:" -l 10 | xargs swaymsg exec
+bindsym $mod+shift+d exec i3-dmenu-desktop
+bindsym $mod+grave exec dmenu | xargs swaymsg
+# passwords
+bindsym $mod+p exec 1password.sh
+
+# volume controls (special keys on keyboard)
+bindsym XF86AudioMute exec pa-adjust mute
+bindsym XF86AudioLowerVolume exec pactl set-sink-volume @DEFAULT_SINK@ -2%
+bindsym XF86AudioRaiseVolume exec pactl set-sink-volume @DEFAULT_SINK@ +2%
+bindsym $mod+XF86AudioLowerVolume exec pa-adjust seekb
+bindsym $mod+XF86AudioRaiseVolume exec pa-adjust seekf
+bindsym $mod+Shift+XF86AudioLowerVolume exec pa-adjust seekbb
+bindsym $mod+Shift+XF86AudioRaiseVolume exec pa-adjust seekff
+# music controls (special keys on keyboard)
+bindsym XF86AudioNext exec stewdio skip
+bindsym XF86AudioPlay exec stewdio play
+bindsym XF86AudioPrev exec stewdio dmenu-search
+bindsym $mod+XF86AudioPlay exec stewdio qfav
+bindsym $mod+XF86AudioNext exec stewdio dmenu-queue
+
+bindsym $mod+Shift+l swaylock -c 444444
+# bindsym XF86Sleep exec swaylock -i `wallpaper` --scaling fill
+# bindsym $mod+XF86Sleep exec swaylock -c 00000000
+# bindsym XF86ScreenSaver exec swaylock -i `wallpaper` --scaling fill
+# bindsym $mod+Pause exec swaylock -i `wallpaper` --scaling fill
+
+set $blue #6699cc
+set $green #99cc99
+set $gray #515151
+set $darkgray #393939
+set $white #f2f0ec
+
+client.focused $darkgray $darkgray $green $darkgray $darkgray
+client.unfocused $darkgray $darkgray $gray $darkgray $darkgray
+client.focused_inactive $darkgray $darkgray $gray $darkgray $darkgray
+
+bar {
+  status_command i3blocks
+  position top
+  pango_markup disabled
+  font pango:Fira Sans 9
+  strip_workspace_numbers yes
+  colors {
+    background $darkgray
+    inactive_workspace $darkgray $darkgray $gray
+    active_workspace $darkgray $darkgray $gray
+    focused_workspace $darkgray $darkgray $green
+  }
+}
+
+include /etc/sway/config.d/*

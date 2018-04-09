@@ -1,0 +1,24 @@
+[Desktop Entry]
+DefaultProfile=hbz.profile
+
+[Favorite Profiles]
+Favorites=
+
+[KonsoleWindow]
+ShowAppNameOnTitleBar=false
+ShowMenuBarByDefault=false
+
+[MainWindow]
+Height 1080=1058
+Height 1200=1179
+Height 1800=883
+Height 2160=1080
+MenuBar=Disabled
+State=AAAA/wAAAAD9AAAAAAAABjwAAANaAAAABAAAAAQAAAAIAAAACPwAAAAA
+ToolBarsMovable=Disabled
+Width 1920=1920
+Width 3200=1600
+Width 3840=1920
+
+[TabBar]
+TabBarVisibility=ShowTabBarWhenNeeded
