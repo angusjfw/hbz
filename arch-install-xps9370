@@ -9,18 +9,15 @@
 # - "System Configuration" > "SATA Operation": "AHCI"
 # - "System Configuration" > "Thunderbolt Adapter Configuration" > "Enable Thunderbolt Adapter Boot Support": "Enabled"
 # - "System Configuration" > "Thunderbolt Adapter Configuration" > "Enable Thunderbolt Adapter Pre-boot Modules": "Enabled"
-# - "System Configuration" > "Miscellaneous Devices" > "Enable Camera": "Disabled"
 # - "Secure Boot" > "Secure Boot Enable": "Disabled"
-
-# Enter boot menu with F12, and boot an Arch live install image
-
+# Enter boot menu with F12 and boot an Arch Linux live install image
 # Set desired keymap
 loadkeys uk
 
 # Set large font
 setfont latarcyrheb-sun32
 
-# Connect to Internet
+# Connect to internet
 wifi-menu
 
 # Sync clock
@@ -38,18 +35,18 @@ mkfs.fat -F32 /dev/nvme0n1pB
 cryptsetup luksFormat /dev/nvme0n1pP
 cryptsetup open /dev/nvme0n1pP luks
 
-# Create LVM partitions for root and /home, no /swap
-# 150GB root, 80% remaining space for /home,
+# Create LVM partitions for /root and /home, no /swap
+# 150GB root, 80% remaining space for home,
 pvcreate /dev/mapper/luks
 vgcreate vg0 /dev/mapper/luks
 lvcreate -L 150G vg0 --name root
 lvcreate -l +80%FREE vg0 --name home  # 80% leaves some space for snapshots
 
+# Format root and home
 mkfs.ext4 /dev/mapper/vg0-root
 mkfs.ext4 /dev/mapper/vg0-home
 
-# Mount the new system
-# /mnt is the system to be installed
+# Mount the new filesystem on /mnt
 mount /dev/mapper/vg0-root /mnt
 
 mkdir /mnt/home
@@ -65,12 +62,13 @@ pacstrap /mnt base zsh vim git sudo make efibootmgr wpa_supplicant dialog iw
 genfstab -L /mnt >> /mnt/etc/fstab
 
 # Verify and adjust /mnt/etc/fstab
-# Change relatime on all non-boot partitions to noatime (reduces wear if using an SSD)
+# Change relatime on all non-boot partitions to noatime (improve SSD performance)
+vim /mnt/etc/pacman.conf
 
 # Enter the new system
 arch-chroot /mnt
 
-# Setup time
+# Set time
 rm /etc/localtime
 ln -s /usr/share/zoneinfo/Europe/London /etc/localtime
 hwclock --systohc
@@ -98,7 +96,20 @@ passwd
 # Add real user
 useradd -m -g users -G wheel -s /bin/zsh <username>
 passwd <username>
-echo '<username> ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/<username>
+echo '<username> ALL=(ALL) ALL' > /etc/sudoers.d/<username>
+
+# Enable additional pacman repositories
+vim /etc/pacman.conf
+# Uncomment multilib repository (Official repo, for 32-bit support):
+#   [multilib]
+#   Include = /etc/packan.d/mirrorlist
+# Add archlinuxfr repository (Unoffical repo, for yaourt)
+#   [archlinuxfr]
+#   SigLevel = Never
+#   Server = http://repo.archlinux.fr/$arch
+
+# enable automatic wifi connection (replace wlp2s0 with interface name)
+systemctl enable netctl-auto@wlp2s0.service
 
 # Configure mkinitcpio with modules needed for the initrd image
 vim /etc/mkinitcpio.conf
@@ -113,16 +124,6 @@ bootctl --path=/boot install
 
 # Enable Intel microcode updates
 pacman -S intel-ucode
-
-# Enable custom repositories
-vim /etc/pacman.conf
-# Uncomment multilib repository:
-#   [multilib]
-#   Include = /etc/pacman.d/mirrorlist
-# Add archlinuxfr repository
-#   [archlinuxfr]
-#   SigLevel = Never
-#   Server = http://repo.archlinux.fr/$arch
 
 # Create bootloader entry
 # Get luks-uuid with: `cryptsetup luksUUID /dev/nvme0n1pP`
