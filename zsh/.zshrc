@@ -49,6 +49,9 @@ export FZF_DEFAULT_OPTS='--color fg+:5,hl+:6'
 export SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
 export DKR_COMPOSE_PREFIX="SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
 
+# npm
+export PATH=$PATH:$HOME/.npm-global/bin
+
 # z - jump around
 source /usr/lib/z.sh
 

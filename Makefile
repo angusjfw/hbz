@@ -26,7 +26,9 @@ tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
 
 node:
-	sudo npm install --global n
+	mkdir ~/.npm-global
+	npm config set prefix '~/.npm-global'
+	npm install --global n
 
 dircolors:
 	mkdir -p ~/.config/dircolors
