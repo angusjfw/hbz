@@ -8,7 +8,7 @@ alias ksway='pkill -15 sway'
 alias lock='swaylock -c 444444'
 
 alias pacin='sudo pacman -S'
-alias pacup='sudo pacman -Syu'
+alias pacup='sudo pacman -Syu && yaourt -Syua'
 
 alias sudo='sudo '
 alias vim='nvim'
