@@ -18,3 +18,6 @@ fonts & more...
 ### Usage
 Install OS following instructions in `arch-install-xps9370`.  
 Install the rest with `make install` or specific `make` targets.
+
+Other suggestions:
+https://chrome.google.com/webstore/detail/material-simple-dark-grey/ookepigabmicjpgfnmncjiplegcacdbm
