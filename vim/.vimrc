@@ -1,25 +1,25 @@
 " Plugins
 call plug#begin()
-Plug 'sheerun/vim-polyglot'
-Plug 'scrooloose/nerdtree'
+Plug 'Shougo/vimproc.vim', {'do' : 'make'}
+Plug 'w0rp/ale'
 Plug 'chriskempson/base16-vim'
+Plug 'scrooloose/nerdtree'
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'mileszs/ack.vim'
 Plug 'junegunn/vim-emoji'
 Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': './install --all' }
 Plug 'junegunn/goyo.vim'
 Plug 'junegunn/rainbow_parentheses.vim'
-Plug 'vim-syntastic/syntastic'
+Plug 'sheerun/vim-polyglot'
 Plug 'pangloss/vim-javascript'
-Plug 'othree/html5.vim'
 Plug 'hail2u/vim-css3-syntax'
-Plug 'mxw/vim-jsx'
-Plug 'JamshedVesuna/vim-markdown-preview'
-Plug 'martinda/Jenkinsfile-vim-syntax'
 Plug 'ap/vim-css-color'
-Plug 'mtscout6/syntastic-local-eslint.vim'
-" Plug 'w0rp/ale'
-" Plug 'valloric/youcompleteme'
+Plug 'mxw/vim-jsx'
+Plug 'martinda/Jenkinsfile-vim-syntax'
+Plug 'JamshedVesuna/vim-markdown-preview'
+Plug 'othree/html5.vim'
+Plug 'Quramy/tsuquyomi'
+Plug 'leafgarland/typescript-vim'
 call plug#end()
 
 " Keybinds
@@ -120,11 +120,8 @@ endif
 
 " Plugin settings
 let vim_markdown_preview_github=1
-let vim_markdown_preview_browser='google-chrome-stable'
+let vim_markdown_preview_browser='chromium'
 let vim_markdown_preview_use_xdg_open=1
-" python
-let g:python3_host_prog='/usr/bin/python3'
-let g:ycm_server_python_interpreter='/usr/bin/python2'
 " NERDTree
 let NERDTreeMapHelp='<f1>'
 nmap <leader>d :NERDTreeToggle<CR>
@@ -134,10 +131,16 @@ let g:NERDTreeWinSize=25
 let NERDTreeIgnore=['\.pyc$']
 let NERDTreeIgnore=['\.swp$']
 let NERDTreeShowHidden=1
-" eslint
-let g:syntastic_javascript_checkers = ['eslint']
-" let g:ale_linters = { 'javascript': ['eslint'] }
+
+" linting
+let g:tsuquyomi_disable_quickfix = 1
+
+" tsuquyomi
+autocmd FileType typescript nmap <buffer> <Leader>t : <C-u>echo tsuquyomi#hint()<CR>
 
 " Theme
 set termguicolors
 colorscheme base16-eighties
+
+" goyo
+let g:goyo_width = 100
