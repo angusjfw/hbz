@@ -1,16 +1,23 @@
-sed -i '/output e\?DP-1/d' $HOME/.config/sway/config
+sed -i '/^output e\?DP-[0-9]/d' $HOME/.config/sway/config
 
-if [[ $1 == 'external' ]]
+if [[ $1 == 'us' ]]
 then
-  echo 'output eDP-1 disable' >> $HOME/.config/sway/config
   export XKB_DEFAULT_LAYOUT=us
 else
   export XKB_DEFAULT_LAYOUT=gb
 fi
 
-if [[ $2 == 'scale' ]]
-then
-  echo "output DP-1 scale $3" >> $HOME/.config/sway/config
+if [[ $2 == 'external' ]]
+ then
+  echo 'output eDP-1 disable' >> $HOME/.config/sway/config
+else
+  echo 'output eDP-1 enable' >> $HOME/.config/sway/config
+fi
+
+if [[ $3 == 'hi' ]]
+ then
+  echo 'output DP-1 scale 1.5' >> $HOME/.config/sway/config
+  echo 'output DP-2 scale 1.5' >> $HOME/.config/sway/config
 fi
 
 export PATH=$PATH:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
@@ -29,5 +36,6 @@ export XDG_DOCUMENTS_DIR="$HOME/documents"
 export XDG_MUSIC_DIR="$HOME/music"
 export XDG_PICTURES_DIR="$HOME/pictures"
 export XDG_VIDEOS_DIR="$HOME/videos"
+export XDG_SESSION_TYPE=wayland
 
 sway 2> ~/sway.log

@@ -2,7 +2,8 @@ typeset -U path
 path=(~/bin $path[@])
 
 alias slay='~/start-sway'
-alias stway='~/start-sway external'
+alias stway='~/start-sway us external'
+alias shway='~/start-sway us external hi'
 alias ksway='pkill -15 sway'
 alias lock='swaylock -c 444444'
 
