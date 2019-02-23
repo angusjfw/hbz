@@ -114,7 +114,7 @@ systemctl enable netctl-auto@wlp2s0.service
 # Configure mkinitcpio with modules needed for the initrd image
 vim /etc/mkinitcpio.conf
 # Add 'ext4 dm_snapshot' to MODULES
-# Change: HOOKS=(base udev systemd autodetect modconf block keyboard sd-vconsole sd-encrypt sd-lvm2 filesystems)
+# Change: HOOKS=(base udev systemd autodetect modconf block keyboard sd-vconsole sd-encrypt sd-lvm2 filesystems usb usbinput)
 
 # Regenerate initrd image
 mkinitcpio -p linux
