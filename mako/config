@@ -1,0 +1,6 @@
+default-timeout=10000
+
+font=FiraSans 10
+background-color=#3F3F3F
+text-color=#DCDCCC
+border-color=#705050

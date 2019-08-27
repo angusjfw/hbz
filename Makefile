@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-install: pkg zsh vim tmux node dircolors fonts sway konsole dunst
+install: pkg zsh vim tmux node dircolors fonts sway konsole mako
 
 pkg:
 	sudo pacman -Syu
@@ -47,9 +47,9 @@ sway:
 	ln -sf ${DIR}/sway/config ~/.config/sway/config
 	ln -sf ${DIR}/sway/start-sway ~/start-sway
 
-dunst:
-	mkdir -p ~/.config/dunst
-	ln -sf ${DIR}/dunst/dunstrc ~/.config/dunst/dunstrc
+mako:
+	mkdir -p ~/.config/mako
+	ln -sf ${DIR}/mako/config ~/.config/mako/config
 
 konsole:
 	mkdir -p ~/.local/share/konsole
