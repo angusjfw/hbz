@@ -2,7 +2,7 @@
 call plug#begin()
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
 Plug 'w0rp/ale'
-Plug 'chriskempson/base16-vim'
+" Plug 'chriskempson/base16-vim'
 Plug 'scrooloose/nerdtree'
 Plug 'christoomey/vim-tmux-navigator'
 Plug 'mileszs/ack.vim'
@@ -140,7 +140,7 @@ autocmd FileType typescript nmap <buffer> <Leader>t : <C-u>echo tsuquyomi#hint()
 
 " Theme
 set termguicolors
-colorscheme base16-eighties
+colorscheme acme-hbz
 
 " goyo
 let g:goyo_width = 100

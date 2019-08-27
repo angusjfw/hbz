@@ -89,6 +89,7 @@ Color=220,220,204
 Color=220,220,204
 
 [General]
+Blur=false
 Description=Dark Pastels
-Opacity=0.85
+Opacity=1
 Wallpaper=

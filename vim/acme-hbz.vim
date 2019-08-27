@@ -22,64 +22,64 @@ let g:colors_name = "acme-hbz"
 " 1 is the lightest value, 3 or 4 are the darkest values
 
 " SHADES OF WHITE
-    let s:W1  = '#FFFFEC'
-    let s:W2  = '#EEEEA7'
-    let s:W3  = '#999957'
-    let s:W4  = '#424242'
+    let s:W1  = '#FFFFEC' " 255,255,236
+    let s:W2  = '#EEEEA7' " 238,238,167
+    let s:W3  = '#999957' " 153, 153, 87
+    let s:W4  = '#424242' " 66, 66, 66
     let s:WC1 = '15'
     let s:WC2 = '08'
     let s:WC3 = '07'
     let s:WC4 = '238'
 
 " SHADES OF RED
-    let s:R1  = '#F8E7E7'
-    let s:R2  = '#F2ACAA'
-    let s:R3  = '#B85C57'
+    let s:R1  = '#F8E7E7' " 224,142,142
+    let s:R2  = '#F2ACAA' " 242, 172, 170
+    let s:R3  = '#B85C57' " 184, 92, 87
     let s:RC1 = '224'
     let s:RC2 = '09'
     let s:RC3 = '01'
 
 " SHADES OF GREEN
-    let s:G1  = '#EFFEEC'
-    let s:G2  = '#98CE8F'
-    let s:G3  = '#57864E'
+    let s:G1  = '#EFFEEC' " 239, 254, 236
+    let s:G2  = '#98CE8F' " 152, 206, 143
+    let s:G3  = '#57864E' " 87, 134, 78
     let s:GC1 = '194'
     let s:GC2 = '10'
     let s:GC3 = '02'
 
 " SHADES OF YELLOW (which is really brown in this context)
-    let s:Y1  = '#EAEBDB'
-    let s:Y2  = '#B7B19C'
-    let s:Y3  = '#8F7634'
+    let s:Y1  = '#EAEBDB' " 234, 235, 219
+    let s:Y2  = '#B7B19C' " 183, 177, 156
+    let s:Y3  = '#8F7634' " 143, 118, 52
     let s:YC1 = '187'
     let s:YC2 = '11'
     let s:YC3 = '03'
 
 " SHADES OF BLUE
-    let s:B1  = '#E2F1F8'
-    let s:B2  = '#A6DCF8'
-    let s:B3  = '#2A8DC5'
+    let s:B1  = '#E2F1F8' " 226, 241, 248
+    let s:B2  = '#A6DCF8' " 166, 220, 248
+    let s:B3  = '#2A8DC5' " 42, 140, 197
     let s:BC1 = '195'
     let s:BC2 = '12'
     let s:BC3 = '04'
 
 " SHADES OF MAGENTA
-    let s:M2  = '#D0D0F7'
-    let s:M3  = '#8888C7'
+    let s:M2  = '#D0D0F7' " 208, 208, 247
+    let s:M3  = '#8888C7' " 136, 136, 199
     let s:MC2 = '13'
     let s:MC3 = '05'
 
 " SHADES OF CYAN
-    let s:C1  = '#EEFEFF'
-    let s:C2  = '#B0ECED'
-    let s:C3  = '#6AA7A8'
+    let s:C1  = '#EEFEFF' " 238, 254, 255
+    let s:C2  = '#B0ECED' " 176, 236, 237
+    let s:C3  = '#6AA7A8' " 106, 167, 168
     let s:CC1 = '195'
     let s:CC2 = '14'
     let s:CC3 = '06'
-
-" ACCENT COLORS
+ 
+ " ACCENT COLORS
     " DEEP BLUE:
-    let s:A1  = '#030093'
+    let s:A1  = '#030093' " 3, 0, 147
     let s:AC1 = '18'
 
 " }}}

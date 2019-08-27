@@ -4,7 +4,7 @@ set $menu dmenu_run
 set $browser chromium
 set $file_manger thunar
 
-font pango:FiraSans 10, DejaVu Sans Mono 9
+font pango:FiraSans 10, DejaVu Sans Mono 10
 output * bg ~/.config/wallpapers/darkgrey.png fill
 default_border none
 
@@ -154,17 +154,21 @@ bindsym XF86AudioPrev exec stewdio dmenu-search
 bindsym $mod+XF86AudioPlay exec stewdio qfav
 bindsym $mod+XF86AudioNext exec stewdio dmenu-queue
 
-bindsym $mod+Shift+l swaylock -c 444444
+# bindsym $mod+Shift+l swaylock -c 444444
 # bindsym XF86Sleep exec swaylock -i `wallpaper` --scaling fill
 # bindsym $mod+XF86Sleep exec swaylock -c 00000000
 # bindsym XF86ScreenSaver exec swaylock -i `wallpaper` --scaling fill
 # bindsym $mod+Pause exec swaylock -i `wallpaper` --scaling fill
 
-set $blue #6699cc
-set $green #99cc99
-set $gray #515151
-set $darkgray #393939
+set $blue #2A8DC5
+set $green #57863E
+# set $green #99cc99
+set $gray #999957
+set $darkgray #424242
 set $white #f2f0ec
+set $black #000000
+
+set $white #FFFFEC
 
 client.focused $darkgray $darkgray $green $darkgray $darkgray
 client.unfocused $darkgray $darkgray $gray $darkgray $darkgray
@@ -177,10 +181,11 @@ bar {
   font pango:Fira Sans 9
   strip_workspace_numbers yes
   colors {
-    background $darkgray
-    inactive_workspace $darkgray $darkgray $gray
-    active_workspace $darkgray $darkgray $gray
-    focused_workspace $darkgray $darkgray $green
+    background $white
+    statusline $black
+    inactive_workspace $white $white $darkgray
+    active_workspace $white $white $darkgray
+    focused_workspace $white $white $green
   }
 }
 

@@ -16,6 +16,9 @@ zsh:
 vim:
 	ln -sf ${DIR}/vim/.vimrc ~/.vimrc
 	mkdir -p ~/.config/nvim
+	ln -s /home/angus/hbz/vim/acme-hbz.vim /home/angus/.config/nvim/colors/acme-hbz.vim
+	mkdir -p ~/.vim/colors
+	ln -s /home/angus/hbz/vim/acme-hbz.vim /home/angus/.vim/colors/acme-hbz.vim
 	ln -sf ${DIR}/vim/.vimrc ~/.config/nvim/.vimrc
 	curl -fLo ~/.vim/autoload/plug.vim --create-dirs \
 	  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
@@ -53,6 +56,8 @@ konsole:
 	ln -sf ${DIR}/konsole/konsolerc ~/.config/konsolerc
 	ln -sf ${DIR}/konsole/DarkPastels.colorscheme \
 	  ~/.local/share/konsole/DarkPastels.colorscheme
+	ln -sf ${DIR}/konsole/AcmeHbz.colorscheme \
+	  ~/.local/share/konsole/AcmeHbz.colorscheme
 	ln -sf ${DIR}/konsole/hbz.profile ~/.local/share/konsole/hbz.profile
 
 wallpapers:
