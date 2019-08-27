@@ -5,7 +5,7 @@ set $browser chromium
 set $file_manger thunar
 
 font pango:FiraSans 10, DejaVu Sans Mono 10
-output * bg ~/.config/wallpapers/darkgrey.png fill
+output * bg ~/.config/wallpapers/white.png fill
 default_border none
 
 set $ws1 1
@@ -162,13 +162,11 @@ bindsym $mod+XF86AudioNext exec stewdio dmenu-queue
 
 set $blue #2A8DC5
 set $green #57863E
-# set $green #99cc99
 set $gray #999957
 set $darkgray #424242
-set $white #f2f0ec
 set $black #000000
-
 set $white #FFFFEC
+set $Y1 #EAEBDB
 
 client.focused $darkgray $darkgray $green $darkgray $darkgray
 client.unfocused $darkgray $darkgray $gray $darkgray $darkgray
@@ -181,11 +179,11 @@ bar {
   font pango:Fira Sans 9
   strip_workspace_numbers yes
   colors {
-    background $white
+    background $Y1
     statusline $black
-    inactive_workspace $white $white $darkgray
-    active_workspace $white $white $darkgray
-    focused_workspace $white $white $green
+    inactive_workspace $Y1 $Y1 $darkgray
+    active_workspace $Y1 $Y1 $darkgray
+    focused_workspace $Y1 $Y1 $green
   }
 }
 

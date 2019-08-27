@@ -63,3 +63,4 @@ konsole:
 wallpapers:
 	mkdir -p ~/.config/wallpapers
 	ln -sf ${DIR}/wallpapers/darkgrey.png ~/.config/wallpapers/darkgrey.png
+	ln -sf ${DIR}/wallpapers/white.png ~/.config/wallpapers/white.png
