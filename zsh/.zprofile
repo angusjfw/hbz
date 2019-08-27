@@ -31,6 +31,25 @@ alias gd='git diff'
 alias gch='git checkout '
 alias glog="git log --graph --abbrev-commit --decorate --date=relative --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)' --all"
 alias gk='gitk --all&'
+alias screenie='grim -g "$(slurp)" $(xdg-user-dir PICTURES)/$(date +"%Y-%m-%d-%H%M%S_screenshot.png")'
+
+chkey() {
+  export XKB_DEFAULT_LAYOUT=$1
+  setxkbmap $1
+}
+
+dison() {
+  swaymsg output $1 enable
+}
+
+disoff() {
+  swaymsg output $1 disable
+}
+
+dissc() {
+  swaymsg output $1 scale $2
+}
+
 
 tmp() {
   nvim $(mktemp /tmp/$1-XXXXXX.$2)

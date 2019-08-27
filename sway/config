@@ -96,8 +96,8 @@ bindsym $mod+Control+Mod1+l move container to workspace next_on_output
 bindsym $mod+Control+Mod1+Left move container to workspace prev_on_output
 bindsym $mod+Control+Mod1+Right move container to workspace next_on_output
 
-bindsym $mod+Tab exec aworkspace switch
-bindsym $mod+Shift+Tab exec aworkspace move
+bindsym $mod+Tab exec workspace switch
+bindsym $mod+Shift+Tab exec workspace move
 
 # vim-style window splits and resizing after hitting mod+w
 mode "window" {
@@ -187,6 +187,20 @@ bar {
     active_workspace $white $white $darkgray
     focused_workspace $white $white $green
   }
+}
+
+workspace $ws1 output DP-1
+workspace $ws2 output DP-2
+workspace $ws3 output eDP-1
+
+input * {
+  xkb_layout us,gb
+  xkb_options ctrl:nocaps
+}
+
+input "1:1:AT_Translated_Set_2_keyboard" {
+  xkb_layout gb
+  xkb_options ctrl:nocaps
 }
 
 include /etc/sway/config.d/*

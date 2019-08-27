@@ -3,6 +3,8 @@ export KEYTIMEOUT=1
 export LC_ALL=en_GB.UTF-8
 export LANG=en_GB.UTF-8
 
+set bell-style none
+
 # pure prompt
 autoload -U promptinit && promptinit
 prompt pure
