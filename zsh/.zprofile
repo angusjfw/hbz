@@ -4,8 +4,9 @@ path=(~/bin $path[@])
 alias slay='~/start-sway'
 alias stway='~/start-sway us external'
 alias shway='~/start-sway us external hi'
-alias ksway='pkill -15 sway'
-alias lock='swaylock -c 444444'
+alias ksway='swaymsg exit || pkill -15 sway'
+alias lock='swaylock -K -c FFFFEC'
+alias freeze='swaylock -K -c FFFFEC60'
 
 alias pacin='sudo pacman -S'
 alias pacup='sudo pacman -Syu && yaourt -Syua'

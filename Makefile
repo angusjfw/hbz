@@ -29,7 +29,7 @@ tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
 
 node:
-	mkdir ~/.npm-global
+	mkdir -p ~/.npm-global
 	npm config set prefix '~/.npm-global'
 	npm install --global n
 
