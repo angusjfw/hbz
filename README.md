@@ -9,7 +9,7 @@ Mostly standard Arch install guide. Disk encryption with `dm-crypt`; separate
 
 ##### 📦 Core software installation
 Official packages installed from `pkglist.txt` which is generated with
-`pacman -Qqetn`; few extras from AUR and `npm`.
+`pacman -Qqen`; few extras from AUR and `npm`.
 
 ##### 🌸 Dotfile symlinking
 Config for `zsh`, `vim`, `tmux`, `sway`, `konsole`, `base16` colours, `fira`
