@@ -202,7 +202,7 @@ exe "hi! Directory"      ." cterm=bold"
 
 " I know I said this colorscheme doesn't do syntax highlighting, I lied.
 
-exe "hi! Comment"     ." cterm=italic"     ." gui=italic"
+exe "hi! Comment"     ." cterm=italic"     ." gui=italic"        ." guifg=".s:G3      ." ctermfg=".s:GC3
 exe "hi! Underlined"  ." cterm=underline"  ." gui=underline"
 exe "hi! Title"       ." cterm=bold"       ." gui=bold"
 
@@ -215,7 +215,7 @@ exe "hi! htmlBold"    ." cterm=bold"
 exe "hi! htmlItalic"  ." cterm=italic"     ." gui=italic"
 
 exe "hi! Ignore"      ." cterm=bold"
-exe "hi! Error"       ." guifg=".s:W1      ." ctermfg=".s:WC1    ." guibg=".s:R3    ." ctermbg=".s:RC3
+exe "hi! Error"       ." guifg=".s:R3      ." ctermfg=".s:RC3
 exe "hi! Todo"        ." guifg=".s:W4      ." ctermfg=".s:WC4    ." guibg=".s:W2    ." ctermbg=".s:WC2
 exe "hi! MatchParen"  ." guifg=".s:W4      ." ctermfg=".s:WC4    ." guibg=".s:W2    ." ctermbg=".s:WC2
 
