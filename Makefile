@@ -27,6 +27,9 @@ nvim:
 	curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
 	  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 
+z:
+	sudo curl -fLo /usr/lib/z.sh --create-dirs https://raw.githubusercontent.com/rupa/z/master/z.sh
+
 tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
 
