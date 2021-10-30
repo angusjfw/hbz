@@ -21,6 +21,8 @@ alias lss='ls -lhta'
 alias findls='find . -type l -exec ls -l {} \; | grep'
 alias bonsai="tree -I 'tmp|node_modules|bower_components'"
 alias xclip='xclip -selection clipboard'
+alias clip='clip.exe'
+alias clipout='powershell.exe Get-Clipboard'
 alias say='echo "$1" | espeak -s 120 2>/dev/null'
 alias pingg='ping 8.8.8.8'
 

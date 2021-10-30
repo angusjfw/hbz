@@ -144,3 +144,12 @@ colorscheme acme-hbz
 
 " goyo
 let g:goyo_width = 100
+
+" couldn't make xserver method work
+if system('uname -r') =~ "microsoft"
+  augroup Yank
+    autocmd!
+    autocmd TextYankPost * :call system('clip.exe ',@")
+  augroup END
+endif
+
