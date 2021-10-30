@@ -3,6 +3,12 @@ export KEYTIMEOUT=1
 export LC_ALL=en_GB.UTF-8
 export LANG=en_GB.UTF-8
 
+# On WSL find Windows IP for local X-server
+# Requires VcXsrc (https://sourceforge.net/projects/vcxsrv/) or alternative
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0
+
+export PATH=$PATH:$HOME/.local/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
+
 set bell-style none
 
 # pure prompt
@@ -21,20 +27,22 @@ setopt extendedhistory
 setopt HIST_IGNORE_SPACE
 setopt HIST_IGNORE_ALL_DUPS
 
-# substring search history (load before highlighting)
+# syntax highlighting - if not installed by package manager
+# source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+# substring search history (load after highlighting)
 source "$HOME/.zsh-history-substring-search.zsh"
 zmodload zsh/terminfo
-bindkey '^[[A' history-substring-search-up
-bindkey '^[[B' history-substring-search-down
+# bindkey '^[[A' history-substring-search-up
+# bindkey '^[[B' history-substring-search-down
+bindkey "$terminfo[kcuu1]" history-substring-search-up
+bindkey "$terminfo[kcud1]" history-substring-search-down
 bindkey -M vicmd 'k' history-substring-search-up
 bindkey -M vicmd 'j' history-substring-search-down
 
 # base16 colours
 BASE16_SHELL=$HOME/.config/base16-shell/
 [ -n "$PS1" ] && [ -s $BASE16_SHELL/profile_helper.sh ] && eval "$($BASE16_SHELL/profile_helper.sh)"
-
-# syntax highlighting
-source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 # ls colors
 eval $(dircolors $HOME/.config/dircolors/config)
