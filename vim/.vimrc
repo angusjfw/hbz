@@ -20,6 +20,8 @@ Plug 'JamshedVesuna/vim-markdown-preview'
 Plug 'othree/html5.vim'
 Plug 'Quramy/tsuquyomi'
 Plug 'leafgarland/typescript-vim'
+Plug 'tpope/vim-fugitive'
+Plug 'APZelos/blamer.nvim'
 call plug#end()
 
 " Keybinds
@@ -28,7 +30,7 @@ map <C-f> :FZF<CR>
 map <C-g> :Goyo<CR>
 map <C-p> :%!python -m json.tool<CR>
 if executable('ag')
-  let g:ackprg = 'ag --vimgrep'
+  let g:ackprg = 'ag --hidden --vimgrep'
 endif
 map <C-s> :Ack!<Space>
 map <C-y> r<C-v>u2713

@@ -12,6 +12,7 @@ export PATH=$PATH:$HOME/.local/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scri
 set bell-style none
 
 # pure prompt
+fpath+=('/home/angus/.npm-global/lib/node_modules/pure-prompt/functions')
 autoload -U promptinit && promptinit
 prompt pure
 
@@ -52,7 +53,7 @@ PS=1"$PS1"'$([ -n "$TMUX" ] && tmux setenv TMUXPWD_$(tmux display -p "#D" | tr -
 
 # fzf
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='ag -g ""'
+export FZF_DEFAULT_COMMAND='ag --hidden --ignore .git -g ""'
 export FZF_DEFAULT_OPTS='--color fg+:5,hl+:6'
 
 # ssh keys
