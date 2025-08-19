@@ -1,5 +1,7 @@
 DIR=$(shell pwd)
 
+.PHONY: install zsh vim tmux node dircolors fonts sway konsole mako
+
 install: pkg zsh vim tmux node dircolors fonts sway konsole mako
 
 pkg:
