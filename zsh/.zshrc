@@ -7,11 +7,12 @@ export LANG=en_GB.UTF-8
 # Requires VcXsrc (https://sourceforge.net/projects/vcxsrv/) or alternative
 export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0
 
-export PATH=$PATH:$HOME/.local/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
+export PATH=$PATH:$HOME/.local/bin/:/home/linuxbrew/.linuxbrew/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
 
 set bell-style none
 
 # pure prompt
+fpath+=("$(brew --prefix)/share/zsh/site-functions")
 fpath+=('/home/angus/.npm-global/lib/node_modules/pure-prompt/functions')
 autoload -U promptinit && promptinit
 prompt pure
@@ -71,3 +72,5 @@ source ~/.zprofile
 if [ -f ~/.zworkprofile ]; then
   source ~/.zworkprofile
 fi
+
+export N_PREFIX="$HOME/n"; [[ :$PATH: == *":$N_PREFIX/bin:"* ]] || PATH+=":$N_PREFIX/bin"  # Added by n-install (see http://git.io/n-install-repo).

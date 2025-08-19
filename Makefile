@@ -13,7 +13,8 @@ zsh:
 	ln -sf ${DIR}/zsh/.zprofile ~/.zprofile
 	ln -sf ${DIR}/zsh/.zsh-history-substring-search.zsh \
 	  ~/.zsh-history-substring-search.zsh
-	yaourt -S --noconfirm zsh-pure-prompt
+	# yaourt -S --noconfirm zsh-pure-prompt
+	brew install pure
 
 vim:
 	mkdir -p ~/.vim/colors
@@ -45,9 +46,10 @@ dircolors:
 	ln -sf ${DIR}/dircolors/config ~/.config/dircolors/config
 
 fonts:
-	yaourt -S --noconfirm ttf-fira-sans
-	yaourt -S --noconfirm ttf-fira-mono
-	yaourt -S --noconfirm ttf-fira-code
+	sudo apt install fonts-firacode
+	# yaourt -S --noconfirm ttf-fira-sans
+	# yaourt -S --noconfirm ttf-fira-mono
+	# yaourt -S --noconfirm ttf-fira-code
 
 sway:
 	mkdir -p ~/.config/sway
