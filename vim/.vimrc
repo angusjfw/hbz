@@ -22,6 +22,7 @@ Plug 'Quramy/tsuquyomi'
 Plug 'leafgarland/typescript-vim'
 Plug 'tpope/vim-fugitive'
 Plug 'APZelos/blamer.nvim'
+Plug 'github/copilot.vim'
 call plug#end()
 
 " Keybinds
