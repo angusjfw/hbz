@@ -31,12 +31,15 @@ setopt HIST_IGNORE_ALL_DUPS
 
 # syntax highlighting - if not installed by package manager
 # source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+source $(brew --prefix)/share/zsh-history-substring-search/zsh-history-substring-search.zsh
 
 # substring search history (load after highlighting)
 source "$HOME/.zsh-history-substring-search.zsh"
 zmodload zsh/terminfo
-# bindkey '^[[A' history-substring-search-up
-# bindkey '^[[B' history-substring-search-down
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+bindkey -M viins '^[[A' history-substring-search-up
+bindkey -M viins '^[[B' history-substring-search-down
 bindkey "$terminfo[kcuu1]" history-substring-search-up
 bindkey "$terminfo[kcud1]" history-substring-search-down
 bindkey -M vicmd 'k' history-substring-search-up
@@ -47,7 +50,7 @@ BASE16_SHELL=$HOME/.config/base16-shell/
 [ -n "$PS1" ] && [ -s $BASE16_SHELL/profile_helper.sh ] && eval "$($BASE16_SHELL/profile_helper.sh)"
 
 # ls colors
-eval $(dircolors $HOME/.config/dircolors/config)
+# eval $(dircolors $HOME/.config/dircolors/config)
 
 # set up TMUXPWD vars for opening new splits in the current directory
 PS=1"$PS1"'$([ -n "$TMUX" ] && tmux setenv TMUXPWD_$(tmux display -p "#D" | tr -d %) "$PWD")'
@@ -65,7 +68,7 @@ export DKR_COMPOSE_PREFIX="SSH_AUTH_SOCK=${SSH_AUTH_SOCK}"
 export PATH=$PATH:$HOME/.npm-global/bin
 
 # z - jump around
-source /usr/lib/z.sh
+source ~/lib/z.sh
 
 source ~/.zprofile
 
@@ -73,4 +76,3 @@ if [ -f ~/.zworkprofile ]; then
   source ~/.zworkprofile
 fi
 
-export N_PREFIX="$HOME/n"; [[ :$PATH: == *":$N_PREFIX/bin:"* ]] || PATH+=":$N_PREFIX/bin"  # Added by n-install (see http://git.io/n-install-repo).
