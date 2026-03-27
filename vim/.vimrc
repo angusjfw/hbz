@@ -23,10 +23,21 @@ Plug 'leafgarland/typescript-vim'
 Plug 'tpope/vim-fugitive'
 Plug 'APZelos/blamer.nvim'
 Plug 'github/copilot.vim'
+Plug 'mhinz/vim-mix-format'
+Plug 'iamcco/markdown-preview.nvim', { 'do': 'cd app && npx --yes yarn install' }
 call plug#end()
+
+" Disable Copilot auto-trigger
+let g:copilot_filetypes = {'*': v:false}
 
 " Keybinds
 let mapleader = ','
+
+" Trigger Copilot manually with Ctrl + Space
+imap <silent> <C-Space> <Plug>(copilot-suggest)
+" Normal mode: press ,c to open the full panel in a vertical split
+nnoremap <leader>c :Copilot panel<CR>
+
 map <C-f> :FZF<CR>
 map <C-g> :Goyo<CR>
 map <C-p> :%!python -m json.tool<CR>
