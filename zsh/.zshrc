@@ -76,3 +76,27 @@ if [ -f ~/.zworkprofile ]; then
   source ~/.zworkprofile
 fi
 
+# ASDF
+export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
+# append completions to fpath
+fpath=(${ASDF_DATA_DIR:-$HOME/.asdf}/completions $fpath)
+# initialise completions with ZSH's compinit
+autoload -Uz compinit && compinit
+
+export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+
+autoload -U +X bashcompinit && bashcompinit
+complete -o nospace -C /opt/homebrew/bin/terraform terraform
+
+source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
+eval "$(direnv hook zsh)"
+
+#if [ -x "$HOME/.nix-profile/bin/direnv" ]; then
+#  eval "$("$HOME/.nix-profile/bin/direnv" hook zsh)"
+#elif command -v direnv >/dev/null 2>&1; then
+#  eval "$(direnv hook zsh)"
+#fi
+
+. "$HOME/.local/bin/env"
+
+if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
