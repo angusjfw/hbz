@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install zsh vim tmux node dircolors fonts sway konsole mako
+.PHONY: install zsh vim tmux node dircolors fonts sway konsole mako ghostty
 
 install: pkg zsh vim tmux node dircolors fonts sway konsole mako
 
@@ -73,3 +73,7 @@ wallpapers:
 	mkdir -p ~/.config/wallpapers
 	ln -sf ${DIR}/wallpapers/darkgrey.png ~/.config/wallpapers/darkgrey.png
 	ln -sf ${DIR}/wallpapers/white.png ~/.config/wallpapers/white.png
+
+ghostty:
+	mkdir -p ~/.config/ghostty
+	ln -sf ${DIR}/ghostty/config ~/.config/ghostty/config
