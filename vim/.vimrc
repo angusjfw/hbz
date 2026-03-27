@@ -47,14 +47,22 @@ endif
 map <C-s> :Ack!<Space>
 map <C-y> r<C-v>u2713
 map <C-n> r<C-v>u2717
+
 map <C-h> <C-w>h
 map <C-j> <C-w>j
 map <C-k> <C-w>k
 map <C-l> <C-w>l
-noremap <Up> <NOP>
-noremap <Down> <NOP>
-noremap <Left> <NOP>
-noremap <Right> <NOP>
+
+" Use nnoremap to ensure these ONLY work in Normal mode
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+
+"noremap <Up> <NOP>
+"noremap <Down> <NOP>
+"noremap <Left> <NOP>
+"noremap <Right> <NOP>
 
 " General
 filetype off
@@ -154,7 +162,7 @@ autocmd FileType typescript nmap <buffer> <Leader>t : <C-u>echo tsuquyomi#hint()
 
 " Theme
 set termguicolors
-colorscheme acme-hbz
+" colorscheme acme-hbz
 
 " goyo
 let g:goyo_width = 100
