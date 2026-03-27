@@ -1,1 +1,9 @@
 zsh/.zworkprofile
+
+# AI tool project-level config (permissions, caches)
+.claude/
+.agents/
+.cursor/
+
+# Implementation plans (working docs, not specs)
+docs/plans/
