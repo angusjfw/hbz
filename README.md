@@ -1,23 +1,18 @@
-## Arch Linux Configuration for Dell XPS 13 9370
-Minimal, keyboard-driven Arch Linux setup with [swaywm](http://swaywm.org/).
+## hbz
+Minimal, AI-enabled, keyboard-driven dev setup.
 
-![screenshot](https://github.com/angusjfw/hbz/raw/master/screenshot-2018-04-16.png)
+##### 🔧 Setup
+Symlinks config files into place via Makefile targets.
+`make install` for Mac, `make arch` for Arch Linux, `make common` otherwise.
+Platform differences handled with conditional sourcing.
 
-##### 🔧 OS installation
-Mostly standard Arch install guide. Disk encryption with `dm-crypt`; separate
-`/home` partition with `lvm`; boot with `sytemd-boot`.
+##### 📦 What's here
+- `zsh/`, `vim/`, `tmux/` — shared across platforms
+- `agents/`, `claude/` — AI tool config, symlinked to `~/.claude/`
+- `ghostty/`, `Brewfile` — Mac
+- `sway/`, `konsole/`, `mako/` — Arch
+- `arch-install-xps9370` — Arch install notes
 
-##### 📦 Core software installation
-Official packages installed from `pkglist.txt` which is generated with
-`pacman -Qqen`; few extras from AUR and `npm`.
-
-##### 🌸 Dotfile symlinking
-Config for `zsh`, `vim`, `tmux`, `sway`, `konsole`, `base16` colours, `fira`
-fonts & more...
-
-### Usage
-Install OS following instructions in `arch-install-xps9370`.  
-Install the rest with `make install` or specific `make` targets.
-
-Other suggestions:
-- https://chrome.google.com/webstore/detail/material-simple-dark-grey/ookepigabmicjpgfnmncjiplegcacdbm
+##### 🌸 Themes
+Acme-inspired light colour scheme across vim, tmux and terminal.
+Fira fonts. Minimal wallpapers.
