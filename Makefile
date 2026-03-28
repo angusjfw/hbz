@@ -1,8 +1,17 @@
 DIR=$(shell pwd)
 
-.PHONY: install zsh vim tmux node dircolors fonts sway konsole mako ghostty ai
+.PHONY: install mac arch common zsh vim nvim tmux ghostty ai brew z dircolors sway konsole mako wallpapers
 
-install: pkg zsh vim tmux node dircolors fonts sway konsole mako
+install: mac
+
+mac: brew common ghostty
+
+arch: pkg common z dircolors sway mako konsole wallpapers
+
+common: zsh vim nvim tmux ai
+
+brew:
+	brew bundle --file=${DIR}/Brewfile
 
 pkg:
 	sudo pacman -Syu
@@ -13,8 +22,6 @@ zsh:
 	ln -sf ${DIR}/zsh/.zprofile ~/.zprofile
 	ln -sf ${DIR}/zsh/.zsh-history-substring-search.zsh \
 	  ~/.zsh-history-substring-search.zsh
-	# yaourt -S --noconfirm zsh-pure-prompt
-	brew install pure
 
 vim:
 	mkdir -p ~/.vim/colors
@@ -31,25 +38,30 @@ nvim:
 	  https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 
 z:
-	sudo curl -fLo /usr/lib/z.sh --create-dirs https://raw.githubusercontent.com/rupa/z/master/z.sh
+	mkdir -p ~/lib
+	curl -fLo ~/lib/z.sh https://raw.githubusercontent.com/rupa/z/master/z.sh
 
 tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
 
-node:
-	mkdir -p ~/.npm-global
-	npm config set prefix '~/.npm-global'
-	npm install --global n
+ghostty:
+	mkdir -p ~/.config/ghostty
+	ln -sf ${DIR}/ghostty/config ~/.config/ghostty/config
+
+ai:
+	mkdir -p ~/.claude/hooks
+	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
+	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
+	ln -sf ${DIR}/claude/hooks/tmux-notify.sh ~/.claude/hooks/tmux-notify.sh
+	curl -fLo ~/.claude/hooks/copy-claude-response \
+	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
+	chmod +x ~/.claude/hooks/copy-claude-response
+
+# --- Arch targets ---
 
 dircolors:
 	mkdir -p ~/.config/dircolors
 	ln -sf ${DIR}/dircolors/config ~/.config/dircolors/config
-
-fonts:
-	sudo apt install fonts-firacode
-	# yaourt -S --noconfirm ttf-fira-sans
-	# yaourt -S --noconfirm ttf-fira-mono
-	# yaourt -S --noconfirm ttf-fira-code
 
 sway:
 	mkdir -p ~/.config/sway
@@ -73,16 +85,3 @@ wallpapers:
 	mkdir -p ~/.config/wallpapers
 	ln -sf ${DIR}/wallpapers/darkgrey.png ~/.config/wallpapers/darkgrey.png
 	ln -sf ${DIR}/wallpapers/white.png ~/.config/wallpapers/white.png
-
-ghostty:
-	mkdir -p ~/.config/ghostty
-	ln -sf ${DIR}/ghostty/config ~/.config/ghostty/config
-
-ai:
-	mkdir -p ~/.claude/hooks
-	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
-	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
-	ln -sf ${DIR}/claude/hooks/tmux-notify.sh ~/.claude/hooks/tmux-notify.sh
-	curl -fLo ~/.claude/hooks/copy-claude-response \
-	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
-	chmod +x ~/.claude/hooks/copy-claude-response
