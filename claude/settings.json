@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/tmux-notify.sh"
+            "command": "~/.claude/hooks/notify.sh 'Claude Code'"
           }
         ]
       }

@@ -58,7 +58,7 @@ ai:
 	mkdir -p ~/.claude/hooks
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
-	ln -sf ${DIR}/claude/hooks/tmux-notify.sh ~/.claude/hooks/tmux-notify.sh
+	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
 	curl -fLo ~/.claude/hooks/copy-claude-response \
 	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
 	chmod +x ~/.claude/hooks/copy-claude-response
