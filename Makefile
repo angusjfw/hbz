@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch common zsh vim nvim tmux ghostty ai brew z dircolors sway konsole mako wallpapers
+.PHONY: install mac arch common zsh vim nvim tmux ghostty ai brew brew-check z dircolors sway konsole mako wallpapers
 
 install: mac
 
@@ -12,6 +12,12 @@ common: zsh vim nvim tmux ai
 
 brew:
 	brew bundle --file=${DIR}/Brewfile
+
+brew-check:
+	@echo "Installed but not in Brewfile:"
+	@brew bundle cleanup --file=${DIR}/Brewfile 2>/dev/null | grep -v "^Would\|^Run\|^$$" || echo "  (none)"
+	@echo "\nIn Brewfile but not installed:"
+	@brew bundle check --file=${DIR}/Brewfile --verbose 2>/dev/null | grep "^→" | sed 's/→ /  /' || echo "  (none)"
 
 pkg:
 	sudo pacman -Syu
