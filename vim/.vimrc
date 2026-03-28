@@ -27,8 +27,9 @@ Plug 'mhinz/vim-mix-format'
 Plug 'iamcco/markdown-preview.nvim', { 'do': 'cd app && npx --yes yarn install' }
 call plug#end()
 
-" Disable Copilot auto-trigger
+" Copilot — manual trigger, pinned node to avoid asdf version conflicts
 let g:copilot_filetypes = {'*': v:false}
+let g:copilot_node_command = expand('~/.asdf/installs/nodejs/24.14.0/bin/node')
 
 " Keybinds
 let mapleader = ','
