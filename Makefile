@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install zsh vim tmux node dircolors fonts sway konsole mako ghostty
+.PHONY: install zsh vim tmux node dircolors fonts sway konsole mako ghostty ai
 
 install: pkg zsh vim tmux node dircolors fonts sway konsole mako
 
@@ -77,3 +77,12 @@ wallpapers:
 ghostty:
 	mkdir -p ~/.config/ghostty
 	ln -sf ${DIR}/ghostty/config ~/.config/ghostty/config
+
+ai:
+	mkdir -p ~/.claude/hooks
+	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
+	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
+	ln -sf ${DIR}/claude/hooks/tmux-notify.sh ~/.claude/hooks/tmux-notify.sh
+	curl -fLo ~/.claude/hooks/copy-claude-response \
+	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
+	chmod +x ~/.claude/hooks/copy-claude-response
