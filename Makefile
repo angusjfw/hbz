@@ -1,10 +1,10 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai brew brew-check git vscode z dircolors sway konsole mako wallpapers
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers
 
 install: mac
 
-mac: brew common ghostty
+mac: brew common ghostty macos-defaults
 
 arch: pkg common z dircolors sway mako konsole wallpapers
 
@@ -80,6 +80,10 @@ ai:
 	curl -fLo ~/.claude/hooks/copy-claude-response \
 	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
 	chmod +x ~/.claude/hooks/copy-claude-response
+
+macos-defaults:
+	defaults write NSGlobalDomain AppleAccentColor -int -1
+	defaults write NSGlobalDomain AppleHighlightColor -string "1.000000 0.937255 0.690196 Yellow"
 
 # --- Arch targets ---
 
