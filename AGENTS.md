@@ -7,6 +7,7 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - Conditional sourcing for platform differences (`uname` checks, overlay files like `.zworkprofile`).
 - Test Makefile targets locally before committing.
 - Writing style: terse, clean. Selective emoji for section headers only.
+- Prefer vendor-neutral references where the tool is interchangeable (e.g. "terminal emulator" not a specific one). Core tools like tmux, vim, zsh are fine to name directly.
 
 ## What's here
 - `zsh/`, `vim/`, `tmux/`, `ghostty/` — core config (shared across platforms)

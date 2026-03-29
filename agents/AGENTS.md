@@ -24,6 +24,12 @@
 - Open nvim for file editing/review: `tmux split-window -h -c "#{pane_current_path}" "nvim +{line} {file}"`
 - To read pane output without re-running: `tmux capture-pane -p -t {pane_id} -S -50`
 
+# Screenshots and visual verification
+- Use screenshots to verify visual changes yourself rather than asking the user. Reach for this whenever the result is visual.
+- Capture frontmost window: `screencapture -x /tmp/screenshot.png`.
+- Capture another app: use osascript to hold focus: `osascript -e 'tell application "App" to activate' -e 'delay 3' -e 'do shell script "screencapture -x /tmp/shot.png"'`
+- After capturing, read the image. If something's wrong, fix it. If you need user input on what you're seeing, open it for them.
+
 # Privacy
 - Don't use personal details (real name, etc.) in memory, docs, or committed content.
 - Never commit secrets, tokens, API keys, or personal paths that leak info.
