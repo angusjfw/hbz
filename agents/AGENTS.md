@@ -12,8 +12,15 @@
 - Conventional commit prefixes: `feat`, `fix`, `docs`, `refactor`, `chore`, etc.
 - Imperative mood, max 72 chars summary, body explains what and why.
 - No AI attribution or co-author lines.
-- Preview diffs before committing. Show the diff, get approval, then commit.
+- Preview diffs before committing. When in tmux, open diffs in a split pane. Get approval, then commit.
 - For partial staging prefer `git-surgeon` (hunk IDs) over `git add -p` or manual patches.
+
+# Terminal tools (tmux)
+- When in tmux, prefer opening tools in panes over showing output inline.
+- Git output in panes must use: `bash -c 'git <cmd> --color=always | less -R'` (keeps pane open with vim-style navigation).
+- Vertical split (`-h`) for tools alongside conversation (diffs, file review). Horizontal split (`-v`) for output-heavy content (test runners).
+- Open nvim for file editing/review: `tmux split-window -h -c "#{pane_current_path}" "nvim +{line} {file}"`
+- To read pane output without re-running: `tmux capture-pane -p -t {pane_id} -S -50`
 
 # Privacy
 - Don't use personal details (real name, etc.) in memory, docs, or committed content.
