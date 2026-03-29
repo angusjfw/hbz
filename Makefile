@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch common zsh vim nvim tmux ghostty ai brew brew-check git z dircolors sway konsole mako wallpapers
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai brew brew-check git vscode z dircolors sway konsole mako wallpapers
 
 install: mac
 
@@ -8,7 +8,11 @@ mac: brew common ghostty
 
 arch: pkg common z dircolors sway mako konsole wallpapers
 
-common: zsh vim nvim tmux ai git
+wsl: common
+	ln -sf ${DIR}/WindowsTerminal/settings.json \
+	  /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
+
+common: zsh vim nvim tmux ai git vscode
 
 brew:
 	brew bundle --file=${DIR}/Brewfile
@@ -50,6 +54,15 @@ z:
 
 git:
 	git config --global include.path ${DIR}/git/.gitconfig
+
+vscode:
+ifeq ($(shell uname),Darwin)
+	mkdir -p ~/Library/Application\ Support/Code/User
+	ln -sf ${DIR}/vscode/settings.json ~/Library/Application\ Support/Code/User/settings.json
+else
+	mkdir -p ~/.config/Code/User
+	ln -sf ${DIR}/vscode/settings.json ~/.config/Code/User/settings.json
+endif
 
 tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
