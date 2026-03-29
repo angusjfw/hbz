@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch common zsh vim nvim tmux ghostty ai brew brew-check z dircolors sway konsole mako wallpapers
+.PHONY: install mac arch common zsh vim nvim tmux ghostty ai brew brew-check git z dircolors sway konsole mako wallpapers
 
 install: mac
 
@@ -8,7 +8,7 @@ mac: brew common ghostty
 
 arch: pkg common z dircolors sway mako konsole wallpapers
 
-common: zsh vim nvim tmux ai
+common: zsh vim nvim tmux ai git
 
 brew:
 	brew bundle --file=${DIR}/Brewfile
@@ -46,6 +46,9 @@ nvim:
 z:
 	mkdir -p ~/lib
 	curl -fLo ~/lib/z.sh https://raw.githubusercontent.com/rupa/z/master/z.sh
+
+git:
+	git config --global include.path ${DIR}/git/.gitconfig
 
 tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf

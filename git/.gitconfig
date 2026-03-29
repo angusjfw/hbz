@@ -1,0 +1,10 @@
+[pull]
+	rebase = true
+[init]
+	defaultBranch = main
+[diff]
+	algorithm = histogram
+[merge]
+	conflictstyle = zdiff3
+[rerere]
+	enabled = true
