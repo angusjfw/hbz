@@ -68,8 +68,9 @@ tmux:
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
 
 ghostty:
-	mkdir -p ~/.config/ghostty
+	mkdir -p ~/.config/ghostty/themes
 	ln -sf ${DIR}/ghostty/config ~/.config/ghostty/config
+	ln -sf ${DIR}/ghostty/acme-hbz ~/.config/ghostty/themes/acme-hbz
 
 ai:
 	mkdir -p ~/.claude/hooks

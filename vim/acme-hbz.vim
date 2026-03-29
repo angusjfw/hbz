@@ -22,7 +22,7 @@ let g:colors_name = "acme-hbz"
 " 1 is the lightest value, 3 or 4 are the darkest values
 
 " SHADES OF WHITE
-    let s:W1  = '#FFFFEC' " 255,255,236
+    let s:W1  = '#FFFFF0' " 255,255,240
     let s:W2  = '#EEEEA7' " 238,238,167
     let s:W3  = '#999957' " 153, 153, 87
     let s:W4  = '#424242' " 66, 66, 66
@@ -185,10 +185,10 @@ hi! link SignColumn LineNr
 " Conceal
 " EndOfBuffer
 
-" DiffAdd
-" DiffChange
-" DiffDelete
-" DiffText
+exe "hi! DiffAdd"     ." guibg=".s:G1    ." ctermbg=".s:GC1
+exe "hi! DiffDelete"  ." guifg=".s:R3    ." ctermfg=".s:RC3    ." guibg=".s:R1    ." ctermbg=".s:RC1
+exe "hi! DiffChange"  ." guibg=".s:Y1    ." ctermbg=".s:YC1
+exe "hi! DiffText"    ." guibg=".s:Y2    ." ctermbg=".s:YC2    ." cterm=bold"     ." gui=bold"
 
 exe "hi! ErrorMsg"       ." cterm=bold"
 exe "hi! ModeMsg"        ." cterm=bold"
@@ -205,6 +205,8 @@ exe "hi! Directory"      ." cterm=bold"
 exe "hi! Comment"     ." cterm=italic"     ." gui=italic"        ." guifg=".s:G3      ." ctermfg=".s:GC3
 exe "hi! Underlined"  ." cterm=underline"  ." gui=underline"
 exe "hi! Title"       ." cterm=bold"       ." gui=bold"
+exe "hi! Statement"   ." cterm=bold"       ." gui=bold"
+exe "hi! String"      ." cterm=italic"     ." gui=italic"
 
 exe "hi! SpellBad"    ." guifg=".s:R3      ." ctermfg=".s:RC3    ." cterm=underline"    ." gui=underline"
 exe "hi! SpellCap"    ." cterm=underline"  ." gui=underline"

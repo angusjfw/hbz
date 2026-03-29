@@ -163,7 +163,7 @@ autocmd FileType typescript nmap <buffer> <Leader>t : <C-u>echo tsuquyomi#hint()
 
 " Theme
 set termguicolors
-" colorscheme acme-hbz
+colorscheme acme-hbz
 
 " goyo
 let g:goyo_width = 100

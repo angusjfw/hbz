@@ -18,6 +18,8 @@
 # Terminal tools (tmux)
 - When in tmux, prefer opening tools in panes over showing output inline.
 - Git output in panes must use: `bash -c 'git <cmd> --color=always | less -R'` (keeps pane open with vim-style navigation).
+- Untracked files: `git diff` shows nothing for new files. Use `git add --intent-to-add <paths>` first, then `git diff`.
+- After opening a pane, verify it has content with `tmux capture-pane -p -t {pane_id} -S -3`.
 - Vertical split (`-h`) for tools alongside conversation (diffs, file review). Horizontal split (`-v`) for output-heavy content (test runners).
 - Open nvim for file editing/review: `tmux split-window -h -c "#{pane_current_path}" "nvim +{line} {file}"`
 - To read pane output without re-running: `tmux capture-pane -p -t {pane_id} -S -50`

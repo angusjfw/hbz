@@ -1,0 +1,55 @@
+# acme-hbz palette
+#
+# Light theme inspired by Acme and Plan 9.
+# Colour as functional UI signal, not decoration.
+# Bold and italic preferred over colour for subtle distinctions.
+#
+# Terminal-first: the terminal emulator defines the ANSI palette,
+# vim and tmux reference it. Vim uses hex for backgrounds
+# (diffs, UI tints) where ANSI slots aren't enough.
+#
+# Font: JetBrains Mono (Ghostty default), 15pt.
+
+# Background and foreground
+bg      #FFFFF0   ivory, tuned from original W1
+fg      #424242   W4, dark grey
+
+# Palette — three shades per hue: light tint, mid, dark/saturated
+#
+# name   light       mid         dark
+white    #FFFFF0     #EEEEA7     #999957      # W1 W2 W3
+grey                             #424242      # W4
+red      #F8E7E7     #F2ACAA     #B85C57      # R1 R2 R3
+green    #EFFEEC     #98CE8F     #57864E      # G1 G2 G3
+yellow   #EAEBDB     #B7B19C     #8F7634      # Y1 Y2 Y3
+blue     #E2F1F8     #A6DCF8     #2A8DC5      # B1 B2 B3
+magenta              #D0D0F7     #8888C7      # M2 M3
+cyan     #EEFEFF     #B0ECED     #6AA7A8      # C1 C2 C3
+accent                           #030093      # A1, deep blue
+
+# ANSI slot mapping
+#
+# slot  name      normal (dark)   bright (light)
+# 0     black     #424242  W4     #999957  W3
+# 1     red       #B85C57  R3     #F2ACAA  R2
+# 2     green     #57864E  G3     #98CE8F  G2
+# 3     yellow    #8F7634  Y3     #B7B19C  Y2
+# 4     blue      #2A8DC5  B3     #A6DCF8  B2
+# 5     magenta   #8888C7  M3     #D0D0F7  M2
+# 6     cyan      #6AA7A8  C3     #B0ECED  C2
+# 7     white     #EAEBDB  Y1     #FFFFF0  W1
+
+# Roles
+#
+# bg/fg            ivory on dark grey
+# chrome           Y1 tint — status bars, gutters, inactive surfaces
+# comments         green (G3), italic
+# keywords         bold, no colour
+# strings          italic, no colour
+# diffs            G1/R1/Y1 background tints
+# errors           red (R3)
+# search/match     W2 background
+# active UI        magenta (M3) — cursor line number, active tab
+# links/info       blue (B3)
+# warnings         yellow (Y3)
+# pane borders     W4 active, colour7 (Y1) inactive
