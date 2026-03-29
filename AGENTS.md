@@ -12,7 +12,6 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `zsh/`, `vim/`, `tmux/`, `ghostty/` — core config (shared across platforms)
 - `agents/` — global AI instructions (symlinked to `~/.claude/CLAUDE.md`)
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
-- `docs/design.md` — working spec for the current overhaul
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.
 
 ## Secrets

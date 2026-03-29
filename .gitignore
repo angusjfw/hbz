@@ -5,5 +5,9 @@ zsh/.zworkprofile
 .agents/
 .cursor/
 
-# Implementation plans (working docs, not specs)
+# Private working docs
+docs/design.md
 docs/plans/
+
+# Work-specific packages
+Brewfile.work

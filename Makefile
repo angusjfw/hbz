@@ -12,6 +12,7 @@ common: zsh vim nvim tmux ai git
 
 brew:
 	brew bundle --file=${DIR}/Brewfile
+	@test -f ${DIR}/Brewfile.work && brew bundle --file=${DIR}/Brewfile.work || true
 
 brew-check:
 	@echo "Installed but not in Brewfile:"
