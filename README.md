@@ -2,18 +2,28 @@
 Multiplatform, AI-enabled, keyboard-driven dev setup.
 
 ##### 🔧 Setup
-Symlinks config files into place via Makefile targets.
-`make install` for Mac, `make arch` for Arch Linux, `make wsl` for WSL, `make common` otherwise.
-Platform differences handled with conditional sourcing.
+Makefile symlinks config into place.
 
-##### 📦 What's here
-- `zsh/`, `vim/`, `tmux/` — shared across platforms
-- `agents/`, `claude/` — AI tool config, symlinked to `~/.claude/`
-- `vscode/` — VS Code settings
-- `ghostty/`, `Brewfile` — Mac
-- `WindowsTerminal/` — WSL
-- `sway/`, `konsole/`, `mako/` — Arch
-- `arch-install-xps9370` — Arch install notes
+`make install` (Mac), `make arch`, `make wsl`, or `make common` for just
+the shared config.
+
+Platform targets run common setup plus extras;
+differences handled with conditional sourcing in shared files.
+
+##### 📦 Common
+`zsh/`, `vim/`, `tmux/`, `git/`, `vscode/` — shared across platforms.
+
+`agents/`, `claude/` — AI tool config, symlinked to `~/.claude/`.
+
+##### 🍏 Mac
+`ghostty/` terminal config. `Brewfile` for packages.
+
+##### 🪟 WSL
+`WindowsTerminal/` settings, auto-detected Windows username.
+
+##### 🐧 Arch
+`sway/`, `konsole/`, `mako/`, `wallpapers/`.
+`arch-install-xps9370` — install notes. `pkglist.txt` for packages.
 
 ##### 🌸 Themes
 Acme-inspired light colour scheme across vim, tmux and terminal.
