@@ -26,5 +26,4 @@ differences handled with conditional sourcing in shared files.
 `arch-install-xps9370` — install notes. `pkglist.txt` for packages.
 
 ##### 🌸 Themes
-Acme-inspired light colour scheme across vim, tmux and terminal.
-Fira fonts. Minimal wallpapers.
+Acme-inspired light colour scheme. See `theme/palette`.
