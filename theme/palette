@@ -41,7 +41,7 @@ accent                           #030093      # A1, deep blue
 
 # Roles
 #
-# bg/fg            ivory on dark grey
+# bg/fg            dark grey on ivory
 # chrome           Y1 tint — status bars, gutters, inactive surfaces
 # comments         green (G3), italic
 # keywords         bold, no colour
