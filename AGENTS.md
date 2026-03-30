@@ -6,6 +6,7 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - Makefile + symlinks for installation. Each tool gets a directory and a make target.
 - Conditional sourcing for platform differences (`uname` checks, overlay files like `.zworkprofile`).
 - Test Makefile targets locally before committing.
+- This is a config repo — changes to dotfiles, themes, and agent instructions are features/fixes, not docs/chores.
 - Writing style: terse, clean. Selective emoji for section headers only.
 - Prefer vendor-neutral references where the tool is interchangeable (e.g. "terminal emulator" not a specific one). Core tools like tmux, vim, zsh are fine to name directly.
 
