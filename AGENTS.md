@@ -16,6 +16,9 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.
 
+## Untracked files
+- `docs/design.md` is gitignored — `git diff` won't show changes. The edit tool's write diff is usually sufficient; otherwise summarise from memory.
+
 ## Secrets
 This is a public repo. Never commit secrets, tokens, API keys, or personal paths that leak info.
 AI tool config that contains secrets must be gitignored.
