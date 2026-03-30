@@ -1,3 +1,7 @@
 theme = acme-hbz
 font-family = JetBrains Mono
 font-size = 15
+macos-titlebar-style = hidden
+
+# TODO: hide split drag handle when supported
+# https://github.com/ghostty-org/ghostty/discussions/10108
