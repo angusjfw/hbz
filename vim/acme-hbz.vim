@@ -152,10 +152,11 @@ exe "hi! Normal"        ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:W1
 exe "hi! Visual"        ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:W2    ." ctermbg=".s:WC2
 exe "hi! NonText"       ." guifg=".s:W3    ." ctermfg=".s:WC3
 exe "hi! StatusLine"    ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:C1    ." ctermbg=".s:CC1    ." cterm=bold,underline"    ." gui=bold,underline"
-exe "hi! StatusLineNC"  ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:C1    ." ctermbg=".s:CC1
+exe "hi! StatusLineNC"  ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:Y1    ." ctermbg=".s:YC1
 exe "hi! LineNr"        ." guifg=".s:W3    ." ctermfg=".s:WC3    ." guibg=".s:Y1    ." ctermbg=".s:WC1    ." cterm=italic"            ." gui=italic"
 exe "hi! CursorLineNr"  ." guifg=".s:W1    ." ctermfg=".s:WC1    ." guibg=".s:M3    ." ctermbg=".s:MC3
 exe "hi! VertSplit"     ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:C1    ." ctermbg=".s:CC1
+exe "hi! WinSeparator"  ." guifg=".s:W4    ." ctermfg=".s:WC4    ." guibg=".s:C1    ." ctermbg=".s:CC1
 exe "hi! Folded"        ." guifg=".s:Y3    ." ctermfg=".s:YC3
 exe "hi! FoldColumn"    ." guifg=".s:Y2    ." ctermfg=".s:YC2    ." guibg=".s:Y1    ." ctermbg=".s:YC1
 exe "hi! TabLineSel"    ." guifg=".s:W1    ." ctermfg=".s:WC1    ." guibg=".s:M3    ." ctermbg=".s:MC3
