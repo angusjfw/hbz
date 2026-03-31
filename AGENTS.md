@@ -12,6 +12,7 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 
 ## What's here
 - `zsh/`, `vim/`, `tmux/`, `ghostty/` — core config (shared across platforms)
+- `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
 - `agents/` — global AI instructions (symlinked to `~/.claude/CLAUDE.md`)
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.

@@ -36,5 +36,8 @@
 - Capture another app: use osascript to hold focus: `osascript -e 'tell application "App" to activate' -e 'delay 3' -e 'do shell script "screencapture -x /tmp/shot.png"'`
 - After capturing, read the image. If something's wrong, fix it. If you need user input on what you're seeing, open it for them.
 
+# Git worktrees
+- Use `wt` (worktrunk) for worktree operations. Consult the worktrunk skill.
+
 # Web search / browsing
 - Use standard web tools (WebFetch, WebSearch) by default. Only use the /browse skill when explicitly requested or when a capability is needed that standard tools don't support (e.g., screenshots, clicking, form interaction, authenticated sessions).

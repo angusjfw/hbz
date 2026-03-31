@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers
 
 install: mac
 
@@ -12,7 +12,7 @@ wsl: common
 	ln -sf ${DIR}/WindowsTerminal/settings.json \
 	  /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
 
-common: zsh vim nvim tmux ai git vscode
+common: zsh vim nvim tmux ai worktrunk git vscode
 
 brew:
 	brew bundle --file=${DIR}/Brewfile
@@ -80,6 +80,10 @@ ai:
 	curl -fLo ~/.claude/hooks/copy-claude-response \
 	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
 	chmod +x ~/.claude/hooks/copy-claude-response
+
+worktrunk:
+	mkdir -p ~/.config/worktrunk
+	ln -sf ${DIR}/worktrunk/config.toml ~/.config/worktrunk/config.toml
 
 macos-defaults:
 	defaults write NSGlobalDomain AppleAccentColor -int -1
