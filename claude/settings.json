@@ -52,5 +52,9 @@
       }
     }
   },
-  "effortLevel": "high"
+  "effortLevel": "high",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  }
 }
