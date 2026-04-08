@@ -11,10 +11,13 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - Prefer vendor-neutral references where the tool is interchangeable (e.g. "terminal emulator" not a specific one). Core tools like tmux, vim, zsh are fine to name directly.
 
 ## What's here
-- `zsh/`, `vim/`, `tmux/`, `ghostty/` — core config (shared across platforms)
-- `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
+- `zsh/`, `vim/`, `tmux/` — core config (shared across platforms)
+- `ghostty/` — terminal emulator (macOS)
 - `agents/` — global AI instructions (symlinked to `~/.claude/CLAUDE.md`)
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
+- `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
+- `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch)
+- `arch/` — Arch/sway install notes, `screenshots/` — repo screenshots
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.
 
 ## Untracked files
