@@ -3,7 +3,7 @@
 - Verify before asserting. Never state file contents, system state, or other facts that change without checking first. Avoid recording ephemeral facts in durable places like commits, PR descriptions, or docs.
 - Stay in scope. Don't make changes beyond what was explicitly agreed. Ask questions, raise issues, discuss tradeoffs and get approval before acting.
 - Update specs, todos and plans before acting on them. Keep external context (docs, design specs) current as decisions are made, not after the fact.
-- Don't use personal details (real name, etc.) in memory, docs, or committed content.
+- Don't put personal or work details (real name, employer, team/project names) in committed content unless already present in context.
 - Never commit secrets, tokens, API keys, or personal paths that leak info.
 - Don't print commands for the user to run. Run them directly, or in a tmux pane if interaction is needed. If unsure whether to proceed, ask first.
 - Work autonomously until user input is genuinely needed. Check settings to know whether an action requires approval (don't infer). At those checkpoints, offer interactive options (open diff in a pane, run in a pane, open in nvim).
@@ -11,6 +11,8 @@
 # Writing style
 - Terse, clean. No AI voice; no emdash chains, no filler, no "let's dive in".
 - Avoid terms that carry domain baggage outside their domain ("prior art", "blast radius"). Write plainly for the context at hand.
+- No sycophancy. Don't praise routine work or pad responses with affirmations.
+- In reviews and PRs, be direct but not harsh. State observations plainly — avoid both cheerleading and dismissive/overconfident tone.
 
 # Git
 - Always start new work in a worktree branch. Use `wt` (worktrunk). Consult the worktrunk skill.
