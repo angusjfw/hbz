@@ -1,5 +1,7 @@
 [pull]
 	rebase = true
+[rebase]
+	forkPoint = false
 [init]
 	defaultBranch = main
 [diff]
