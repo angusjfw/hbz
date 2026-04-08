@@ -1,5 +1,6 @@
 # Rules
-- Verify before asserting. Never state file contents, system state, or outcomes without checking first. Read the file, run the command, then speak.
+- At the start of each session, read any AGENTS.md in the working directory. Those rules take precedence.
+- Verify before asserting. Never state file contents, system state, or other facts that change without checking first. Avoid recording ephemeral facts in durable places like commits, PR descriptions, or docs.
 - Stay in scope. Don't make changes beyond what was explicitly agreed. Ask questions, raise issues, discuss tradeoffs and get approval before acting.
 - Update specs, todos and plans before acting on them. Keep external context (docs, design specs) current as decisions are made, not after the fact.
 - Don't use personal details (real name, etc.) in memory, docs, or committed content.
@@ -20,6 +21,7 @@
 - Review the diff before committing or pushing. If something looks off, fix it first.
 - For partial staging prefer `git-surgeon` (hunk IDs) over `git add -p` or manual patches.
 - Always create PRs as drafts unless explicitly told to open them as ready for review.
+- Don't state test counts in commits or PR descriptions.
 
 # tmux
 - Use tmux panes for showing output and deeper interactivity when the user's input is needed or requested.
