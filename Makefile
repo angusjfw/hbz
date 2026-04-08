@@ -31,8 +31,8 @@ pkg:
 zsh:
 	ln -sf ${DIR}/zsh/.zshrc ~/.zshrc
 	ln -sf ${DIR}/zsh/.zprofile ~/.zprofile
-	ln -sf ${DIR}/zsh/.zsh-history-substring-search.zsh \
-	  ~/.zsh-history-substring-search.zsh
+	curl -fLo ~/.zsh-history-substring-search.zsh \
+	  https://raw.githubusercontent.com/zsh-users/zsh-history-substring-search/master/zsh-history-substring-search.zsh
 
 vim:
 	mkdir -p ~/.vim/colors

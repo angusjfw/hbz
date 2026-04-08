@@ -1,4 +1,5 @@
 zsh/.zworkprofile
+zsh/.zsh-history-substring-search.zsh
 
 # AI tool project-level config (permissions, caches)
 .claude/
