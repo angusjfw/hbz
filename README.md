@@ -16,14 +16,14 @@ differences handled with conditional sourcing in shared files.
 `agents/`, `claude/` — AI tool config, symlinked to `~/.claude/`.
 
 ##### 🍏 Mac
-`ghostty/` terminal config. `Brewfile` for packages.
+`ghostty/` terminal config. `brew/` for packages.
 
 ##### 🪟 WSL
 `WindowsTerminal/` settings, auto-detected Windows username.
 
 ##### 🐧 Arch
 `sway/`, `konsole/`, `mako/`, `wallpapers/`.
-`arch-install-xps9370` — install notes. `pkglist.txt` for packages.
+`arch/` — install notes. `pacman/` for package lists.
 
 ##### 🌸 Themes
 Acme-inspired light colour scheme. See `theme/palette`.

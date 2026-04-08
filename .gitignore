@@ -11,4 +11,4 @@ docs/design.md
 docs/plans/
 
 # Work-specific packages
-Brewfile.work
+brew/Brewfile.work

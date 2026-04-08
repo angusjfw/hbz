@@ -15,18 +15,18 @@ wsl: common
 common: zsh vim nvim tmux ai worktrunk git vscode
 
 brew:
-	brew bundle --file=${DIR}/Brewfile
-	@test -f ${DIR}/Brewfile.work && brew bundle --file=${DIR}/Brewfile.work || true
+	brew bundle --file=${DIR}/brew/Brewfile
+	@test -f ${DIR}/brew/Brewfile.work && brew bundle --file=${DIR}/brew/Brewfile.work || true
 
 brew-check:
 	@echo "Installed but not in Brewfile:"
-	@brew bundle cleanup --file=${DIR}/Brewfile 2>/dev/null | grep -v "^Would\|^Run\|^$$" || echo "  (none)"
+	@brew bundle cleanup --file=${DIR}/brew/Brewfile 2>/dev/null | grep -v "^Would\|^Run\|^$$" || echo "  (none)"
 	@echo "\nIn Brewfile but not installed:"
-	@brew bundle check --file=${DIR}/Brewfile --verbose 2>/dev/null | grep "^→" | sed 's/→ /  /' || echo "  (none)"
+	@brew bundle check --file=${DIR}/brew/Brewfile --verbose 2>/dev/null | grep "^→" | sed 's/→ /  /' || echo "  (none)"
 
 pkg:
 	sudo pacman -Syu
-	sudo pacman -S --needed - < pkglist.txt
+	sudo pacman -S --needed - < pacman/pkglist.txt
 
 zsh:
 	ln -sf ${DIR}/zsh/.zshrc ~/.zshrc
