@@ -12,7 +12,9 @@ export PATH=$PATH:$HOME/.local/bin/:/home/linuxbrew/.linuxbrew/bin/:$HOME/bin/:$
 set bell-style none
 
 # pure prompt
-fpath+=("$(brew --prefix)/share/zsh/site-functions")
+if command -v brew >/dev/null 2>&1; then
+  fpath+=("$(brew --prefix)/share/zsh/site-functions")
+fi
 fpath+=('/home/angus/.npm-global/lib/node_modules/pure-prompt/functions')
 autoload -U promptinit && promptinit
 prompt pure
@@ -31,7 +33,6 @@ setopt HIST_IGNORE_ALL_DUPS
 
 # syntax highlighting - if not installed by package manager
 # source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-source $(brew --prefix)/share/zsh-history-substring-search/zsh-history-substring-search.zsh
 
 # substring search history (load after highlighting)
 source "$HOME/.zsh-history-substring-search.zsh"
@@ -78,25 +79,30 @@ fi
 
 # ASDF
 export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
-# append completions to fpath
 fpath=(${ASDF_DATA_DIR:-$HOME/.asdf}/completions $fpath)
-# initialise completions with ZSH's compinit
 autoload -Uz compinit && compinit
 
-export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+# postgresql (macOS)
+[ -d "/opt/homebrew/opt/postgresql@16/bin" ] && export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
 
 autoload -U +X bashcompinit && bashcompinit
-complete -o nospace -C /opt/homebrew/bin/terraform terraform
+command -v terraform >/dev/null 2>&1 && complete -o nospace -C "$(command -v terraform)" terraform
 
-source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
-eval "$(direnv hook zsh)"
+# zsh-vi-mode
+if command -v brew >/dev/null 2>&1; then
+  source "$(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh"
+fi
 
-#if [ -x "$HOME/.nix-profile/bin/direnv" ]; then
-#  eval "$("$HOME/.nix-profile/bin/direnv" hook zsh)"
-#elif command -v direnv >/dev/null 2>&1; then
-#  eval "$(direnv hook zsh)"
-#fi
+command -v direnv >/dev/null 2>&1 && eval "$(direnv hook zsh)"
 
-. "$HOME/.local/bin/env"
+[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 
 if command -v wt >/dev/null 2>&1; then eval "$(command wt config shell init zsh)"; fi
+
+export PATH="$PATH:$HOME/.claude/local"
+
+[ -f "$HOME/.asdf/asdf.sh" ] && . "$HOME/.asdf/asdf.sh"
+
+export PYENV_ROOT="$HOME/.pyenv"
+command -v pyenv >/dev/null 2>&1 || export PATH="$PYENV_ROOT/bin:$PATH"
+command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init -)"
