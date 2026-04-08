@@ -38,11 +38,8 @@
 - Read pane output with `tmux capture-pane -p -t {pane_id} -S -50` rather than re-running commands.
 - Untracked files: `git diff` shows nothing for new files, use `git add --intent-to-add` first.
 
-# Screenshots and visual verification
-- Use screenshots to verify visual changes yourself rather than asking the user. Reach for this whenever the result is visual.
-- Capture frontmost window: `screencapture -x /tmp/screenshot.png`.
-- Capture another app: use osascript to hold focus: `osascript -e 'tell application "App" to activate' -e 'delay 3' -e 'do shell script "screencapture -x /tmp/shot.png"'`
-- After capturing, read the image. If something's wrong, fix it. If you need user input on what you're seeing, open it for them.
+# Screenshots
+- Use screenshots to verify visual changes. Open the image for the user when their input is needed.
 
 # Web search / browsing
 - Use standard web tools (WebFetch, WebSearch) by default. Only use the /browse skill when explicitly requested or when a capability is needed that standard tools don't support (e.g., screenshots, clicking, form interaction, authenticated sessions).
