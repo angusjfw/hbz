@@ -71,6 +71,10 @@ export PATH=$PATH:$HOME/.npm-global/bin
 # z - jump around
 source ~/lib/z.sh
 
+export PATH=$PATH:/usr/local/go/bin
+export GOPATH=$HOME/go
+export PATH=$PATH:$HOME/go/bin
+
 source ~/.zprofile
 
 if [ -f ~/.zworkprofile ]; then
