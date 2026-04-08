@@ -1,7 +1,25 @@
 " Plugins
 call plug#begin()
 Plug 'Shougo/vimproc.vim', {'do' : 'make'}
+
 Plug 'w0rp/ale'
+
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
+" https://github.com/neoclide/coc.nvim/issues/349
+function! s:disable_coc_for_type()
+  let l:coc_filetypes_enable = [ 'prisma' ]
+  if index(l:coc_filetypes_enable, &filetype) == -1
+    :silent! CocDisable
+  else
+    :silent! CocEnable
+  endif
+endfunction
+augroup CocGroup
+ autocmd!
+ autocmd BufNew,BufEnter,BufAdd,BufCreate * call s:disable_coc_for_type()
+augroup end
+
+Plug 'airblade/vim-gitgutter'
 " Plug 'chriskempson/base16-vim'
 Plug 'scrooloose/nerdtree'
 Plug 'christoomey/vim-tmux-navigator'
@@ -14,16 +32,19 @@ Plug 'sheerun/vim-polyglot'
 Plug 'pangloss/vim-javascript'
 Plug 'hail2u/vim-css3-syntax'
 Plug 'ap/vim-css-color'
-Plug 'mxw/vim-jsx'
+"Plug 'mxw/vim-jsx' weird unindenting bug
 Plug 'martinda/Jenkinsfile-vim-syntax'
 Plug 'JamshedVesuna/vim-markdown-preview'
 Plug 'othree/html5.vim'
 Plug 'Quramy/tsuquyomi'
 Plug 'leafgarland/typescript-vim'
-Plug 'tpope/vim-fugitive'
+" Plug 'tpope/vim-fugitive'
 Plug 'APZelos/blamer.nvim'
 Plug 'mhinz/vim-mix-format'
 Plug 'iamcco/markdown-preview.nvim', { 'do': 'cd app && npx --yes yarn install' }
+Plug 'pantharshit00/vim-prisma'
+" post install (yarn install | npm install) then load plugin only for editing supported files
+Plug 'prettier/vim-prettier', { 'do': 'yarn install --frozen-lockfile --production' }
 call plug#end()
 
 " Keybinds
@@ -31,7 +52,7 @@ let mapleader = ','
 
 map <C-f> :FZF<CR>
 map <C-g> :Goyo<CR>
-map <C-p> :%!python -m json.tool<CR>
+map <C-p> :%!python3 -m json.tool<CR>
 if executable('ag')
   let g:ackprg = 'ag --hidden --vimgrep'
 endif
