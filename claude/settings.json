@@ -1,5 +1,8 @@
 {
-  "model": "opus[1m]",
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -36,7 +39,8 @@
     "linear@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "skills-cleaner@skills-cleaner": true,
-    "worktrunk@worktrunk": true
+    "worktrunk@worktrunk": true,
+    "ralph-loop@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "skills-cleaner": {
@@ -51,10 +55,5 @@
         "repo": "max-sixty/worktrunk"
       }
     }
-  },
-  "effortLevel": "high",
-  "attribution": {
-    "commit": "",
-    "pr": ""
   }
 }
