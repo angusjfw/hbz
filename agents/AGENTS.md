@@ -18,6 +18,7 @@
 - Always start new work in a worktree branch. Use `wt` (worktrunk). Consult the worktrunk skill.
 - Surgical commits. Each one coherent and meaningful. One logical change per commit.
 - Use amends, fixup commits and rebases to keep history legible for reviewers. Update commit messages as necessary. Autosquash fixups directly; open a tmux pane for rebases that need user input.
+- Don't amend or fixup commits from other authors unless explicitly asked.
 - Conventional commit prefixes: `feat`, `fix`, `docs`, `refactor`, `chore`, etc.
 - Imperative mood, max 72 chars summary, body explains what and why.
 - Review the diff before committing or pushing. If something looks off, fix it first.

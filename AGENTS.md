@@ -7,13 +7,14 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - Conditional sourcing for platform differences (`uname` checks, overlay files like `.zworkprofile`).
 - Test Makefile targets locally before committing.
 - This is a config repo — changes to dotfiles, themes, and agent instructions are features/fixes, not docs/chores.
+- Config managed here is symlinked into place. Edit the source files in this repo, not the symlink targets (e.g. edit `agents/AGENTS.md`, not `~/.claude/CLAUDE.md`).
 - Writing style: terse, clean. Selective emoji for section headers only.
 - Prefer vendor-neutral references where the tool is interchangeable (e.g. "terminal emulator" not a specific one). Core tools like tmux, vim, zsh are fine to name directly.
 
 ## What's here
 - `zsh/`, `vim/`, `tmux/` — core config (shared across platforms)
 - `ghostty/` — terminal emulator (macOS)
-- `agents/` — global AI instructions (symlinked to `~/.claude/CLAUDE.md`)
+- `agents/` — global AI agent instructions, symlinked as `~/.claude/CLAUDE.md`
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
 - `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
 - `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch)
