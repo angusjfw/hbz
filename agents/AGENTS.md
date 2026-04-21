@@ -35,6 +35,12 @@
 - Always create PRs as drafts unless explicitly told to open them as ready for review.
 - Don't state test counts in commits or PR descriptions.
 
+# Plans and specs
+- Plans and specs are private working artifacts by default. Default locations: `docs/plans/` and `docs/specs/`, both gitignored. Don't use a skill or tool's default directory.
+- Writing a spec is often worthwhile even for smaller changes — it forces clarity before coding.
+- Never commit plans.
+- Only commit a spec when the change is substantial enough that others need it for reference. Prefer extending an existing doc standard (README section, ADR, module doc) over committing `docs/specs/` files directly.
+
 # tmux
 - Use tmux panes for showing output and deeper interactivity when the user's input is needed or requested.
 - Be aware of the tmux layout and external changes to it when creating, sending to or killing panes (`tmux list-panes -a -F '#{window_index} #{pane_id} #{pane_current_command} #{pane_current_path}'`).
