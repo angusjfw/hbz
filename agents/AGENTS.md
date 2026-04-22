@@ -35,6 +35,8 @@
 - Imperative mood, max 72 chars summary, body explains what and why.
 - Always create PRs as drafts unless explicitly told to open them as ready for review.
 - Don't state test counts in commits or PR descriptions.
+- AI attribution: append `Assisted-by: <agent>:<model-id>` trailer to commits and PR descriptions when AI assisted. Human takes full responsibility for review and correctness.
+- Never add `Co-authored-by:` or `Signed-off-by:` naming the AI.
 
 # Plans and specs
 - Plans and specs are private working artifacts by default. Default locations: `docs/plans/` and `docs/specs/`, both gitignored. Don't use a skill or tool's default directory.
