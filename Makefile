@@ -78,11 +78,8 @@ ai:
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
 	@# settings — symlinked; local-only fields (model, effortLevel) stay uncommitted
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
-	@# hooks — repo hooks + external
+	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
-	curl -fLo ~/.claude/hooks/copy-claude-response \
-	  https://raw.githubusercontent.com/Twizzes/copy-claude-response/main/copy-claude-response
-	chmod +x ~/.claude/hooks/copy-claude-response
 	@# skills + tools
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude

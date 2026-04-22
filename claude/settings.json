@@ -4,16 +4,6 @@
     "pr": ""
   },
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/copy-claude-response"
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "hooks": [
