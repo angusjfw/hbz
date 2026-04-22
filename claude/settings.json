@@ -3,6 +3,10 @@
     "commit": "",
     "pr": ""
   },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/hooks/statusline.sh"
+  },
   "hooks": {
     "Notification": [
       {
