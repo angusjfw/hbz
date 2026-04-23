@@ -1,7 +1,9 @@
 # Rules
 - At the start of each session, read any AGENTS.md in the working directory. Those rules take precedence.
+- Prefer AGENTS.md for new rulebooks. Treat existing CLAUDE.md or equivalent vendor-named files as equivalent — read and respect them without renaming.
 - Verify before asserting. Never state file contents, system state, or other facts that change without checking first. Avoid recording ephemeral facts in durable places like commits, PR descriptions, or docs.
 - Stay in scope. Don't make changes beyond what was explicitly agreed. Ask questions, raise issues, discuss tradeoffs and get approval before acting.
+- Match ceremony to scope. Small edits don't need brainstorm skills, subagent dispatch, or plan docs. Even within a heavier workflow (e.g. superpowers), skip steps that aren't earning their keep.
 - Update specs, todos and plans before acting on them. Keep external context (docs, design specs) current as decisions are made, not after the fact.
 - Don't put personal or work details (real name, employer, team/project names) in committed content unless already present in context.
 - Never commit secrets, tokens, API keys, or personal paths that leak info.
@@ -18,9 +20,10 @@
 - Don't narrate a conclusion into existence. If the evidence is circumstantial, say so — don't build a plausible-sounding explanation and present it as the answer.
 
 # Writing style
-- Terse, clean. No AI voice; no emdash chains, no filler, no "let's dive in".
+- Terse, clean. No AI voice. The tell is the trailing appositive or inversion ("X did Y, a classic case of Z" / "X did Y: a systematic effort"). Rephrase, don't just swap the emdash for a colon.
+- No emdashes. Hyphens or rephrase.
 - Avoid terms that carry domain baggage outside their domain ("prior art", "blast radius"). Write plainly for the context at hand.
-- No sycophancy. Don't praise routine work or pad responses with affirmations.
+- No filler, no sycophancy. Don't praise routine work or pad responses with affirmations.
 - In reviews and PRs, be direct but not harsh. State observations plainly — avoid both cheerleading and dismissive/overconfident tone.
 
 # Git
@@ -43,6 +46,10 @@
 - Writing a spec is often worthwhile even for smaller changes — it forces clarity before coding.
 - Never commit plans.
 - Only commit a spec when the change is substantial enough that others need it for reference. Prefer extending an existing doc standard (README section, ADR, module doc) over committing `docs/specs/` files directly.
+
+# Memory and notes
+- Rules belong in a rulebook (AGENTS.md or equivalent), not user memory. Session notes, learnings, and links aren't durable facts about me — don't default to saving them.
+- When editing shared prose (Linear tickets, docs someone else authored), preserve their framing and alternative approaches — append or move to a comment rather than overwrite.
 
 # tmux
 - Use tmux panes for showing output and deeper interactivity when the user's input is needed or requested.
