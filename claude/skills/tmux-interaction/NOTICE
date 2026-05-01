@@ -1,0 +1,28 @@
+tmux-interaction
+================
+
+This skill borrows from `mitsuhiko/agent-stuff`
+(https://github.com/mitsuhiko/agent-stuff), licensed under the Apache
+License 2.0. See LICENSE-Apache-2.0 in this directory.
+
+Modifications and scope deviations from upstream
+------------------------------------------------
+
+scripts/wait-for-text.sh
+    Vendored unmodified from upstream
+    `skills/tmux/scripts/wait-for-text.sh` (main, fetched 2026-05-01).
+
+skills/tmux/scripts/find-sessions.sh
+    Not vendored. Most of its value is in cross-socket scanning under
+    `CLAUDE_TMUX_SOCKET_DIR`, which doesn't apply here (this setup
+    uses the default tmux server with everything visible to plain
+    `tmux ls`).
+
+SKILL.md
+    Original to this repo. Upstream's SKILL.md is built around an
+    isolated-socket pattern for driving REPLs and debuggers, which
+    this setup explicitly does not adopt (sessions must stay visible
+    to default `tmux ls`). The patterns retained here are the literal
+    send-keys form, control-key notation, and capture-pane polling;
+    the Claude-pane specifics (vim-mode submit, lost-leading-char
+    workaround) are not in upstream.
