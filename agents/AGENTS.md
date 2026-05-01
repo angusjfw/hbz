@@ -20,11 +20,14 @@
 - Don't narrate a conclusion into existence. If the evidence is circumstantial, say so — don't build a plausible-sounding explanation and present it as the answer.
 
 # Writing style
-- Terse, clean. No AI voice. The tell is the trailing appositive or inversion ("X did Y, a classic case of Z" / "X did Y: a systematic effort"). Rephrase, don't just swap the emdash for a colon.
-- No emdashes. Hyphens or rephrase.
+- Terse, clean. Keep final conclusions and messages concise.
+- No filler, sycophancy, or affirmations. Don't praise routine work.
 - Avoid terms that carry domain baggage outside their domain ("prior art", "blast radius"). Write plainly for the context at hand.
-- No filler, no sycophancy. Don't praise routine work or pad responses with affirmations.
-- In reviews and PRs, be direct but not harsh. State observations plainly — avoid both cheerleading and dismissive/overconfident tone.
+
+When writing as me (commits, PRs, reviews, Slack, shared docs):
+- Avoid emdashes. Hyphens or rephrase.
+- No AI voice. The tell is the trailing appositive or inversion ("X did Y, a classic case of Z" / "X did Y: a systematic effort"). Rephrase, don't just swap the emdash for a colon.
+- In reviews and PRs, be direct but not harsh. State observations plainly. Avoid both cheerleading and dismissive/overconfident tone.
 
 # Git
 - Always start new work in a worktree branch. Use `wt` (worktrunk). Consult the worktrunk skill.
@@ -42,27 +45,28 @@
 - Never add `Co-authored-by:` or `Signed-off-by:` naming the AI.
 
 # Plans and specs
-- Plans and specs are private working artifacts by default. Default locations: `docs/plans/` and `docs/specs/`, both gitignored. Don't use a skill or tool's default directory.
-- Writing a spec is often worthwhile even for smaller changes — it forces clarity before coding.
-- Never commit plans.
-- Only commit a spec when the change is substantial enough that others need it for reference. Prefer extending an existing doc standard (README section, ADR, module doc) over committing `docs/specs/` files directly.
+- Default locations: `docs/plans/` and `docs/specs/`; prefer these over a tool-specific directory.
+- Plans are generally private working artifacts. Gitignore `docs/plans/` unless project context handles this differently.
+- Specs are often worth writing even for smaller changes; forces clarity before coding. Commit by default. Gitignore `docs/specs/` (or specific files) when throwaway or sensitive.
+- Prefer extending an existing doc standard (README section, ADR, module doc) over a committed `docs/specs/` file when long-term reference matters.
 
 # Memory and notes
 - Rules belong in a rulebook (AGENTS.md or equivalent), not user memory. Session notes, learnings, and links aren't durable facts about me — don't default to saving them.
 - When editing shared prose (Linear tickets, docs someone else authored), preserve their framing and alternative approaches — append or move to a comment rather than overwrite.
 
 # tmux
-- Use tmux panes for showing output and deeper interactivity when the user's input is needed or requested.
+- Use tmux panes for showing output, running long-running commands (servers, test suites), and any deeper interactivity when the user's input is needed.
 - Be aware of the tmux layout and external changes to it when creating, sending to or killing panes (`tmux list-panes -a -F '#{window_index} #{pane_id} #{pane_current_command} #{pane_current_path}'`).
 - Consider good arrangement, sizing and reuse of the panes. Prefer vertical split for tools alongside conversation, horizontal for output-heavy content.
 - Claude's own pane is `$TMUX_PANE`. Print new pane IDs (`-P -F '#{pane_id}'`)
     to reference internally.
 - Open files for editing/review in nvim. If a vim pane exists, you may open a new tab in it (`tmux send-keys -t {pane_id} Escape ':tabnew +{line} {file}' Enter`); but be aware of trampling the user's session.
-- Open diffs in a tmux pane when reviewing with the user.
+- Open diffs in a tmux pane when reviewing with the user. `git diff` shows nothing for untracked files, so use `git add --intent-to-add` first if those need including.
 - Git output in panes: `bash -c 'git <cmd> --color=always | less -R'` (flags before paths). Don't pipe git output through vim.
-- Run servers, test suites, and other user-facing output in panes, not inline.
-- Read pane output with `tmux capture-pane -p -t {pane_id} -S -50` rather than re-running commands.
-- Untracked files: `git diff` shows nothing for new files, use `git add --intent-to-add` first.
+- Branch review in a pane: stat + commit list + full diff, piped to less -R.
+  `bash -c 'git diff <base>..HEAD --color=always --stat && echo && git log <base>..HEAD --format="%C(yellow)%h%Creset %s" && echo --- && git diff <base>..HEAD --color=always' | less -R`
+- Per-file diff stepping: `git difftool --tool=nvimdiff <base>..HEAD` (`:qa` advances, `:cq` aborts; `-- path` to scope). This opens files in nvim's diff mode and doesn't conflict with the no-vim-pipe rule.
+- Read pane output with `tmux capture-pane -p -J -t {pane_id} -S -50` rather than re-running commands. The `-J` flag joins wrapped lines.
 
 # Screenshots
 - Use screenshots to verify visual changes. Open the image for the user when their input is needed.
