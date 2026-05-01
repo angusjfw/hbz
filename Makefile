@@ -74,13 +74,15 @@ ghostty:
 
 ai:
 	@# instructions
-	mkdir -p ~/.claude/hooks
+	mkdir -p ~/.claude/hooks ~/.claude/skills
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
 	@# settings — symlinked; local-only fields (model, effortLevel) stay uncommitted
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
 	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
-	@# skills + tools
+	@# personal skills (each subdir under claude/skills/ becomes ~/.claude/skills/<name>)
+	for d in ${DIR}/claude/skills/*/; do ln -sfn "$${d%/}" ~/.claude/skills/; done
+	@# external skills + tools
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
 
