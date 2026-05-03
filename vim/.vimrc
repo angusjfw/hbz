@@ -42,6 +42,9 @@ Plug 'leafgarland/typescript-vim'
 Plug 'APZelos/blamer.nvim'
 Plug 'mhinz/vim-mix-format'
 Plug 'iamcco/markdown-preview.nvim', { 'do': 'cd app && npx --yes yarn install' }
+Plug 'nvim-treesitter/nvim-treesitter', { 'do': ':TSUpdate' }
+Plug 'nvim-tree/nvim-web-devicons'
+Plug 'MeanderingProgrammer/render-markdown.nvim'
 Plug 'pantharshit00/vim-prisma'
 " post install (yarn install | npm install) then load plugin only for editing supported files
 Plug 'prettier/vim-prettier', { 'do': 'yarn install --frozen-lockfile --production' }
@@ -153,6 +156,10 @@ else
 endif
 
 " Plugin settings
+lua << EOF
+require('render-markdown').setup({})
+EOF
+
 let vim_markdown_preview_github=1
 let vim_markdown_preview_browser='chromium'
 let vim_markdown_preview_use_xdg_open=1
