@@ -7,7 +7,7 @@ export LANG=en_GB.UTF-8
 # Requires VcXsrc (https://sourceforge.net/projects/vcxsrv/) or alternative
 export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0
 
-export PATH=$PATH:$HOME/.local/bin/:/home/linuxbrew/.linuxbrew/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
+export PATH=/home/linuxbrew/.linuxbrew/bin/:$PATH:$HOME/.local/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
 
 set bell-style none
 
