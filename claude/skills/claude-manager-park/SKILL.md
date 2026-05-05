@@ -57,35 +57,40 @@ id, by manager convention).
      | awk -F: -v s="$src_session" '$1 == s {print; exit}')
    ```
 
-   If empty, scan candidate panes in the worker's tmux session and
-   pick one with a Claude TUI signature (`> ` prompt, `esc to
-   interrupt`, or a spinner). Try the lowest-numbered window's pane 0
-   first (manager convention), then other panes in the same session.
-   Skip the worker's own pane.
+   If empty, scan candidate panes in the worker's tmux session. Use
+   `#{pane_current_command}` to detect Claude panes — the Claude
+   binary exposes its version string as the process name (e.g.
+   `2.1.128`), which matches the worker's own command. Don't rely on
+   scraping pane content for TUI signatures; they change with UI state
+   and won't match when Claude is idle.
 
    ```bash
+   own_cmd=$(tmux display-message -p -t "$TMUX_PANE" '#{pane_current_command}')
    for cand in $(tmux list-panes -s -t "$src_session" \
        -F '#{session_name}:#{window_index}.#{pane_index}' \
        | grep -v "^${src_session}:${src_window}\.${src_pane}$"); do
-     if tmux capture-pane -p -J -t "$cand" -S -20 \
-          | grep -qE '(^> |esc to interrupt)'; then
+     cmd=$(tmux display-message -p -t "$cand" '#{pane_current_command}')
+     if [ "$cmd" = "$own_cmd" ]; then
        mgr_target="$cand"; break
      fi
    done
    ```
 
-   Bail with evidence if nothing matches.
+   If nothing matches, tell the user exactly what you found and stop.
+   Don't silently bail — show the candidate list, the own_cmd you were
+   matching against, and what each pane was running.
 
-3. Sanity-check the chosen pane before sending. Capture and confirm a
-   Claude TUI signature even when the candidate came from the
-   registry — the line may be stale:
+3. Sanity-check the chosen pane before sending, even when the
+   candidate came from the registry (the line may be stale). Check
+   `#{pane_current_command}` matches the worker's own command:
 
    ```bash
-   tmux capture-pane -p -J -t "$mgr_target" -S -10
+   mgr_cmd=$(tmux display-message -p -t "$mgr_target" '#{pane_current_command}')
    ```
 
-   If the capture doesn't look like a Claude TUI, surface it and
-   stop.
+   If it doesn't match, tell the user what you found (pane, command,
+   registry entry) and fall through to the scan. If the scan also
+   fails, stop and surface all evidence — never proceed silently.
 
 4. Send the park request. Submit with `Escape` then a brief sleep
    then `Enter` so it lands in both vim editorMode and non-vim:
@@ -117,11 +122,16 @@ the trigger; this skill carries no registry mutation of its own.
 
 ## Failure modes
 
-- **No manager line and no Claude TUI in the worker's tmux session.**
-  No manager to ask. Surface to the user; either start a manager
-  elsewhere or park manually.
-- **Manager line points at a pane that no longer looks like Claude.**
-  Stale entry. Surface it; fall through to the scan; bail if scan
-  fails too.
-- **Multiple manager lines for the same tmux session.** Pick the
-  first match; document the choice when surfacing evidence.
+Every failure must surface evidence to the user. Never return silently.
+
+- **No manager line and no matching process in the worker's tmux session.**
+  Show the pane list and what command each was running. Tell the user
+  there's no manager to ask and they should either start one or park
+  manually (`tmux new-session -d -s <name>; tmux move-window -s <src> -t <name>`).
+- **Registry line points at a pane running a different command.**
+  Show the stale entry and what the pane is actually running now.
+  Fall through to the process scan. If scan also fails, stop with
+  full evidence.
+- **Multiple manager lines for the same tmux session.**
+  Pick the first match; tell the user which one was chosen and what
+  the others were.
