@@ -45,6 +45,19 @@ When in doubt, spawn a worker. The manager may read worker pane output
 (`tmux capture-pane -p`). It does not send keys or prompts to workers
 unless asked.
 
+## Task list hygiene
+
+The in-conversation task list mirrors the registry. Sync them in the
+same action, never as cleanup later:
+
+- Spawn or import → add a task as `in_progress`.
+- Wrap → mark `completed`, then remove the registry entry.
+- Shutdown → mark `shutdown` and update the description to note it.
+- Status, ticket or notes changes → update the task entry.
+
+If you wrote to the registry and didn't touch the task list, you're
+not done.
+
 ## Terminology
 
 "task" and "session" are interchangeable for an item in the registry.
