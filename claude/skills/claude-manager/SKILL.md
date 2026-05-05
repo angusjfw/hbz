@@ -63,7 +63,7 @@ or its own tmux session) and one or more workers in panes inside it.
    mgr_pane="$(tmux display-message -p -t "$TMUX_PANE" '#S:#I.#P')"
    ```
 
-   Edit the registry under `flock`: drop any prior `manager:` line
+   Edit the registry under a `mkdir` lock (cross-platform; `flock` is Linux-only): drop any prior `manager:` line
    whose value matches `$mgr_pane`, then insert
    `manager: $mgr_pane` in the header block immediately after the
    `# Sessions` heading. Leave other manager lines alone (multiple
@@ -109,9 +109,20 @@ absent means either no tmux container yet, or the session was shutdown
 tmux field; shutdown sessions have `shutdown` + `resumed_session_id`
 but no tmux fields; wrapped sessions are removed entirely (see Wrap).
 
-Reads/writes are full-file. Use `flock` so concurrent managers don't
-clobber each other. Preserve unknown fields, header lines, and stray
-prose on rewrite.
+Reads/writes are full-file. Use a `mkdir` lock for mutual exclusion so
+concurrent managers don't clobber each other (`flock` is Linux-only and
+not available on macOS). Pattern:
+
+```bash
+_reg="$HOME/.local/state/claude-manager/sessions.md"
+_lock="${_reg}.lock"
+while ! mkdir "$_lock" 2>/dev/null; do sleep 0.1; done
+trap "rmdir '$_lock'" EXIT INT TERM
+# ... read, modify, write $_reg ...
+rmdir "$_lock"
+```
+
+Preserve unknown fields, header lines, and stray prose on rewrite.
 
 Example:
 
@@ -282,7 +293,7 @@ Steps:
    on macOS `lsof` does not expose it.
 
 3. **Update the registry entry.** Rewrite the entry in-place (full-file
-   write with `flock`):
+   write under a `mkdir` lock — see Registry section):
    - Add `resumed_session_id: <id>`
    - Add `snapshot: ~/.local/state/claude-manager/snapshots/<session-id>.txt`
    - Add `shutdown: <today>`
