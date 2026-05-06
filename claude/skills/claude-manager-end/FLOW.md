@@ -113,17 +113,28 @@ conversation can be resumed via `claude --resume <id>`.
    done > "$snapshot"
    ```
 
-2. **Resolve `resumed_session_id`.** The worker is itself a Claude
-   session, so the most-recently-modified JSONL under the project's
-   session dir *is* this session — it's being written to right now.
+2. **Resolve `resumed_session_id`.** If the registry entry already has
+   this field, reuse it and skip the rest of this step —
+   `claude --resume <id>` continues writing to the same JSONL, so the
+   id is stable across resume cycles.
+
+   Otherwise, the worker is itself a Claude session, so the
+   most-recently-modified JSONL under the project's session dir *is*
+   this session — it's being written to right now.
 
    ```bash
    cwd="$(pwd)"   # or the entry's worktree if set
-   encoded=$(echo "$cwd" | sed 's|^/||; s|[/_]|-|g')
+   encoded=$(echo "$cwd" | sed 's|[/._]|-|g')
    proj_dir="$HOME/.claude/projects/$encoded"
    jsonl=$(ls -t "$proj_dir"/*.jsonl 2>/dev/null | head -1)
    resumed_session_id="$(basename "${jsonl%.jsonl}")"
    ```
+
+   Encoding: every `/`, `.` and `_` in the absolute cwd is replaced
+   with `-`. Don't strip the leading `/` — it produces a leading `-`
+   on the directory name, which is correct (e.g.
+   `/Users/angus.whitehead/dev/mv/off_the_job` →
+   `-Users-angus-whitehead-dev-mv-off-the-job`).
 
    Fallback if the cwd encoding doesn't match any dir (e.g. cwd is a
    symlink): grep the snapshot for a distinctive phrase and match
