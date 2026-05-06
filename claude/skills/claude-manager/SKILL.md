@@ -57,8 +57,8 @@ this is the formal contract across managers:
 
 - `[active] <session-id>: <ticket or summary>` — live, has a tmux
   container.
-- `[parked] <session-id>: ...` — `tmux_session` set, no
-  `tmux_window`.
+- `[parked] <session-id>: ...` — `tmux_window_id` set with
+  `tmux_session` set (window lives in a standalone tmux session).
 - `[shutdown] <session-id>: ...` — `shutdown` field set, no tmux
   fields.
 - `[wrap requested] <session-id>: ...` — transient; worker has

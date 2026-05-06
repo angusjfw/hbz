@@ -14,10 +14,10 @@ manager can move it back later when asked.
 This is a thin wrapper. The shared lifecycle flow lives at
 `../claude-manager-end/FLOW.md`. Read it and run with `mode=park`.
 
-The worker handles park itself: captures its tmux address, acquires the
-registry lock, performs the `tmux move-window`, rewrites its registry
-entry (`tmux_window` → `tmux_session`), releases the lock, and tells
-the user how to attach. The manager learns about the change through
+The worker handles park itself: captures its tmux address, performs
+the `tmux move-window`, then under the registry lock adds
+`tmux_session` to its entry (the stable `tmux_window_id` doesn't
+change across the move). The manager learns about the change through
 its file watch; no prompt-the-manager step.
 
 After parking, attach with:
