@@ -145,9 +145,14 @@ Recognised header fields:
 Recognised session fields:
 
 - `ticket` — free-form ID or URL
-- `tmux_session` — when the session lives in its own tmux session
-- `tmux_window` — `<tmux-session>:<index>` when it lives as a tmux
-  window in another tmux session, typically the manager's
+- `tmux_window_id` — stable tmux window id (`@N`), assigned at
+  spawn, immune to renumbering and renaming. Use this to find the
+  window's current location: `tmux list-windows -a -F '#{window_id}
+  #{session_name}:#{window_index}'` and match.
+- `tmux_session` — present only when the window lives in a standalone
+  tmux session (i.e. parked). Human-readable hint; can be derived
+  from `tmux_window_id` lookup but kept on the entry so the registry
+  reads cleanly without running tmux.
 - `claude_panes` — comma-separated tmux pane indices where workers
   run; default `0`
 - `worktree`, `branch`, `cwd`
@@ -160,12 +165,18 @@ Recognised session fields:
   manager fulfils the journal-write phase and removes the entry
 - `notes` — string OR a path to a file (typically a journal entry)
 
-Exactly one of `tmux_session` / `tmux_window` is set on a live
-session; both absent means either the session was shutdown
-(`shutdown` + `resumed_session_id` present) or wrap is in progress
-(`wrap_requested: true`). There is no explicit status field; absence
-of tmux fields combined with `shutdown` / `wrap_requested` is the
-signal.
+Lifecycle state is encoded by which fields are present:
+
+- `tmux_window_id` set, no `tmux_session` → active (window lives in
+  the manager's tmux session).
+- `tmux_window_id` set, `tmux_session` set → parked (window lives in
+  a standalone tmux session).
+- No `tmux_window_id`, `shutdown` + `resumed_session_id` set →
+  shutdown.
+- No `tmux_window_id`, `wrap_requested: true` set → wrap in progress
+  (worker has marked, manager hasn't fulfilled).
+
+There is no explicit status field — derived from the field set.
 
 Reads/writes are full-file. Use a `mkdir` lock for mutual exclusion
 (cross-platform; `flock` is Linux-only). Hold the lock only around the
@@ -195,7 +206,9 @@ manager: hbz:1.0
 
 ## eng-1234-payment-bug
 ticket: ENG-1234
+tmux_window_id: @42
 tmux_session: payment-bug
+claude_panes: 0
 worktree: ~/dev/mv/repo-foo/_wt/eng-1234
 branch: fix/eng-1234-payment-bug
 started: 2026-04-29 14:00
@@ -203,15 +216,19 @@ last_touched: 2026-04-29 16:20
 notes: ~/dev/mv/journal/2026-04-29-eng-1234.md
 ```
 
+(Parked; window `@42` lives in tmux session `payment-bug`. An active
+session would have `tmux_window_id` but no `tmux_session`.)
+
 ## Registry as shared channel
 
 The registry is shared state between the manager and its workers. The
 mkdir lock serialises writes from either side.
 
 **Workers may write to their own entry only.** Allowed fields:
-`last_touched`, `notes`, ticket/branch updates, the tmux-location
-swap a self-park performs (`tmux_window` ↔ `tmux_session`), and the
-shutdown/wrap fields (`shutdown`, `resumed_session_id`, `snapshot`,
+`last_touched`, `notes`, ticket/branch updates, adding/removing
+`tmux_session` when self-park moves the window (`tmux_window_id`
+itself never changes — same window before and after the move), and
+the shutdown/wrap fields (`shutdown`, `resumed_session_id`, `snapshot`,
 `wrap_requested`). Workers may also write to their own snapshot file
 under `~/.local/state/claude-manager/snapshots/`.
 
@@ -221,8 +238,7 @@ marker; the manager does the journal write.
 
 **Manager continues to own:** header refresh for itself; the spawn
 flow; journal entries and other knowledge work; reconciling against
-`tmux ls`; window renumbering after a worker shutdown/wrap kills a
-window in the manager's tmux session.
+`tmux ls`; on-demand window renumbering when the user asks for it.
 
 Both manager-initiated lifecycle transitions (driven by user requests
 to the manager directly) and worker-initiated transitions (via the
@@ -288,12 +304,21 @@ net.
    whatever the project rules say.
 3. Default location: a new tmux window in the manager's own tmux
    session, with `cwd` set to the worktree (or repo root). Name the
-   window after the session id (`-n <session-id>`); spawned windows
-   go after the manager's. The manager itself occupies window 1 (or
-   whatever `base-index` makes the first window).
+   window after the session id (`-n <session-id>`) and capture the
+   stable window id:
+
+   ```bash
+   tmux_window_id=$(tmux new-window -d -P -F '#{window_id}' \
+     -n "$session_id" -c "$cwd")
+   ```
+
+   The manager itself occupies window 1 of its tmux session. Spawned
+   windows go after; gappy indices are fine and kept on purpose
+   (renumbering happens on demand only — see Renumber).
 4. Start Claude in pane 0 (the primary worker). Add extra panes per
    the project rulebook; if any runs Claude, append to `claude_panes`.
-5. Add the session to the registry. Add to the visible task list.
+5. Add the session to the registry with `tmux_window_id`. Add to the
+   visible task list (`[active]` prefix).
 6. Tell the user how to switch to it.
 
 All `tmux new-window` and `tmux move-window` invocations include `-d`
@@ -312,25 +337,39 @@ list into a standalone tmux session. Reversible. Same vocabulary on
 both sides; flexible wording allowed ("park", "move out", "drop into
 the background").
 
+The window's `tmux_window_id` is stable across the move — only
+`tmux_session` is added (parked) or removed (unparked) on the entry.
+Look up the window's current location by id, not by `(session,
+index)`:
+
+```bash
+loc=$(tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}' \
+  | awk -v wid="$tmux_window_id" '$1 == wid {print $2}')
+src_session="${loc%%:*}"; src_window="${loc##*:}"
+```
+
 **Mechanics (split out):**
 
 ```bash
-tmux new-session -d -s <session-id> -n placeholder
-tmux move-window -d -s <manager-tmux-session>:<idx> -t <session-id>:0 -k
+tmux new-session -d -s "$session_id" -n placeholder
+tmux move-window -d -s "${src_session}:${src_window}" -t "${session_id}:0" -k
 ```
 
-Update the registry: drop `tmux_window`, add `tmux_session`. Update
-`last_touched`.
+Update the registry: add `tmux_session: $session_id`. Update
+`last_touched`. `tmux_window_id` is unchanged.
 
 **Mechanics (merge back as a window in the manager's tmux session):**
 
 ```bash
-tmux move-window -d -s <session-id>:0 -t <manager-tmux-session>: -k
-tmux kill-session -t <session-id>
+loc=$(tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}' \
+  | awk -v wid="$tmux_window_id" '$1 == wid {print $2}')
+src_session="${loc%%:*}"; src_window="${loc##*:}"
+tmux move-window -d -s "${src_session}:${src_window}" -t "${manager_tmux_session}:" -k
+tmux kill-session -t "$src_session"
 ```
 
-Update the registry symmetrically. Either move stays visible to
-`tmux ls`.
+Update the registry: drop `tmux_session`. `tmux_window_id` is
+unchanged. Either move stays visible to `tmux ls`.
 
 **Trigger paths:**
 
@@ -347,13 +386,16 @@ The end state is identical either way.
 On demand, diff the registry against `tmux ls` and the manager's
 window list:
 
-- Entry with no live tmux container → check for `shutdown` field
-  first. If set, the session was already shutdown — leave it alone.
-  Check for `wrap_requested: true` — if set and the watch missed it,
-  trigger the manager-side wrap-fulfilment now. Otherwise ask:
-  "finished or shutdown?". Finished → run Wrap. Shutdown → run
-  Shutdown.
-- tmux session or window present but not in the registry → ask:
+- Entry with `tmux_window_id` set: look up the id in `tmux
+  list-windows -a -F '#{window_id} #{session_name}:#{window_index}'`.
+  If found, derive active vs parked from session name (manager's
+  tmux session → active; otherwise → parked) and update the entry's
+  `tmux_session` field accordingly. If not found, the window died
+  unexpectedly — surface and ask: finished, shutdown, or unknown?
+- Entry without `tmux_window_id`: check for `shutdown` (leave it
+  alone) or `wrap_requested: true` (trigger manager-side wrap if the
+  watch missed it). Otherwise ask the user.
+- tmux window present but no registry entry matches its id → ask:
   import or ignore. Don't silently take ownership.
 
 Sync the visible task list after reconciling.
@@ -362,14 +404,30 @@ The watch auto-triggers a reconcile pass on any worker write, so
 manual reconcile is mostly only needed for tmux-side drift the watch
 can't see.
 
+## Renumber
+
+On demand only — gappy indices in the manager's tmux session are
+fine and don't break anything (entries identify windows by stable
+`tmux_window_id`, not by index). If the user wants the indices tidy:
+
+```bash
+tmux move-window -r -s "$manager_tmux_session"
+```
+
+No registry updates needed afterwards. Window ids are unchanged.
+
 ## Importing an existing tmux session
 
 1. Confirm the tmux session exists with `tmux ls`.
 2. Ask for a session id and any missing context (ticket, branch,
    worktree, which panes run Claude — default `0`).
-3. Add to the registry with `tmux_session`, `claude_panes`, `started`,
-   `last_touched`. Add to the visible task list.
-4. Hand over the right `switch-client` / `attach` command, or run the
+3. Capture the window id:
+   `tmux display-message -p -t <name>:0 '#{window_id}'`.
+4. Add to the registry with `tmux_window_id`, `tmux_session: <name>`,
+   `claude_panes`, `started`, `last_touched`. Add to the visible task
+   list (`[parked]` prefix since standalone tmux session = parked by
+   convention).
+5. Hand over the right `switch-client` / `attach` command, or run the
    merge-back flow if the user wants it inline.
 
 ## Shutdown
@@ -436,18 +494,20 @@ tmux".
    - Updates `last_touched`.
    - Appends to `notes`: "Tmux killed <date>; resume via
      `claude --resume <id>` from the worktree/cwd."
-   - Removes `tmux_session`, `tmux_window`, `claude_panes`.
+   - Removes `tmux_window_id`, `tmux_session`, `claude_panes`.
 
-4. **Kill the tmux container** (after the lock is released):
-   - `tmux_window`: `tmux kill-window -t <target>`, then renumber
-     the manager's tmux session: `tmux move-window -r -s
-     <manager-tmux-session>`. After renumber, refresh any other
-     registry entries in that tmux session by mapping their
-     session-id (window name) back to the current `window_index` via
-     `tmux list-windows -t <manager-tmux-session> -F '#{window_index}
-     #{window_name}'`.
-   - `tmux_session`: `tmux kill-session -t <name>`. No renumber
-     needed.
+4. **Kill the tmux container** (after the lock is released): look up
+   the window's current location by id, then kill:
+
+   ```bash
+   loc=$(tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}' \
+     | awk -v wid="$tmux_window_id" '$1 == wid {print $2}')
+   tmux kill-window -t "$loc"
+   ```
+
+   If the parent tmux session was a standalone one (parked) and that
+   was its only window, it dies with the window — no extra step.
+   No renumber afterwards; gappy indices are fine.
 
 5. **Update the visible task list:** set the description prefix to
    `[shutdown]` per the Task list hygiene rule.
@@ -459,8 +519,7 @@ tmux".
 - A worker self-shuts via `/claude-manager-shutdown`. The worker does
   steps 1–4 itself (it has direct access to its own JSONL — most
   recently modified is by definition this session). The manager
-  observes the change via the watch, runs the renumber-windows step
-  if applicable, and updates the task list.
+  observes the change via the watch and updates the task list.
 
 **To resume later:** from the worktree (or `cwd`):
 
@@ -489,10 +548,8 @@ wording: "wrap up", "complete", "close out", "finish".
    writing. Otherwise proceed.
 3. Set the visible task list entry to `completed`.
 4. Remove the entry from the registry.
-5. Close the tmux container:
-   - `tmux_window`: `tmux kill-window -t <target>`, then renumber
-     and refresh sibling indices per the Shutdown flow.
-   - `tmux_session`: `tmux kill-session -t <name>`. No renumber.
+5. Kill the tmux container if it's still alive (look up by
+   `tmux_window_id` per the Shutdown flow). No renumber afterwards.
 
 **Trigger paths:**
 
@@ -502,9 +559,9 @@ wording: "wrap up", "complete", "close out", "finish".
   the snapshot, resolves its `resumed_session_id`, gathers any
   context for the journal into `notes`, sets `wrap_requested: true`
   on its registry entry, then kills the tmux container. The watch
-  fires; the manager picks up the marker and runs steps 2–5 (journal
-  write, task-list completion, registry removal, window renumber if
-  applicable).
+  fires; the manager picks up the marker and runs steps 2–4
+  (journal write, task-list completion, registry removal). Step 5
+  (kill) is already done.
 
 If the manager isn't running when a worker wraps, the
 `wrap_requested` marker persists on the entry. The next manager

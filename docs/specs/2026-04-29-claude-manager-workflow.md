@@ -116,6 +116,7 @@ manager: hbz:1.0
 
 ## eng-1234-payment-bug
 ticket: ENG-1234
+tmux_window_id: @42
 tmux_session: payment-bug
 claude_panes: 0
 worktree: ~/dev/mv/repo-foo/_wt/eng-1234
@@ -125,7 +126,7 @@ last_touched: 2026-04-29 16:20
 notes: ~/dev/mv/journal/2026-04-29-eng-1234.md
 
 ## explore-cmux
-tmux_window: hbz:3
+tmux_window_id: @17
 claude_panes: 0
 started: 2026-04-29 11:00
 last_touched: 2026-04-29 11:45
@@ -145,13 +146,16 @@ Recognised header fields:
 Recognised session fields:
 
 - `ticket` — free-form ID or URL
-- `tmux_session` — tmux session name when the session lives in its own
-  tmux session
-- `tmux_window` — `<tmux-session>:<index>` when the session lives as a
-  tmux window inside another tmux session, typically the manager's
+- `tmux_window_id` — stable tmux window id (`@N`), assigned at
+  spawn. Survives renumbering and renaming, so this is the canonical
+  way to find the window's current location:
+  `tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}'`.
+- `tmux_session` — present only when the window lives in a standalone
+  tmux session (parked). Human-readable hint that survives a glance
+  read of the registry without running tmux. Derivable from
+  `tmux_window_id` lookup.
 - `claude_panes` — comma-separated list of tmux pane indices in the
-  session's tmux window where workers (Claude) run. Default `0`. Used
-  by idle-detection queries.
+  session's tmux window where workers (Claude) run. Default `0`.
 - `worktree` — absolute path
 - `branch` — branch name
 - `started`, `last_touched`, `shutdown` — timestamps, format flexible
@@ -167,13 +171,18 @@ Recognised session fields:
 Optionality matters: sessions can exist before any of these are
 decided.
 
-The registry has no explicit status field. Live sessions have a tmux
-field set. Shutdown sessions have `shutdown` + `resumed_session_id`
-and no tmux fields. Wrapped sessions are removed entirely. Wrap in
-progress is signalled by `wrap_requested: true` (the worker has
-written this and killed its tmux container; the manager has not yet
-written the journal entry and removed the registry entry). Recency
-is `last_touched`; current state is whatever tmux says.
+The registry has no explicit status field. Lifecycle state is
+encoded by which fields are present:
+
+- `tmux_window_id` set, no `tmux_session` → active.
+- `tmux_window_id` set, `tmux_session` set → parked.
+- No `tmux_window_id`, `shutdown` + `resumed_session_id` set →
+  shutdown.
+- No `tmux_window_id`, `wrap_requested: true` → wrap in progress
+  (worker has marked, manager hasn't fulfilled).
+
+Wrapped sessions are removed entirely. Recency is `last_touched`;
+current state is whatever tmux says when the id is looked up.
 
 Reads/writes are full-file. The registry is shared between the
 manager and its workers — both sides may write. Mutual exclusion uses
@@ -230,8 +239,8 @@ this is the contract that matters across managers, not the harness's
 own status set:
 
 - `[active] <session-id>: ...` — has a tmux container.
-- `[parked] <session-id>: ...` — `tmux_session` set, no
-  `tmux_window`.
+- `[parked] <session-id>: ...` — `tmux_window_id` set, plus
+  `tmux_session` for human readability.
 - `[shutdown] <session-id>: ...` — `shutdown` field set, no tmux
   fields.
 - `[wrap requested] <session-id>: ...` — transient; worker has
@@ -259,14 +268,17 @@ no UI.
    the timing is hard.
 3. By default, spawn the session as a new tmux window in the manager's
    own tmux session, named after the session id (`-n <session-id>`),
-   with `cwd` set to the worktree (or repo root if none). The manager
-   itself occupies window 1 (or whatever `base-index` makes the first
-   window); spawned tasks go after.
+   with `cwd` set to the worktree (or repo root if none). Capture the
+   stable window id at spawn (`tmux new-window -d -P -F '#{window_id}'`).
+   The manager itself occupies window 1 of its tmux session; spawned
+   tasks go after. Gappy indices are fine — entries identify windows
+   by `tmux_window_id`, not by index, so a wrap or shutdown in the
+   middle leaves a hole that never needs filling.
 4. Start Claude in pane 0 of that tmux window (the primary worker),
    plus any extra panes the project's CLAUDE.md/AGENTS.md describes.
    If any of those extra panes also runs Claude, append its index to
    `claude_panes`.
-5. Add the session to the registry, recording `tmux_window` and
+5. Add the session to the registry, recording `tmux_window_id` and
    `claude_panes`.
 
 All `tmux new-window` and `tmux move-window` invocations include `-d`
@@ -365,8 +377,10 @@ bring it under management, the manager:
 1. Confirms the tmux session exists.
 2. Asks for a session id and any other useful context (ticket, branch,
    worktree, which panes run Claude).
-3. Adds the session to the registry with `tmux_session: <name>` and
-   `claude_panes: <n[,m,...]>`.
+3. Captures the window id
+   (`tmux display-message -p -t <name>:0 '#{window_id}'`) and adds
+   the session to the registry with `tmux_window_id`,
+   `tmux_session: <name>`, and `claude_panes`.
 4. Mirrors into the visible task list.
 5. Hands me the appropriate `switch-client` or `attach` command, or
    re-imports as a tmux window in the manager's tmux session if I'd
@@ -418,14 +432,19 @@ Whether triggered by me asking the manager directly or by a worker's
 3. Set the visible task list entry to `completed`.
 4. Remove the entry from the registry. The journal is the durable
    record from here.
-5. Close the tmux container. For a `tmux_window` in the manager's
-   tmux session: kill the window, then `tmux move-window -r -s
-   <manager-tmux-session>` to renumber. Refresh any other registry
-   entries in that tmux session by mapping their session-id (used as
-   window name) back to the current `window_index` via
-   `tmux list-windows`. For a `tmux_session`: `tmux kill-session -t
-   <name>`; no renumber needed. If the worker already killed the
-   container, only the renumber step is needed.
+5. Kill the tmux container if it's still alive: look up
+   `tmux_window_id` against `tmux list-windows -a` to find its
+   current location, then `tmux kill-window`. If the worker already
+   killed it, this step is a no-op. No renumber afterwards — gappy
+   indices are fine. Renumber on demand only (see below).
+
+### Renumber
+
+On demand only. Gappy indices in the manager's tmux session don't
+matter for the registry — entries identify by `tmux_window_id`. If
+I want indices tidy, I ask the manager and it runs
+`tmux move-window -r -s <manager-tmux-session>`. No registry
+follow-up.
 
 ### Knowledge work
 

@@ -54,7 +54,7 @@ and retry.
 
 All three modes start the same way.
 
-1. Resolve worker location:
+1. Resolve worker location and stable window id:
 
    ```bash
    pane="$TMUX_PANE"
@@ -62,16 +62,15 @@ All three modes start the same way.
    src_window=$(tmux display-message -p -t "$pane" '#I')
    src_pane=$(tmux display-message -p -t "$pane" '#P')
    window_name=$(tmux display-message -p -t "$pane" '#W')
+   my_window_id=$(tmux display-message -p -t "$pane" '#{window_id}')
    ```
 
 2. Read the registry (no lock — reads are full-file, last-write-wins
    is fine for this flow). Find the worker's own session entry by
-   matching its tmux address: `tmux_window` against
-   `<src_session>:<src_window>`, or `tmux_session` against
-   `<src_session>`.
+   matching its `tmux_window_id` against `$my_window_id`.
 
-   If neither matches any entry, surface what was searched for and
-   what the registry actually holds, then stop. Don't guess.
+   If no entry matches, surface what was searched for and what the
+   registry actually holds, then stop. Don't guess.
 
 After the preamble, branch on `mode`.
 
@@ -79,10 +78,12 @@ After the preamble, branch on `mode`.
 
 Move the worker's tmux window into a standalone tmux session.
 
-If `tmux_window` isn't set on the entry (worker is already in a
-standalone tmux session), surface the entry and stop — nothing to park.
+If the entry already has `tmux_session` set (worker is already in a
+standalone tmux session), surface the entry and stop — nothing to
+park.
 
-1. Do the move:
+1. Do the move (`src_session`/`src_window` from the preamble are the
+   worker's current location):
 
    ```bash
    target="${1:-$window_name}"
@@ -93,9 +94,9 @@ standalone tmux session), surface the entry and stop — nothing to park.
 2. Acquire the lock, rewrite the entry, release the lock (see
    Lock pattern). The rewrite:
 
-   - Drops `tmux_window`.
    - Adds `tmux_session: $target`.
    - Updates `last_touched`.
+   - Leaves `tmux_window_id` unchanged (the move doesn't change it).
    - Preserves all other fields and unknown keys.
 
 3. Tell the user `tmux attach -t $target`.
@@ -113,8 +114,7 @@ conversation can be resumed via `claude --resume <id>`.
    worth keeping.
 
    ```bash
-   container="${src_session}:${src_window}"   # tmux_window case
-   # or: container="${src_session}"           # tmux_session case
+   container="${src_session}:${src_window}"
    snapshot="$HOME/.local/state/claude-manager/snapshots/<session-id>.txt"
    mkdir -p "$(dirname "$snapshot")"
    tmux list-panes -t "$container" -F '#{pane_index}' | while read p; do
@@ -166,17 +166,20 @@ conversation can be resumed via `claude --resume <id>`.
    - Updates `last_touched`.
    - Appends a `notes` line: "Shutdown by self <date>; resume via
      `claude --resume <id>` from the worktree/cwd."
-   - Drops `tmux_session`, `tmux_window`, `claude_panes`.
+   - Drops `tmux_window_id`, `tmux_session`, `claude_panes`.
    - Preserves all other fields and prose.
 
 4. **Kill the tmux container.** Only do this after the lock has been
    released and the registry write has landed; this kills the worker's
    own pane, so any remaining work must be done first:
 
-   - `tmux_window` case: `tmux kill-window -t "${src_session}:${src_window}"`.
-     Sibling windows are renumbered by the manager on its next
-     interaction (cosmetic).
-   - `tmux_session` case: `tmux kill-session -t "${src_session}"`.
+   ```bash
+   tmux kill-window -t "${src_session}:${src_window}"
+   ```
+
+   If the worker lived in a standalone tmux session and that was the
+   only window, the session dies with it (tmux's normal behaviour).
+   No renumber afterwards — gappy indices are fine.
 
 To resume later, from the worktree (or `cwd`):
 
@@ -213,18 +216,18 @@ fulfils the journal write.
    - Adds or updates `notes` with the journal context. If `notes` is
      already a path (workers and managers may set it to a journal
      file), append to that file instead of overwriting the field.
-   - Leaves `tmux_session` / `tmux_window` / `claude_panes` in place
-     — the manager cleans those up after the journal write.
+   - Drops `tmux_window_id`, `tmux_session`, `claude_panes` — the
+     window is about to be killed.
 
 5. **Kill the tmux container** as in Shutdown, after the lock has
    been released and the registry write has landed.
 
 **Manager phase** (driven by the watch — no action needed from the
-worker after step 6): the manager's reaction loop sees `wrap_requested:
+worker after step 5): the manager's reaction loop sees `wrap_requested:
 true`, reads the project's journal schema, reviews the snapshot and
 notes, asks the user a focused question if the picture is thin, writes
-the journal entry, removes the registry entry, renumbers sibling
-windows if `tmux_window` was set, and marks the task list completed.
+the journal entry, removes the registry entry, and marks the task
+list completed. No renumber.
 
 If the manager isn't running, the marker persists. The next manager
 invocation picks it up.
