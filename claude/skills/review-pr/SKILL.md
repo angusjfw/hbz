@@ -64,29 +64,37 @@ Colleague review:
 
 The review runs on a local worktree because you'll need to run git
 commands, read surrounding code (not just the diff), and use shell
-tools throughout — without it you're reviewing blind. The PR branch
+tools throughout. Without it you're reviewing blind. The PR branch
 and its base both need to be up to date with the remote before you
-start, so diffs and context are accurate. If setup goes wrong, flag
-it to the user and discuss before proceeding; don't auto-fix.
+start, so diffs and context are accurate.
 
 1. Resolve the PR's head and base branches:
    `gh pr view <N> --repo <owner>/<repo> --json headRefName,baseRefName`.
-2. `wt switch -c <headRefName>` — create-or-switch into a worktree on
-   the PR's branch (worktrunk creates if missing).
-3. `git pull` — sync the PR branch with remote. The branch may have
-   been pushed since the worktree was last touched.
-4. `git fetch origin <baseRefName>` — update the base ref locally so
-   diffs against `origin/<baseRefName>` reflect current main (or
-   whatever the base is). No need to check out the base branch.
+2. `wt switch -c <headRefName>` to create-or-switch into a worktree
+   on the PR's branch (worktrunk creates if missing).
+3. Sync the head branch. Behind, or diverged from a force-pushed
+   remote, are both routine; resync a clean worktree without
+   prompting.
+   - `git fetch origin <headRefName>`.
+   - If local is behind origin: `git pull --ff-only`.
+   - If local has diverged but the worktree is clean and the only
+     local-only commits are an earlier remote tip (typical
+     force-push case): `git reset --hard origin/<headRefName>`.
+4. `git fetch origin <baseRefName>` so diffs against
+   `origin/<baseRefName>` reflect current base. No need to check
+   out the base branch.
 5. Verify:
    - `git rev-parse --abbrev-ref HEAD` matches `<headRefName>`.
    - The local branch's tip matches `origin/<headRefName>`.
    - `origin/<baseRefName>` has been updated by step 4.
 
-If any step fails or any verification doesn't match, stop and tell
-the user what's off (uncommitted changes blocking pull, branch
-mismatch, fetch failure, network, etc.). Discuss before proceeding.
-Don't auto-fix setup; the user decides what to do.
+Stop and surface to the user when judgement is needed:
+- Uncommitted changes a sync would discard.
+- Local commits that aren't on the remote (real unpushed work, not
+  a force-push artifact).
+- Branch mismatch after `wt switch`.
+- Network or auth failure on fetch or pull.
+- Verification still doesn't match after sync.
 
 ## Layered walkthrough
 
