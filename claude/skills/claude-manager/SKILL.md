@@ -7,9 +7,7 @@ description: Use when the user types /claude-manager, or when running a Claude c
 
 Coordinator role for a Claude conversation running inside tmux. Tracks a
 registry of sessions, spawns workers on request, owns the project's
-recordkeeping (journal, wiki, harness notes). Full design at
-`docs/specs/2026-04-29-claude-manager-workflow.md`; this file is the
-operational guide.
+recordkeeping (journal, wiki, harness notes).
 
 ## Hard boundary: meta work only
 
@@ -26,9 +24,9 @@ In scope:
   manager-initiated operations.
 - tmux operations on session containers (spawn, move, kill, list,
   capture).
-- **Journal, wiki and harness-note updates per the project's schemas.
-  Workers rarely do these; the manager must.** This includes the
-  journal entry triggered by a worker's `wrap_requested` marker.
+- **Journal, wiki and harness-note updates per the project's schemas.**
+  Includes the journal entry triggered by a worker's `wrap_requested`
+  marker.
 - Conversation-level planning and routing: deciding what worker to
   spawn and what context it needs.
 - Trivial meta updates explicitly requested (one-line ticket/todo,
@@ -415,14 +413,6 @@ window list:
   not per-window deaths. Surface aggregately and confirm before
   changing any state.
 
-- Entry without `tmux_window_id` but with the legacy `tmux_window:
-  <session>:<index>` field — schema-migration artifact from before
-  this branch. Look up `<session>:<index>` in the live tmux state;
-  if it's a Claude pane and matches the entry's worktree, capture
-  its `#{window_id}` and migrate the entry by replacing
-  `tmux_window` with `tmux_window_id`. If it doesn't match, ask the
-  user.
-
 - Entry without `tmux_window_id`: check for `shutdown` (leave it
   alone) or `wrap_requested: true` (trigger manager-side wrap if the
   watch missed it). Otherwise ask the user.
@@ -614,9 +604,7 @@ invocation sees it during reconcile and processes it.
 
 ## Knowledge work
 
-The manager owns the project's recordkeeping. Workers rarely show
-interest in journal/wiki/harness updates, so the manager doing it is
-how it actually gets done.
+The manager owns the project's recordkeeping.
 
 When the project rulebook (already in Claude's context on startup)
 points to a journal, wiki, investigations dir or similar, write into
