@@ -222,13 +222,25 @@ persists. The next manager invocation processes it during reconcile.
 ## Visible task list
 
 The registry file is canonical. The manager additionally mirrors live
-sessions into Claude's in-conversation task list
-(`TaskCreate`/`TaskUpdate`) so I can see them at a glance in the UI.
+sessions into Claude's in-conversation task list (TaskCreate /
+TaskUpdate in Claude Code) so I can see them at a glance in the UI.
 
-Status mapping is simple: every registry entry is `in_progress`. When
-a session is wrapped, the manager sets its task list entry to
-`completed` (so I see the check) and then removes it from the
-registry.
+Conceptual state lives in the task description as a formal prefix —
+this is the contract that matters across managers, not the harness's
+own status set:
+
+- `[active] <session-id>: ...` — has a tmux container.
+- `[parked] <session-id>: ...` — `tmux_session` set, no
+  `tmux_window`.
+- `[shutdown] <session-id>: ...` — `shutdown` field set, no tmux
+  fields.
+- `[wrap requested] <session-id>: ...` — transient; worker has
+  marked, manager hasn't fulfilled.
+
+The harness status is plumbing: every registry entry maps to
+`in_progress`; the manager flips to `completed` only at wrap
+fulfilment, just before removing the task. Don't extend the harness
+status set to match the prefixes — they're orthogonal.
 
 The list is conversation-scoped, so a fresh manager conversation
 rebuilds it from the registry on invocation. It must be kept in sync

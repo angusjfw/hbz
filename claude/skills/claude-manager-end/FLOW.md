@@ -25,6 +25,31 @@ the manager side (journal write for wrap, window renumbering after a
 worker kills a tmux window). See `claude-manager/SKILL.md` for the
 manager-side mechanics; the modes use the same vocabulary on both sides.
 
+## Lock pattern
+
+Every registry rewrite happens under a `mkdir` lock. Acquire just
+before the rewrite, release just after — keep the critical section
+tight, not spanning snapshot capture or tmux moves.
+
+```bash
+_reg="$HOME/.local/state/claude-manager/sessions.md"
+_lock="${_reg}.lock"
+t=0
+while ! mkdir "$_lock" 2>/dev/null; do
+  sleep 0.1; t=$((t+1))
+  [ $t -ge 100 ] && { echo "lock held >10s, aborting"; exit 1; }
+done
+# read registry, mutate own entry, write registry (Edit tool is fine)
+rmdir "$_lock"
+```
+
+Each Bash tool call runs in a fresh shell — `trap`-based release
+does NOT survive across calls, so don't rely on it. The acquire and
+release happen in different Bash calls in practice (Edit is in
+between); if anything errors between them, the lock is held until
+explicitly released. Recovery: `rmdir ~/.local/state/claude-manager/sessions.md.lock`
+and retry.
+
 ## Common preamble
 
 All three modes start the same way.
@@ -39,31 +64,14 @@ All three modes start the same way.
    window_name=$(tmux display-message -p -t "$pane" '#W')
    ```
 
-2. Acquire the registry lock (cross-platform; `flock` is Linux-only):
+2. Read the registry (no lock — reads are full-file, last-write-wins
+   is fine for this flow). Find the worker's own session entry by
+   matching its tmux address: `tmux_window` against
+   `<src_session>:<src_window>`, or `tmux_session` against
+   `<src_session>`.
 
-   ```bash
-   _reg="$HOME/.local/state/claude-manager/sessions.md"
-   _lock="${_reg}.lock"
-   t=0
-   while ! mkdir "$_lock" 2>/dev/null; do
-     sleep 0.1; t=$((t+1))
-     [ $t -ge 100 ] && { echo "lock held >10s, aborting"; exit 1; }
-   done
-   trap "rmdir '$_lock'" EXIT INT TERM
-   ```
-
-3. Find the worker's own session entry. Match its tmux address against
-   recorded fields:
-
-   - If `tmux_window` equals `<src_session>:<src_window>` — the worker
-     lives as a window inside another tmux session (typically the
-     manager's). Park is the natural mode.
-   - If `tmux_session` equals `<src_session>` — the worker already lives
-     in its own tmux session (previously parked, or imported). Park is
-     a no-op; shutdown and wrap apply.
-
-   If neither matches any entry, surface what was searched for and what
-   the registry actually holds, then stop. Don't guess.
+   If neither matches any entry, surface what was searched for and
+   what the registry actually holds, then stop. Don't guess.
 
 After the preamble, branch on `mode`.
 
@@ -74,20 +82,23 @@ Move the worker's tmux window into a standalone tmux session.
 If `tmux_window` isn't set on the entry (worker is already in a
 standalone tmux session), surface the entry and stop — nothing to park.
 
-```bash
-target="${1:-$window_name}"
-tmux new-session -d -s "$target" -n placeholder
-tmux move-window -d -s "${src_session}:${src_window}" -t "${target}:0" -k
-```
+1. Do the move:
 
-Rewrite the entry under the lock:
+   ```bash
+   target="${1:-$window_name}"
+   tmux new-session -d -s "$target" -n placeholder
+   tmux move-window -d -s "${src_session}:${src_window}" -t "${target}:0" -k
+   ```
 
-- Drop `tmux_window`.
-- Add `tmux_session: $target`.
-- Update `last_touched`.
-- Preserve all other fields and unknown keys.
+2. Acquire the lock, rewrite the entry, release the lock (see
+   Lock pattern). The rewrite:
 
-Release the lock. Tell the user `tmux attach -t $target`.
+   - Drops `tmux_window`.
+   - Adds `tmux_session: $target`.
+   - Updates `last_touched`.
+   - Preserves all other fields and unknown keys.
+
+3. Tell the user `tmux attach -t $target`.
 
 The manager will see the change via its watch and update its task list.
 No prompt to the manager pane is needed.
@@ -141,20 +152,26 @@ conversation can be resumed via `claude --resume <id>`.
    against the candidate JSONL files. If still ambiguous, surface the
    candidates and stop.
 
-3. **Rewrite the entry** under the lock:
+   Shared cwd: if multiple workers run in the same cwd (e.g. several
+   off_the_job sessions), `ls -t` may pick another worker's JSONL.
+   Verify by grepping the snapshot for a phrase only present in this
+   session's JSONL (the initial prompt usually works); if no JSONL
+   contains it, surface the candidates and ask.
 
-   - Add `resumed_session_id`, `snapshot: <path>`, `shutdown: <today>`.
-     Add `resume_target` if the user mentioned a date.
-   - Update `last_touched`.
-   - Append a `notes` line: "Shutdown by self <date>; resume via
+3. **Acquire the lock, rewrite the entry, release the lock** (see
+   Lock pattern). The rewrite:
+
+   - Adds `resumed_session_id`, `snapshot: <path>`, `shutdown: <today>`.
+     Adds `resume_target` if the user mentioned a date.
+   - Updates `last_touched`.
+   - Appends a `notes` line: "Shutdown by self <date>; resume via
      `claude --resume <id>` from the worktree/cwd."
-   - Drop `tmux_session`, `tmux_window`, `claude_panes`.
-   - Preserve all other fields and prose.
+   - Drops `tmux_session`, `tmux_window`, `claude_panes`.
+   - Preserves all other fields and prose.
 
-4. **Release the lock.**
-
-5. **Kill the tmux container.** This kills the worker's own pane, so
-   the registry write must already have landed:
+4. **Kill the tmux container.** Only do this after the lock has been
+   released and the registry write has landed; this kills the worker's
+   own pane, so any remaining work must be done first:
 
    - `tmux_window` case: `tmux kill-window -t "${src_session}:${src_window}"`.
      Sibling windows are renumbered by the manager on its next
@@ -187,18 +204,20 @@ fulfils the journal write.
    `notes` (single-line) or as a path to a notes file the manager can
    read.
 
-4. **Rewrite the entry** under the lock:
+4. **Acquire the lock, rewrite the entry, release the lock** (see
+   Lock pattern). The rewrite:
 
-   - Add `wrap_requested: true`.
-   - Add `snapshot: <path>`, `resumed_session_id: <id>`.
-   - Update `last_touched`.
-   - Add or update `notes` with the journal context.
-   - Leave `tmux_session` / `tmux_window` / `claude_panes` in place —
-     the manager cleans those up after the journal write.
+   - Adds `wrap_requested: true`.
+   - Adds `snapshot: <path>`, `resumed_session_id: <id>`.
+   - Updates `last_touched`.
+   - Adds or updates `notes` with the journal context. If `notes` is
+     already a path (workers and managers may set it to a journal
+     file), append to that file instead of overwriting the field.
+   - Leaves `tmux_session` / `tmux_window` / `claude_panes` in place
+     — the manager cleans those up after the journal write.
 
-5. **Release the lock.**
-
-6. **Kill the tmux container** as in Shutdown.
+5. **Kill the tmux container** as in Shutdown, after the lock has
+   been released and the registry write has landed.
 
 **Manager phase** (driven by the watch — no action needed from the
 worker after step 6): the manager's reaction loop sees `wrap_requested:

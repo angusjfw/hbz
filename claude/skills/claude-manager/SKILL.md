@@ -51,16 +51,38 @@ unless asked.
 ## Task list hygiene
 
 The in-conversation task list mirrors the registry. Sync them in the
-same action, never as cleanup later:
+same action, never as cleanup later. Conceptual state is encoded as a
+prefix on the task description, not in the harness's API status —
+this is the formal contract across managers:
 
-- Spawn or import → add a task as `in_progress`.
-- Wrap → mark `completed`, then remove the registry entry.
-- Shutdown → mark `shutdown` and update the description to note it.
-- Status, ticket or notes changes → update the task entry.
+- `[active] <session-id>: <ticket or summary>` — live, has a tmux
+  container.
+- `[parked] <session-id>: ...` — `tmux_session` set, no
+  `tmux_window`.
+- `[shutdown] <session-id>: ...` — `shutdown` field set, no tmux
+  fields.
+- `[wrap requested] <session-id>: ...` — transient; worker has
+  marked the entry, manager hasn't fulfilled yet.
+
+Every registry entry maps to a task at `in_progress`; the harness
+status changes only at wrap fulfilment, when the manager sets
+`completed` then removes the task. Don't extend the API status set
+to match the prefixes — keep them orthogonal.
+
+Sync triggers:
+- Spawn or import → add a task at `in_progress` with `[active]`
+  prefix.
+- Park → update prefix to `[parked]`.
+- Shutdown → update prefix to `[shutdown]`.
+- Wrap-requested seen on a worker entry → update prefix to
+  `[wrap requested]`.
+- Wrap fulfilled → set `completed`, remove the task, remove the
+  registry entry.
+- Ticket / notes / branch changes → update the task description.
 
 If you wrote to the registry and didn't touch the task list, you're
-not done. The registry watch (see below) auto-triggers this when the
-change came from a worker.
+not done. The registry watch (see below) catches worker writes
+between turns.
 
 ## Terminology
 
@@ -146,16 +168,21 @@ of tmux fields combined with `shutdown` / `wrap_requested` is the
 signal.
 
 Reads/writes are full-file. Use a `mkdir` lock for mutual exclusion
-(cross-platform; `flock` is Linux-only and not available on macOS):
+(cross-platform; `flock` is Linux-only). Hold the lock only around the
+rewrite — not across snapshot capture or tmux moves:
 
 ```bash
 _reg="$HOME/.local/state/claude-manager/sessions.md"
 _lock="${_reg}.lock"
 while ! mkdir "$_lock" 2>/dev/null; do sleep 0.1; done
-trap "rmdir '$_lock'" EXIT INT TERM
-# ... read, modify, write $_reg ...
+# read $_reg, mutate, write $_reg (Edit tool is fine)
 rmdir "$_lock"
 ```
+
+Each Bash tool call is a fresh shell — `trap`-based release does not
+survive across calls, so don't rely on it. Release explicitly. If a
+flow aborts with the lock held, recover with
+`rmdir ~/.local/state/claude-manager/sessions.md.lock`.
 
 Preserve unknown fields, header lines, and stray prose on rewrite.
 
@@ -228,19 +255,21 @@ manager reacts between turns.
 
 Lifecycle:
 
-- **PID file** at `~/.local/state/claude-manager/watch.<mgr-pane>.pid`
-  — keyed by the manager's tmux address so multiple managers don't
-  trample each other. On invocation: if the PID file exists and the
-  PID is alive, reuse it; else start a new watch and write the PID.
+- **PID file** at `~/.local/state/claude-manager/watch.<sanitised-mgr-pane>.pid`
+  — keyed by the manager's tmux address with `:` and `.` replaced by
+  `-` (`tr ':.' '--'`) so the basename has a single `.pid` extension.
+  On invocation: if the PID file exists and the PID is alive, reuse
+  it; else start a new watch and write the PID.
 - **Reaction loop:** on each `changed:` event, re-read the registry,
   diff against the in-conversation last-known state, surface a brief
   note for any worker-driven change ("worker `eng-1234` parked itself
   to tmux session `eng-1234`"), and update the task list per the
   hygiene rule.
 - **Self-writes don't double-fire.** When the manager writes to the
-  registry, it updates its in-conversation state in the same atomic
-  action. The watch still fires, but the diff is empty and nothing is
-  surfaced.
+  registry it updates its in-conversation last-known state *before*
+  releasing the lock. The watch event arrives next turn and re-reads
+  a registry already matching the in-conversation state, so the diff
+  is empty and nothing is surfaced.
 - **`wrap_requested: true`** is a special diff: trigger the
   manager-side wrap-fulfilment phase (journal write, registry
   removal — see Wrap).
@@ -400,15 +429,16 @@ tmux".
    Do **not** use `lsof` on the tmux pane's PID to locate the JSONL
    — on macOS `lsof` does not expose it.
 
-3. **Update the registry entry** under the lock:
-   - Add `resumed_session_id`, `snapshot`, `shutdown: <today>`.
-   - Add `resume_target: <date>` if known.
-   - Update `last_touched`.
-   - Append to `notes`: "Tmux killed <date>; resume via
+3. **Acquire the lock, rewrite the entry, release the lock** (see
+   Registry section). The rewrite:
+   - Adds `resumed_session_id`, `snapshot`, `shutdown: <today>`.
+   - Adds `resume_target: <date>` if known.
+   - Updates `last_touched`.
+   - Appends to `notes`: "Tmux killed <date>; resume via
      `claude --resume <id>` from the worktree/cwd."
-   - Remove `tmux_session`, `tmux_window`, `claude_panes`.
+   - Removes `tmux_session`, `tmux_window`, `claude_panes`.
 
-4. **Kill the tmux container.**
+4. **Kill the tmux container** (after the lock is released):
    - `tmux_window`: `tmux kill-window -t <target>`, then renumber
      the manager's tmux session: `tmux move-window -r -s
      <manager-tmux-session>`. After renumber, refresh any other
@@ -419,7 +449,8 @@ tmux".
    - `tmux_session`: `tmux kill-session -t <name>`. No renumber
      needed.
 
-5. **Update the visible task list:** mark the entry as `shutdown`.
+5. **Update the visible task list:** set the description prefix to
+   `[shutdown]` per the Task list hygiene rule.
 
 **Trigger paths:**
 
