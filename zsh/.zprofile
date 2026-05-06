@@ -66,21 +66,6 @@ v() {
   fi
 }
 
-git() {
-    if [[ $1 == "reset" && $2 == "--hard" ]]; then
-        while true; do
-          read '?Are you sure?' answer
-          case $answer in
-            hard* ) command git "$@"; break;;
-            [Nn]* ) break;;
-            * ) echo -e "Type 'hard' to confirm or n.";;
-          esac
-        done
-    else
-        command git "$@"
-    fi
-}
-
 post-json() {
   url=$1; data=$2
   if [[ -z $url || -z $data ]]; then
