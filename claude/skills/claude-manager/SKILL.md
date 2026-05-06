@@ -365,14 +365,22 @@ tmux".
    done >> ~/.local/state/claude-manager/snapshots/<session-id>.txt
    ```
 
-2. **Find the Claude session ID.** Claude stores per-project JSONL
-   conversation files under `~/.claude/projects/<encoded-cwd>/`. The
-   encoding converts every `/` and `_` in the absolute cwd path to
-   `-` (strip the leading `/` first):
+2. **Find the Claude session ID.** If the registry entry already has
+   `resumed_session_id`, reuse it — `claude --resume <id>` continues
+   writing to the same JSONL, so the id is stable across resume
+   cycles. Skip the rest of this step.
+
+   Otherwise, Claude stores per-project JSONL conversation files
+   under `~/.claude/projects/<encoded-cwd>/`. The encoding converts
+   every `/`, `.` and `_` in the absolute cwd to `-`; don't strip the
+   leading `/` (it produces a leading `-` on the directory name,
+   which is correct — e.g.
+   `/Users/foo.bar/code/my_service` →
+   `-Users-foo-bar-code-my-service`):
 
    ```bash
    cwd="<worktree or cwd from registry>"
-   encoded=$(echo "$cwd" | sed 's|^/||; s|[/_]|-|g')
+   encoded=$(echo "$cwd" | sed 's|[/._]|-|g')
    proj_dir="$HOME/.claude/projects/$encoded"
    ls -t "$proj_dir"/*.jsonl 2>/dev/null
    ```
