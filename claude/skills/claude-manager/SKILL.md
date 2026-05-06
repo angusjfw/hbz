@@ -392,9 +392,24 @@ window list:
   tmux session → active; otherwise → parked) and update the entry's
   `tmux_session` field accordingly. If not found, the window died
   unexpectedly — surface and ask: finished, shutdown, or unknown?
+
+  If *many* entries fail lookup at once, suspect a tmux server
+  restart (every `@N` from the previous server is now meaningless),
+  not per-window deaths. Surface aggregately and confirm before
+  changing any state.
+
+- Entry without `tmux_window_id` but with the legacy `tmux_window:
+  <session>:<index>` field — schema-migration artifact from before
+  this branch. Look up `<session>:<index>` in the live tmux state;
+  if it's a Claude pane and matches the entry's worktree, capture
+  its `#{window_id}` and migrate the entry by replacing
+  `tmux_window` with `tmux_window_id`. If it doesn't match, ask the
+  user.
+
 - Entry without `tmux_window_id`: check for `shutdown` (leave it
   alone) or `wrap_requested: true` (trigger manager-side wrap if the
   watch missed it). Otherwise ask the user.
+
 - tmux window present but no registry entry matches its id → ask:
   import or ignore. Don't silently take ownership.
 
@@ -487,7 +502,15 @@ tmux".
    Do **not** use `lsof` on the tmux pane's PID to locate the JSONL
    — on macOS `lsof` does not expose it.
 
-3. **Acquire the lock, rewrite the entry, release the lock** (see
+3. **Capture `tmux_window_id` into a shell var before rewriting** —
+   the registry write below removes it from the entry, so the kill
+   step needs it remembered:
+
+   ```bash
+   wid="$(read it from the registry entry)"
+   ```
+
+4. **Acquire the lock, rewrite the entry, release the lock** (see
    Registry section). The rewrite:
    - Adds `resumed_session_id`, `snapshot`, `shutdown: <today>`.
    - Adds `resume_target: <date>` if known.
@@ -496,20 +519,19 @@ tmux".
      `claude --resume <id>` from the worktree/cwd."
    - Removes `tmux_window_id`, `tmux_session`, `claude_panes`.
 
-4. **Kill the tmux container** (after the lock is released): look up
-   the window's current location by id, then kill:
+5. **Kill the tmux container** (after the lock is released). Pass the
+   stable id directly — `tmux kill-window` accepts `@N` targets, no
+   resolve-then-kill round trip needed (which would be racy):
 
    ```bash
-   loc=$(tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}' \
-     | awk -v wid="$tmux_window_id" '$1 == wid {print $2}')
-   tmux kill-window -t "$loc"
+   tmux kill-window -t "$wid"
    ```
 
    If the parent tmux session was a standalone one (parked) and that
    was its only window, it dies with the window — no extra step.
    No renumber afterwards; gappy indices are fine.
 
-5. **Update the visible task list:** set the description prefix to
+6. **Update the visible task list:** set the description prefix to
    `[shutdown]` per the Task list hygiene rule.
 
 **Trigger paths:**
@@ -517,7 +539,7 @@ tmux".
 - The user asks the manager directly. Manager runs the full mechanics
   above.
 - A worker self-shuts via `/claude-manager-shutdown`. The worker does
-  steps 1–4 itself (it has direct access to its own JSONL — most
+  steps 1–5 itself (it has direct access to its own JSONL — most
   recently modified is by definition this session). The manager
   observes the change via the watch and updates the task list.
 
@@ -537,19 +559,24 @@ wording: "wrap up", "complete", "close out", "finish".
 
 **Mechanics:**
 
-1. For each pane in `claude_panes` (or every pane, when killing the
+1. Capture `tmux_window_id` (if present on the entry) into a shell
+   var — the registry-removal step below wipes it, so the kill needs
+   it remembered:
+   `wid="$(read it from the registry entry)"`.
+2. For each pane in `claude_panes` (or every pane, when killing the
    container), capture
    `tmux capture-pane -p -t <target>.<pane> -S -200` for a final
    snapshot.
-2. Write the journal entry per the project's schema, using the
+3. Write the journal entry per the project's schema, using the
    snapshot and any `notes` from the registry entry. If notes are
    thin and there's no obvious narrative from snapshot + recent git
    activity in the worktree, ask the user a focused question before
    writing. Otherwise proceed.
-3. Set the visible task list entry to `completed`.
-4. Remove the entry from the registry.
-5. Kill the tmux container if it's still alive (look up by
-   `tmux_window_id` per the Shutdown flow). No renumber afterwards.
+4. Set the visible task list entry to `completed`.
+5. Remove the entry from the registry.
+6. Kill the tmux container if `wid` was set: `tmux kill-window -t
+   "$wid"`. Pass the stable id directly to avoid the lookup-then-kill
+   race. No renumber afterwards.
 
 **Trigger paths:**
 

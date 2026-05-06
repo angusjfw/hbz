@@ -507,6 +507,11 @@ and avoids leaking work-specific paths into a public dotfiles repo.
   that pings manager is possible later; for now, the registry watch
   notices worker writes but doesn't see external tmux changes —
   those still go through manual reconcile.
+- **No automatic window renumber after wrap or shutdown.** Gappy
+  indices in the manager's tmux session are fine — entries identify
+  windows by stable `tmux_window_id`, so a hole left by a wrapped
+  session never needs filling. Renumber is on demand only, when the
+  user asks for it (see Renumber).
 - **No separate tmux skill, for now.** The existing `# tmux` rules in
   `agents/AGENTS.md` are shared by manager and workers and don't
   need more. If they grow, lift to a skill.
