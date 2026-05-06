@@ -317,6 +317,23 @@ net.
    (renumbering happens on demand only — see Renumber).
 4. Start Claude in pane 0 (the primary worker). Add extra panes per
    the project rulebook; if any runs Claude, append to `claude_panes`.
+
+   Kickoff: launch `claude`, poll the pane until the TUI input line
+   is ready, then send the prompt text and `Enter` as separate
+   `send-keys` calls. Capture the pane afterwards to confirm the
+   prompt left the input box. The polling check must match what the
+   current TUI renders — capture first and adapt the regex.
+
+   ```bash
+   tmux send-keys -t "$wid" "claude" Enter
+   # Example shape — adapt the check to whatever this TUI renders:
+   until tmux capture-pane -p -t "$wid" -S -5 | grep -q '<marker>'; do
+     sleep 0.5
+   done
+   tmux send-keys -t "$wid" "$prompt"
+   tmux send-keys -t "$wid" Enter
+   tmux capture-pane -p -t "$wid" -S -5
+   ```
 5. Add the session to the registry with `tmux_window_id`. Add to the
    visible task list (`[active]` prefix).
 6. Tell the user how to switch to it.
