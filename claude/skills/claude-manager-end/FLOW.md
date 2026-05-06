@@ -21,9 +21,10 @@ In claude-manager terminology:
 
 Workers run all three themselves under the registry lock. The manager
 observes via its registry watch and handles any follow-up that lives on
-the manager side (journal write for wrap, window renumbering after a
-worker kills a tmux window). See `claude-manager/SKILL.md` for the
-manager-side mechanics; the modes use the same vocabulary on both sides.
+the manager side (journal write for wrap). No renumber afterwards —
+gappy indices are fine, and the registry identifies windows by stable
+`tmux_window_id`. See `claude-manager/SKILL.md` for the manager-side
+mechanics; the modes use the same vocabulary on both sides.
 
 ## Lock pattern
 
@@ -70,7 +71,9 @@ All three modes start the same way.
    matching its `tmux_window_id` against `$my_window_id`.
 
    If no entry matches, surface what was searched for and what the
-   registry actually holds, then stop. Don't guess.
+   registry actually holds, then stop. Don't guess. If more than one
+   matches (shouldn't happen on a single tmux server, but defensive),
+   surface both and stop.
 
 After the preamble, branch on `mode`.
 
@@ -171,10 +174,13 @@ conversation can be resumed via `claude --resume <id>`.
 
 4. **Kill the tmux container.** Only do this after the lock has been
    released and the registry write has landed; this kills the worker's
-   own pane, so any remaining work must be done first:
+   own pane, so any remaining work must be done first. Pass the
+   stable id directly — `kill-window` accepts `@N` targets and
+   avoids the lookup-vs-kill race that a `(session, index)` target
+   would have:
 
    ```bash
-   tmux kill-window -t "${src_session}:${src_window}"
+   tmux kill-window -t "$my_window_id"
    ```
 
    If the worker lived in a standalone tmux session and that was the
