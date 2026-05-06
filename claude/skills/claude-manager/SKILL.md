@@ -589,7 +589,8 @@ wording: "wrap up", "complete", "close out", "finish".
    thin and there's no obvious narrative from snapshot + recent git
    activity in the worktree, ask the user a focused question before
    writing. Otherwise proceed.
-4. Set the visible task list entry to `completed`.
+4. Mark the visible task list entry `completed`, then delete it from
+   the list.
 5. Remove the entry from the registry.
 6. Kill the tmux container if `wid` was set: `tmux kill-window -t
    "$wid"`. Pass the stable id directly to avoid the lookup-then-kill
