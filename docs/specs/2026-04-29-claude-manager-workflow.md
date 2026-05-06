@@ -44,17 +44,19 @@ not "let me take a quick look".
 
 It *does* own all the meta-work that workers typically don't pick up on
 their own: harness knowledge, journal logging, wiki upkeep, session and
-ticket tracking, recordkeeping across the registry. Workers rarely show
-interest in this work, so making it the manager's primary responsibility
-ensures it actually happens.
+ticket tracking. The manager owns the journal (and other knowledge
+stores) end-to-end; the registry is a shared channel — see the
+Registry section.
 
 In scope:
 
-- Reading and writing the session registry.
+- The header on the registry; full registry reads/writes for
+  manager-initiated operations.
 - tmux operations on session containers (new-window, move-window,
   list-windows, capture-pane for state observation).
 - Journal entries, wiki updates, harness notes, per the project's
-  schemas.
+  schemas. This includes journal entries triggered by a worker's
+  `wrap_requested` marker.
 - Conversation-level planning, clarification and routing: deciding
   what worker to spawn, what context it needs, where its output goes.
 - Light meta updates I explicitly request (a one-line ticket/todo
@@ -79,7 +81,10 @@ cost of a polluted manager is high.
 
 The manager may read worker pane output (`tmux capture-pane`) to
 understand session state, but does not send keys or prompts to workers
-unless I explicitly ask it to.
+unless I explicitly ask it to. The registry takes the place of any
+direct prompting between worker and manager — workers communicate
+state changes by editing their own entries, the manager observes via
+its registry watch.
 
 ## Terminology
 
@@ -134,10 +139,8 @@ Recognised header fields:
 
 - `manager` — `<tmux-session>:<window>.<pane>` for an active manager.
   One line per manager. Each manager refreshes its line on invocation
-  and on registry-touching actions. Workers (e.g. `claude-manager-park`)
-  read these lines to locate a manager. Stale lines are tolerated;
-  workers verify by capture-pane and fall back to scanning if a line
-  no longer points at a Claude TUI.
+  and on registry-touching actions. Stale lines are tolerated;
+  presence is best-effort, not a guarantee the pane is alive.
 
 Recognised session fields:
 
@@ -151,23 +154,70 @@ Recognised session fields:
   by idle-detection queries.
 - `worktree` — absolute path
 - `branch` — branch name
-- `started`, `last_touched` — timestamps, format flexible
+- `started`, `last_touched`, `shutdown` — timestamps, format flexible
+- `resumed_session_id` — Claude `--resume` token captured at shutdown
+  or wrap
+- `snapshot` — path to pane snapshot captured at shutdown or wrap
+- `resume_target` — expected resume date (free-form)
+- `wrap_requested` — `true` when a worker has requested wrap; the
+  manager fulfils the journal-write phase and removes the entry
 - `notes` — string OR a path. When a path, the manager treats that
   file as the canonical narrative for the session.
 
 Optionality matters: sessions can exist before any of these are
 decided.
 
-The registry has no status fields. Live sessions are in the file;
-wrapping a session removes it from the file (the journal carries the
-record from then on). Recency is `last_touched`; whether a session is
-currently in front of the user is loosely correlated with tmux
-location but not reliable enough to encode.
+The registry has no explicit status field. Live sessions have a tmux
+field set. Shutdown sessions have `shutdown` + `resumed_session_id`
+and no tmux fields. Wrapped sessions are removed entirely. Wrap in
+progress is signalled by `wrap_requested: true` (the worker has
+written this and killed its tmux container; the manager has not yet
+written the journal entry and removed the registry entry). Recency
+is `last_touched`; current state is whatever tmux says.
 
-Manager always reads the file fresh, applies its edits, writes once.
-Multiple managers coordinate via `flock` on the file. The format is
-forgiving: an unknown field or stray prose under a session is preserved
-on rewrite, not lost.
+Reads/writes are full-file. The registry is shared between the
+manager and its workers — both sides may write. Mutual exclusion uses
+a `mkdir` lock on `${registry}.lock` (cross-platform; `flock` is
+Linux-only). The format is forgiving: an unknown field or stray
+prose under a session is preserved on rewrite, not lost.
+
+### Workers writing to the registry
+
+Workers may write to their own session entry only. Allowed fields:
+`last_touched`, `notes`, ticket/branch updates, the tmux-location
+swap a self-park performs, and the shutdown/wrap fields (`shutdown`,
+`resumed_session_id`, `snapshot`, `wrap_requested`). Workers may also
+write to their own snapshot file under
+`~/.local/state/claude-manager/snapshots/`.
+
+Workers must not touch the header, any other session's entry, or the
+journal/wiki. Wrap is driven via the `wrap_requested` marker; the
+manager fulfils the journal write.
+
+### Manager registry watch
+
+The manager runs a background watch process (`stat`-poll loop on the
+registry's mtime, consumed via the `Monitor` tool) so worker writes
+surface in the manager's task list live, not just on the manager's
+next turn. PID file is keyed by manager pane address so multiple
+managers don't trample each other. If the watch dies, the manager
+detects on its next registry-touching action via explicit re-stat,
+surfaces drift, and restarts the watch. Watch state is per-manager
+and per-conversation; nothing on the file system survives the
+manager's shutdown beyond the registry itself.
+
+### `wrap_requested` two-phase flow
+
+Wrap is the only lifecycle transition that touches the journal, and
+the journal schema lives on the manager side. Workers initiate wrap
+by writing `wrap_requested: true` along with snapshot path,
+`resumed_session_id`, and any context for the journal as `notes`,
+then killing the tmux container. The manager's watch fires; the
+manager reads the project's journal schema, writes the entry, and
+removes the registry entry.
+
+If the manager isn't running when the worker wraps, the marker
+persists. The next manager invocation processes it during reconcile.
 
 ## Visible task list
 
@@ -217,22 +267,53 @@ runs the `review-pr` skill once started; the manager's job is just to
 land it in the right worktree. The layered walkthrough, stance and
 variants live in that skill, not here.
 
-If I want the session to live as its own tmux session (typically to
-attach to it from a separate client, or just to get it out of the
-manager's window list), the manager moves it on request:
+### Lifecycle: park, shutdown, wrap
 
-- Create a detached target tmux session with a placeholder window.
-- `move-window` the session's tmux window into the target tmux
-  session.
-- Drop the placeholder.
-- Update the registry: drop `tmux_window`, add `tmux_session: <name>`.
+Three transitions, same vocabulary on both sides; flexible wording
+mapped to the canonical mode before acting.
 
-The reverse (move it back as a tmux window in the manager's tmux
-session) is symmetric via `move-window`. Both directions stay on the
-same tmux server, fully visible to `tmux ls`. Nothing is hidden in the
-mitsuhiko sense. These moves don't change session status: usually
-moving a session out of the manager's window list means I've parked it,
-but not always, so the registry doesn't try to encode that.
+**Park** = move the session's tmux container out of the manager's
+window list into a standalone tmux session. Reversible. Park can be
+initiated by me asking the manager directly (manager runs the
+mechanics) or by the worker self-serving via `/claude-manager-park`
+(worker runs the move and updates the registry; manager observes via
+the watch). End state is identical either way.
+
+```bash
+tmux new-session -d -s <name> -n placeholder
+tmux move-window -d -s <manager-tmux-session>:<idx> -t <name>:0 -k
+```
+
+Reverse direction (merge a standalone tmux session back as a window):
+
+```bash
+tmux move-window -d -s <name>:0 -t <manager-tmux-session>: -k
+tmux kill-session -t <name>
+```
+
+Both stay visible to `tmux ls`. Nothing is hidden in the mitsuhiko
+sense.
+
+**Shutdown** = kill the tmux container; keep the registry entry. The
+worker captures its panes, resolves its own Claude conversation's
+JSONL session id, writes `shutdown`, `resumed_session_id`, and
+`snapshot` to its registry entry, then kills the tmux container.
+The manager-initiated path runs the same mechanics from the manager
+side. Either way, resume later via `claude --resume <id>` from the
+worktree (or `cwd`).
+
+**Wrap** = final close-out, two-phase. Worker captures snapshot,
+gathers any context worth carrying into the journal, writes
+`wrap_requested: true` along with `snapshot` and `resumed_session_id`
+to its registry entry, then kills the tmux container. Manager's
+watch picks up the marker, writes the journal entry per the
+project's schema, and removes the registry entry. If I ask the
+manager to wrap a session directly, the manager runs both phases
+itself — the worker need not be alive.
+
+Park, shutdown and wrap don't change with how they were initiated:
+the registry state is the source of truth, the watch keeps the
+manager's view current.
 
 ### Attaching and switching
 
@@ -244,13 +325,22 @@ via the manager itself (`switch-client`) or whatever client I prefer.
 
 ### Reconciling with reality
 
+The watch auto-triggers a reconcile on any worker write, so manual
+reconciliation is mostly only needed for tmux-side drift the watch
+can't see.
+
 On demand, manager diffs the registry against `tmux ls` and the
 manager's own window list:
 
 - Entries in the registry but missing from tmux: the tmux container
-  has been closed. Ask me whether the session is finished or just
-  parked. Finished triggers Wrap. Parked leaves the entry alone — a
-  dormant entry is fine.
+  has been closed.
+  - If `shutdown` is set, leave the entry alone — it was already
+    shutdown.
+  - If `wrap_requested: true` is set and the watch missed it,
+    trigger the manager-side wrap-fulfilment now (journal write,
+    entry removal).
+  - Otherwise, ask me: finished or shutdown? Finished triggers
+    Wrap. Shutdown triggers the Shutdown flow on the manager side.
 - tmux sessions or windows present in tmux but not in the registry:
   prompt me to import or ignore. Manager does not silently take
   ownership of anything it didn't create.
@@ -300,25 +390,30 @@ share where possible".
 
 This is opt-in noise reduction, not enforcement.
 
-### Wrap-up
+### Wrap mechanics
 
-Wrap is the one explicit lifecycle transition. On wrap:
+Whether triggered by me asking the manager directly or by a worker's
+`wrap_requested` marker, the manager runs:
 
-1. For each pane in `claude_panes`, capture
-   `tmux capture-pane -p -t <target>.<pane> -S -200` for a final
-   snapshot.
-2. Write the journal entry per the project's schema, including the
-   snapshot and any prose notes carried in the registry entry.
+1. Capture a final snapshot for each pane in `claude_panes` (or every
+   pane, when killing the container) via `tmux capture-pane -p -t
+   <target>.<pane> -S -200`. If the worker has already written a
+   snapshot path, use that instead.
+2. Write the journal entry per the project's schema, using the
+   snapshot and any `notes` from the registry entry. If notes are
+   thin and there's no obvious narrative from snapshot + recent git
+   activity, ask me a focused question before writing.
 3. Set the visible task list entry to `completed`.
 4. Remove the entry from the registry. The journal is the durable
    record from here.
 5. Close the tmux container. For a `tmux_window` in the manager's
    tmux session: kill the window, then `tmux move-window -r -s
-   <manager-tmux-session>` to renumber so windows stay sequential.
-   Refresh any other registry entries in that tmux session by mapping
-   their session-id (used as window name) back to the current
-   `window_index` via `tmux list-windows`. For a `tmux_session`:
-   `tmux kill-session -t <name>`; no renumber needed.
+   <manager-tmux-session>` to renumber. Refresh any other registry
+   entries in that tmux session by mapping their session-id (used as
+   window name) back to the current `window_index` via
+   `tmux list-windows`. For a `tmux_session`: `tmux kill-session -t
+   <name>`; no renumber needed. If the worker already killed the
+   container, only the renumber step is needed.
 
 ### Knowledge work
 
@@ -370,19 +465,27 @@ and avoids leaking work-specific paths into a public dotfiles repo.
   edit files, and run tmux commands directly. A CLI is only worth
   adding if a concrete need shows up (heavy contention, inspection
   from non-Claude shells).
-- **No daemon.** Manager is interactive; reconciliation is on demand.
+- **No standalone daemon.** The registry watch is a per-manager
+  background process tied to the manager's conversation lifetime; it
+  is not a system service, not a cross-conversation singleton, and
+  has no responsibilities beyond emitting `changed:` events when the
+  registry's mtime advances.
 - **No hidden sockets.** All tmux state remains visible to `tmux ls`
   and attachable from any client.
-- **No automatic discovery hook.** A tmux session-create hook that
-  pings manager is possible later; v1 reconciles only when asked.
+- **No automatic tmux discovery hook.** A tmux session-create hook
+  that pings manager is possible later; for now, the registry watch
+  notices worker writes but doesn't see external tmux changes —
+  those still go through manual reconcile.
 - **No separate tmux skill, for now.** The existing `# tmux` rules in
   `agents/AGENTS.md` are shared by manager and workers and don't
   need more. If they grow, lift to a skill.
-- **No remote prompting of workers.** Manager reads worker panes; it
-  doesn't send keys to them unprompted.
+- **No tmux-prompt channel between workers and the manager.** The
+  registry is the only structured channel. Workers communicate by
+  editing their own entries; the manager observes via the watch.
 - **No status fields.** No `active`/`paused`, no `done`. Live
-  sessions are in the registry; wrapping removes them. Recency is
-  `last_touched`; current state is whatever tmux says.
+  sessions are in the registry; wrapping removes them. Lifecycle
+  state is encoded by which fields are present (`shutdown`,
+  `wrap_requested`).
 
 ## Related work
 
@@ -397,15 +500,10 @@ as a skill.
 
 ## Open questions
 
-- **Lock semantics on the registry.** `flock` is the obvious answer;
-  confirm availability everywhere this runs and pick a fallback if
-  not.
-- **What "aware of external sessions" looks like in practice.** v1:
-  nothing automatic, manager scans on demand. Possible later: a tmux
-  hook touching a marker file the manager checks.
+- **What "aware of external sessions" looks like in practice.** The
+  registry watch closes the worker-write side; tmux-side drift still
+  needs manual reconcile. Possible later: a tmux hook touching a
+  marker file the manager checks.
 - **Journal/wiki contract.** The skill needs a small, well-defined
   contract that project rules implement. Pin down when first used in
   `~/code/`.
-- **Repo organisation.** Where the manager skill lives in the
-  dotfiles repo, and how the install path lines up with personal
-  skill discovery. To be decided when implementation starts.
