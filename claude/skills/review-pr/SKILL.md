@@ -111,8 +111,17 @@ Follow all linked Linear / GitHub tickets, including ones the PR claims
 to close — they may not actually match. A PR claiming "Closes XYZ-123"
 doesn't mean XYZ-123's scope is what got built.
 
+Read the PR's existing comments — top-level review comments, inline
+review comments, and the conversation timeline. Treat them like Linear
+thread context: things already raised, decisions reached, points the
+author has explained-away, and bot findings (Cursor, Bugbot, CodeRabbit)
+the author has accepted, dismissed, or acknowledged.
+
 Tools:
 - `gh pr view <N> --repo <owner>/<repo> --json title,body,author,baseRefName,headRefName,additions,deletions,url`
+- `gh pr view <N> --comments` for the conversation timeline
+- `gh api repos/<owner>/<repo>/pulls/<N>/comments` for inline review comments
+- `gh api repos/<owner>/<repo>/issues/<N>/comments` for top-level conversation comments
 - `mcp__plugin_linear_linear__get_issue` for ticket detail
 - `mcp__plugin_linear_linear__list_comments` for in-thread context
   (implementation plans buried in long comments are common)
@@ -220,7 +229,12 @@ For each finding from 4a:
    change and any callers or callees that bear on the claim.
    Look for evidence that contradicts the finding before evidence
    that confirms it.
-4. **Re-score confidence.** Drop anything below 80. Merge findings
+4. **Check against existing PR comments.** Has this already been
+   raised by the author, another reviewer, or a bot? If yes, the
+   bar to surface it again rises sharply. Only re-raise if you
+   genuinely disagree with how it was resolved, and frame it as
+   engaging with the prior discussion, not as a fresh finding.
+5. **Re-score confidence.** Drop anything below 80. Merge findings
    that overlap. Internal tracking labels (e.g. "A", "T4",
    "B/2/3") and raw numeric scores are for your own bookkeeping —
    do not carry them into user-facing output. For survivors,
