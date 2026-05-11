@@ -29,7 +29,6 @@
     "security-guidance@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "figma@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "skills-cleaner@skills-cleaner": true,
