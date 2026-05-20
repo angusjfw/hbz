@@ -156,7 +156,10 @@ Recognised session fields:
 - `worktree`, `branch`, `cwd`
 - `started`, `last_touched`, `shutdown` — timestamps, format flexible
 - `resumed_session_id` — Claude `--resume` token captured at shutdown
-  or wrap
+  or wrap. Always written and surfaced in full — never truncated or
+  abbreviated with `<prefix>-...`. It's the only handle for resuming
+  the conversation; an abbreviation is unrecoverable if the JSONL
+  prefix isn't unique or the JSONL is later moved.
 - `snapshot` — path to pane snapshot captured at shutdown or wrap
 - `resume_target` — expected resume date (optional, free-form)
 - `wrap_requested` — `true` when a worker has requested wrap; the

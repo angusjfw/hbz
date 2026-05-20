@@ -222,6 +222,8 @@ fulfils the journal write.
    - Adds or updates `notes` with the journal context. If `notes` is
      already a path (workers and managers may set it to a journal
      file), append to that file instead of overwriting the field.
+     Whenever notes reference the resume id, write the full
+     `resumed_session_id` — never `<prefix>-...`.
    - Drops `tmux_window_id`, `tmux_session`, `claude_panes` — the
      window is about to be killed.
 
