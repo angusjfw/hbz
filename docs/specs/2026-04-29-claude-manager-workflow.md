@@ -1,5 +1,11 @@
 # Claude manager workflow
 
+Partially superseded by
+`2026-05-22-claude-manager-sessions-pivot.md`, which replaces the
+Registry, Spawn, Park, Reconcile, Shutdown, Wrap and Import sections.
+The framing below (goals, non-goals, hard boundary, watch, knowledge
+work, idle detection, resource awareness) still applies.
+
 Spec for a "manager" Claude conversation that coordinates parallel work
 across tmux. Tracks a registry of sessions, spawns them on request, and
 keeps adjacent journal, wiki and log artefacts up to date as work moves
