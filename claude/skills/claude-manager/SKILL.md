@@ -1,6 +1,6 @@
 ---
 name: claude-manager
-description: Use when the user types /claude-manager, or when running a Claude conversation whose role is to oversee parallel sessions across tmux rather than execute them. Tracks a per-machine session registry, spawns workers in tmux windows or tmux sessions, and owns journal, wiki and harness-knowledge upkeep that workers tend to skip. Manager does not do session work itself; it delegates implementation to spawned workers and defers to them.
+description: Use when the user types /claude-manager, or when running a Claude conversation whose role is to oversee parallel sessions across tmux rather than execute them. Tracks a per-machine session registry, spawns workers in standalone tmux sessions (one tmux session per registry session), and owns journal, wiki and harness-knowledge upkeep that workers tend to skip. Manager does not do session work itself; it delegates implementation to spawned workers and defers to them.
 ---
 
 # Claude manager
@@ -137,24 +137,22 @@ Recognised header fields:
 Recognised session fields:
 
 - `ticket` — free-form ID or URL
-- `tmux_window_id` — stable tmux window id (`@N`), assigned at
-  spawn, immune to renumbering and renaming. Use this to find the
-  window's current location: `tmux list-windows -a -F '#{window_id}
-  #{session_name}:#{window_index}'` and match.
-- `tmux_session` — present only when the window lives in a standalone
-  tmux session (i.e. parked). Human-readable hint; can be derived
-  from `tmux_window_id` lookup but kept on the entry so the registry
-  reads cleanly without running tmux.
-- `claude_panes` — comma-separated tmux pane indices where workers
-  run; default `0`
+- `tmux_session` — name of the tmux session this registry session
+  lives in. By convention equals the registry session id. Present iff
+  the tmux session is alive. Find the session with
+  `tmux has-session -t <tmux_session>`.
 - `worktree`, `branch`, `cwd`
 - `started`, `last_touched`, `shutdown` — timestamps, format flexible
-- `resumed_session_id` — Claude `--resume` token captured at shutdown
-  or wrap. Always written and surfaced in full — never truncated or
-  abbreviated with `<prefix>-...`. It's the only handle for resuming
-  the conversation; an abbreviation is unrecoverable if the JSONL
-  prefix isn't unique or the JSONL is later moved.
-- `snapshot` — path to pane snapshot captured at shutdown or wrap
+- `resumed_session_id` — Claude `--resume` token for the primary
+  worker (window 0 pane 0), captured at shutdown or wrap. Always
+  written and surfaced in full — never truncated or abbreviated with
+  `<prefix>-...`. Reading the registry alone should be enough to fire
+  a manual `claude --resume` for the common single-worker case.
+- `snapshot` — path to multi-window pane snapshot captured at shutdown
+  or wrap
+- `resume_state` — path to the structured per-window state file under
+  `~/.local/state/claude-manager/resume/` written at shutdown. See
+  the Shutdown section for format.
 - `resume_target` — expected resume date (optional, free-form)
 - `wrap_requested` — `true` when a worker has requested wrap; the
   manager fulfils the journal-write phase and removes the entry
@@ -162,11 +160,10 @@ Recognised session fields:
 
 Lifecycle state is encoded by which fields are present:
 
-- `tmux_window_id` set, no `tmux_session` → active (window lives in
-  the manager's tmux session).
-- No `tmux_window_id`, `shutdown` + `resumed_session_id` set →
-  shutdown.
-- No `tmux_window_id`, `wrap_requested: true` set → wrap in progress
+- `tmux_session` set → active.
+- No `tmux_session`, `shutdown` + `resumed_session_id` + `resume_state`
+  set → shutdown.
+- No `tmux_session`, `wrap_requested: true` set → wrap in progress
   (worker has marked, manager hasn't fulfilled).
 
 There is no explicit status field — derived from the field set.
@@ -195,13 +192,11 @@ Example:
 ```markdown
 # Sessions
 
-manager: hbz:1.0
+manager: 0:1.0
 
 ## eng-1234-payment-bug
 ticket: ENG-1234
-tmux_window_id: @42
-tmux_session: payment-bug
-claude_panes: 0
+tmux_session: eng-1234-payment-bug
 worktree: ~/code/repo-foo/_wt/eng-1234
 branch: fix/eng-1234-payment-bug
 started: 2026-04-29 14:00
@@ -209,8 +204,9 @@ last_touched: 2026-04-29 16:20
 notes: ~/code/journal/2026-04-29-eng-1234.md
 ```
 
-(Parked; window `@42` lives in tmux session `payment-bug`. An active
-session would have `tmux_window_id` but no `tmux_session`.)
+(Active; the tmux session named `eng-1234-payment-bug` is alive.
+A shutdown entry would drop `tmux_session` and add `shutdown`,
+`snapshot`, `resume_state`, `resumed_session_id`.)
 
 ## Registry as shared channel
 
@@ -292,74 +288,81 @@ net.
 2. If a worktree is wanted, create it first. Worktrees must exist
    before Claude starts inside them: `cwd` cannot change later. Use
    whatever the project rules say.
-3. Default location: a new tmux window in the manager's own tmux
-   session, with `cwd` set to the worktree (or repo root). Name the
-   window after the session id (`-n <session-id>`) and capture the
-   stable window id:
+3. Pre-check name collision:
 
    ```bash
-   tmux_window_id=$(tmux new-window -d -P -F '#{window_id}' \
-     -n "$session_id" -c "$cwd")
+   tmux has-session -t "$session_id" 2>/dev/null
    ```
 
-   The manager itself occupies window 1 of its tmux session. Spawned
-   windows go after; gappy indices are fine and kept on purpose
-   (renumbering happens on demand only — see Renumber).
-4. Start Claude in pane 0 (the primary worker). Add extra panes per
-   the project rulebook; if any runs Claude, append to `claude_panes`.
-
-   Kickoff: launch `claude`, poll the pane until the TUI input line
-   is ready, then send the prompt text and `Enter` as separate
-   `send-keys` calls. Capture the pane afterwards to confirm the
-   prompt left the input box. The polling check must match what the
-   current TUI renders — capture first and adapt the regex.
+   If a tmux session by that name already exists, surface it and ask:
+   import (see Importing an existing tmux session) or pick a new
+   session id. Don't silently take over.
+4. Create the tmux session and capture its name:
 
    ```bash
-   tmux send-keys -t "$wid" "claude" Enter
+   tmux new-session -d -s "$session_id" -n "$session_id" -c "$cwd"
+   ```
+
+   `-d` keeps the focus rule (no stealing the user's view). `-n`
+   names window 0 after the session id for tidiness; the user is free
+   to rename later. Additional windows or panes inside this session
+   are user free space — the registry doesn't track them while alive.
+5. Start Claude in window 0 pane 0 (the primary worker). Kickoff:
+   launch `claude`, poll the pane until the TUI input line is ready,
+   then send the prompt text and `Enter` as separate `send-keys`
+   calls. Capture the pane afterwards to confirm the prompt left the
+   input box. The polling check must match what the current TUI
+   renders — capture first and adapt the regex.
+
+   ```bash
+   target="${session_id}:0.0"
+   tmux send-keys -t "$target" "claude" Enter
    # Example shape — adapt the check to whatever this TUI renders:
-   until tmux capture-pane -p -t "$wid" -S -5 | grep -q '<marker>'; do
+   until tmux capture-pane -p -t "$target" -S -5 | grep -q '<marker>'; do
      sleep 0.5
    done
-   tmux send-keys -t "$wid" "$prompt"
-   tmux send-keys -t "$wid" Enter
-   tmux capture-pane -p -t "$wid" -S -5
+   tmux send-keys -t "$target" "$prompt"
+   tmux send-keys -t "$target" Enter
+   tmux capture-pane -p -t "$target" -S -5
    ```
-5. Add the session to the registry with `tmux_window_id`. Add to the
-   visible task list (`[active]` prefix).
-6. Tell the user how to switch to it.
+6. Add the session to the registry with `tmux_session: $session_id`.
+   Add to the visible task list (`[active]` prefix).
+7. Tell the user how to switch to it (see Switch UX).
 
-All `tmux new-window` and `tmux move-window` invocations include `-d`
-so spawning, parking or reopening sessions never steals the user's
-focus. Hard rule.
+All session-creating tmux commands include `-d` so spawning sessions
+never steals the user's focus. Hard rule.
 
 For **PR review** tasks specifically, the worktree is off the PR's
 branch (`gh pr view <N> --json headRefName`). The worker's `review-pr`
 skill takes over once the worker starts; the manager just lands it in
 the right worktree.
 
+## Switch UX
+
+Primary: `prefix+w` picker — interactive list across sessions and
+windows. Direct: `tmux switch-client -t <session-id>`. Manager hands
+back the session id; the user navigates.
+
 ## Reconcile
 
-On demand, diff the registry against `tmux ls` and the manager's
-window list:
+On demand, diff the registry against `tmux ls`:
 
-- Entry with `tmux_window_id` set: look up the id in `tmux
-  list-windows -a -F '#{window_id} #{session_name}:#{window_index}'`.
-  If found, derive active vs parked from session name (manager's
-  tmux session → active; otherwise → parked) and update the entry's
-  `tmux_session` field accordingly. If not found, the window died
-  unexpectedly — surface and ask: finished, shutdown, or unknown?
+- Entry with `tmux_session` set: `tmux has-session -t <tmux_session>`.
+  If alive, fine. If not alive, the session died unexpectedly —
+  surface and ask: finished, shutdown unexpectedly, or unknown?
 
   If *many* entries fail lookup at once, suspect a tmux server
-  restart (every `@N` from the previous server is now meaningless),
-  not per-window deaths. Surface aggregately and confirm before
-  changing any state.
+  restart and surface aggregately before changing any state. Unlike
+  numeric window ids, `tmux_session` is a user-namespace name and
+  cannot be recycled into pointing at something unrelated — the
+  worst case is everything missing at once.
 
-- Entry without `tmux_window_id`: check for `shutdown` (leave it
-  alone) or `wrap_requested: true` (trigger manager-side wrap if the
-  watch missed it). Otherwise ask the user.
+- Entry without `tmux_session`: check for `shutdown` (leave alone) or
+  `wrap_requested: true` (trigger manager-side wrap if the watch
+  missed it). Otherwise ask the user.
 
-- tmux window present but no registry entry matches its id → ask:
-  import or ignore. Don't silently take ownership.
+- tmux session present but no matching registry entry → ask: import
+  or ignore. Don't silently take ownership.
 
 Sync the visible task list after reconciling.
 
@@ -369,17 +372,17 @@ can't see.
 
 ## Importing an existing tmux session
 
-1. Confirm the tmux session exists with `tmux ls`.
-2. Ask for a session id and any missing context (ticket, branch,
-   worktree, which panes run Claude — default `0`).
-3. Capture the window id:
-   `tmux display-message -p -t <name>:0 '#{window_id}'`.
-4. Add to the registry with `tmux_window_id`, `tmux_session: <name>`,
-   `claude_panes`, `started`, `last_touched`. Add to the visible task
-   list (`[parked]` prefix since standalone tmux session = parked by
-   convention).
-5. Hand over the right `switch-client` / `attach` command, or run the
-   merge-back flow if the user wants it inline.
+1. `tmux has-session -t <existing-name>` to confirm the session
+   exists.
+2. If the existing tmux session name equals the desired registry
+   session id, register as-is. If different, either rename the tmux
+   session (`tmux rename-session`) or adopt the existing name as the
+   registry session id.
+3. Ask for missing context (ticket, branch, worktree, anything else
+   worth recording).
+4. Write the registry entry with `tmux_session: <name>`, `started`,
+   `last_touched`. Add to the visible task list (`[active]` prefix).
+5. Hand over the switch handle (see Switch UX).
 
 ## Shutdown
 
@@ -549,11 +552,20 @@ Read the relevant store's schema before writing. Follow it.
 ## Idle-detection query
 
 "Which workers are waiting for input?" — for each registry session
-with a tmux location, capture each `claude_panes` entry:
+with `tmux_session` set, walk every pane in the session and capture
+the recent tail:
 
 ```bash
-tmux capture-pane -p -t <tmux-target>.<pane> -S -30
+tmux list-panes -s -t <tmux_session> \
+  -F '#{window_index} #{pane_index} #{pane_current_command}' \
+  | while read w p cmd; do
+    [ -n "$cmd" ] || continue
+    tmux capture-pane -p -t "<tmux_session>:${w}.${p}" -S -30
+  done
 ```
+
+Filter for Claude panes by `pane_current_command` containing "claude"
+or by sniffing the captured tail for TUI signatures.
 
 Heuristics (Claude Code TUI):
 
