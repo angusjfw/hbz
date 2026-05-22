@@ -215,9 +215,10 @@ mkdir lock serialises writes from either side.
 
 **Workers may write to their own entry only.** Allowed fields:
 `last_touched`, `notes`, ticket/branch updates, and the shutdown/wrap
-fields (`shutdown`, `resumed_session_id`, `snapshot`, `wrap_requested`).
-Workers may also write to their own snapshot file under
-`~/.local/state/claude-manager/snapshots/`.
+fields (`shutdown`, `resumed_session_id`, `snapshot`, `resume_state`,
+`wrap_requested`). Workers may also write their own snapshot file
+under `~/.local/state/claude-manager/snapshots/` and resume_state
+file under `~/.local/state/claude-manager/resume/`.
 
 **Workers must not touch:** the header block, any other session's
 entry, or the journal/wiki. Wrap is driven via the `wrap_requested`
@@ -386,91 +387,134 @@ can't see.
 
 ## Shutdown
 
-Shutdown = kill the tmux container; keep the registry entry for later
-resumption via `claude --resume <id>`. Sits between Park (keeps tmux
-alive) and Wrap (final, journal entry written, entry removed).
+Shutdown = kill the tmux session; keep the registry entry so the
+session can be cold-resumed later via the manager. Sits between
+active and Wrap (final, journal entry written, entry removed).
 Flexible wording: "shutdown", "kill that one", "pause it", "drop
 tmux".
 
 **Mechanics:**
 
-1. **Capture pane snapshots.** Capture every pane in the tmux
-   container, not just `claude_panes` — other panes may hold dev
-   servers, shells, or other context worth preserving:
+1. **Discover structure.** Walk every window and every pane in the
+   tmux session, capturing window layouts and per-pane metadata:
 
    ```bash
-   tmux list-panes -t <target> -F '#{pane_index}' | while read p; do
-     echo "--- pane $p ---"
-     tmux capture-pane -p -J -t <target>.$p -S -500
-     echo
-   done >> ~/.local/state/claude-manager/snapshots/<session-id>.txt
+   tmux list-windows -t "$tmux_session" \
+     -F '#{window_index} #{window_name} #{window_layout}'
+   # per window:
+   tmux list-panes -t "$tmux_session":<w> \
+     -F '#{pane_index} #{pane_current_path} #{pane_current_command}'
    ```
 
-2. **Find the Claude session ID.** If the registry entry already has
-   `resumed_session_id`, reuse it — `claude --resume <id>` continues
-   writing to the same JSONL, so the id is stable across resume
-   cycles. Skip the rest of this step.
-
-   Otherwise, Claude stores per-project JSONL conversation files
-   under `~/.claude/projects/<encoded-cwd>/`. The encoding converts
-   every `/`, `.` and `_` in the absolute cwd to `-`; don't strip the
-   leading `/` (it produces a leading `-` on the directory name,
-   which is correct — e.g.
-   `/Users/foo.bar/code/my_service` →
-   `-Users-foo-bar-code-my-service`):
+2. **Capture pane snapshots.** Concatenate every pane in every
+   window into one snapshot file, with `--- window <w> pane <p> ---`
+   markers:
 
    ```bash
-   cwd="<worktree or cwd from registry>"
-   encoded=$(echo "$cwd" | sed 's|[/._]|-|g')
-   proj_dir="$HOME/.claude/projects/$encoded"
-   ls -t "$proj_dir"/*.jsonl 2>/dev/null
+   snapshot=~/.local/state/claude-manager/snapshots/<session-id>.txt
+   mkdir -p "$(dirname "$snapshot")"
+   tmux list-windows -t "$tmux_session" -F '#{window_index}' | while read w; do
+     tmux list-panes -t "$tmux_session":$w -F '#{pane_index}' | while read p; do
+       echo "--- window $w pane $p ---"
+       tmux capture-pane -p -J -t "${tmux_session}:${w}.${p}" -S -500
+       echo
+     done
+   done > "$snapshot"
    ```
 
-   To identify which JSONL belongs to this session, grep the snapshot
-   for a distinctive phrase (initial prompt, early output) and match
-   against the candidate JSONL files. The basename without `.jsonl`
-   is the `resumed_session_id`.
+3. **Find Claude session IDs for every Claude pane.** Walk every pane
+   from step 1; filter to those whose `pane_current_command` matches
+   `claude` or whose recent capture shows the Claude TUI. For each:
 
-   **Shared project dirs** (multiple sessions in the same cwd, e.g.
-   three separate my_service workers): each session's snapshot will
-   contain its distinctive initial prompt. If no phrase is unique
-   enough, fall back to mtime — most recently modified JSONL not
-   already claimed by another registry entry. Note the method used
-   in `notes`.
+   - If this is the primary pane (window 0 pane 0) and the registry
+     entry already has `resumed_session_id`, reuse it — `claude
+     --resume <id>` continues writing to the same JSONL, so the id is
+     stable across resume cycles.
 
-   Do **not** use `lsof` on the tmux pane's PID to locate the JSONL
-   — on macOS `lsof` does not expose it.
+   - Otherwise, Claude stores per-project JSONL conversation files
+     under `~/.claude/projects/<encoded-cwd>/`. The encoding converts
+     every `/`, `.` and `_` in the absolute cwd to `-`; don't strip
+     the leading `/` (it produces a leading `-` on the directory
+     name, which is correct — e.g.
+     `/Users/foo.bar/code/my_service` →
+     `-Users-foo-bar-code-my-service`):
 
-3. **Capture `tmux_window_id` into a shell var before rewriting** —
-   the registry write below removes it from the entry, so the kill
-   step needs it remembered:
+     ```bash
+     cwd="<pane_current_path>"
+     encoded=$(echo "$cwd" | sed 's|[/._]|-|g')
+     proj_dir="$HOME/.claude/projects/$encoded"
+     ls -t "$proj_dir"/*.jsonl 2>/dev/null
+     ```
 
-   ```bash
-   wid="$(read it from the registry entry)"
+     Identify the JSONL by grepping the snapshot for a distinctive
+     phrase (initial prompt, early output) and matching against the
+     candidate JSONL files. The basename without `.jsonl` is the
+     `claude_session_id` for that pane.
+
+   - **Shared project dirs** (multiple Claude panes with the same
+     cwd): each pane's section of the snapshot contains its
+     distinctive initial prompt. If no phrase is unique enough, fall
+     back to mtime — most recently modified JSONL not already claimed
+     by another pane. Note the method used in the resume_state file.
+
+   - Do **not** use `lsof` on the tmux pane's PID to locate the JSONL
+     — on macOS `lsof` does not expose it.
+
+4. **Build the resume_state file** at
+   `~/.local/state/claude-manager/resume/<session-id>.md`. Markdown,
+   same idiom as the registry. One window per `## window <n>: <name>`
+   block with a `layout:` field; one pane per `### pane <n>` sub-block
+   with `cwd:`, `command:`, and on Claude panes `claude_session_id:`.
+   For panes whose `pane_current_command` is just a shell (`bash`,
+   `zsh`, `fish`), set `command:` empty — auto-replaying an idle
+   shell on resume is noise. Example:
+
+   ```markdown
+   # Resume state: eng-1234
+
+   shutdown: 2026-05-22
+
+   ## window 0: claude
+   layout: 5fe4,200x50,0,0,0
+
+   ### pane 0
+   cwd: ~/code/.../eng-1234
+   command: claude --resume abc-123
+   claude_session_id: abc-123
+
+   ## window 3: dev
+   layout: 9a3c,200x50,0,0{100x50,0,0,1,99x50,101,0,2}
+
+   ### pane 0
+   cwd: ~/code/.../mock
+   command: yarn mock
+
+   ### pane 1
+   cwd: ~/code/.../eng-1234
+   command: yarn dev
+
+   ### pane 2
+   cwd: ~/code/.../eng-1234
+   command: yarn test --watch
    ```
 
-4. **Acquire the lock, rewrite the entry, release the lock** (see
-   Registry section). The rewrite:
-   - Adds `resumed_session_id`, `snapshot`, `shutdown: <today>`.
+5. **Acquire the lock, rewrite the registry entry, release the lock**
+   (see Registry section). The rewrite:
+   - Adds `resumed_session_id` (primary worker = window 0 pane 0).
+   - Adds `snapshot: <path>`, `resume_state: <path>`,
+     `shutdown: <today>`.
    - Adds `resume_target: <date>` if known.
    - Updates `last_touched`.
-   - Appends to `notes`: "Tmux killed <date>; resume via
-     `claude --resume <id>` from the worktree/cwd."
-   - Removes `tmux_window_id`, `tmux_session`, `claude_panes`.
+   - Appends to `notes`: "Tmux killed <date>; resume via the manager."
+   - Removes `tmux_session`.
 
-5. **Kill the tmux container** (after the lock is released). Pass the
-   stable id directly — `tmux kill-window` accepts `@N` targets, no
-   resolve-then-kill round trip needed (which would be racy):
+6. **Kill the tmux session** (after the lock is released):
 
    ```bash
-   tmux kill-window -t "$wid"
+   tmux kill-session -t "$tmux_session"
    ```
 
-   If the parent tmux session was a standalone one (parked) and that
-   was its only window, it dies with the window — no extra step.
-   No renumber afterwards; gappy indices are fine.
-
-6. **Update the visible task list:** set the description prefix to
+7. **Update the visible task list:** set the description prefix to
    `[shutdown]` per the Task list hygiene rule.
 
 **Trigger paths:**
@@ -478,17 +522,15 @@ tmux".
 - The user asks the manager directly. Manager runs the full mechanics
   above.
 - A worker self-shuts via `/claude-manager-shutdown`. The worker does
-  steps 1–5 itself (it has direct access to its own JSONL — most
-  recently modified is by definition this session). The manager
-  observes the change via the watch and updates the task list.
+  steps 1–6 itself. For multi-Claude sessions (forked workers in other
+  windows), the worker walks all panes per step 3, not just its own.
+  The manager observes the change via the watch and updates the task
+  list.
 
-**To resume later:** from the worktree (or `cwd`):
-
-```bash
-claude --resume <resumed_session_id>
-```
-
-The snapshot provides context on where the session left off.
+**To resume later:** the manager's cold-resume flow rebuilds the
+whole tmux session from the resume_state file (see Cold resume
+below). A manual `claude --resume <resumed_session_id>` from the
+worktree still works as an escape hatch for the primary worker only.
 
 ## Wrap
 
