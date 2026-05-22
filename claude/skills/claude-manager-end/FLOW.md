@@ -1,30 +1,25 @@
-# Worker session lifecycle: park, shutdown, wrap
+# Worker session lifecycle: shutdown, wrap
 
-Shared flow for the three worker-side slash commands:
+Shared flow for the two worker-side slash commands:
 
-- `/claude-manager-park` — `mode=park`
 - `/claude-manager-shutdown` — `mode=shutdown`
 - `/claude-manager-wrap` — `mode=wrap`
 
 Each top-level skill is a thin wrapper that invokes this flow with a
-specific mode. The mechanics live here so the three modes don't drift.
+specific mode. The mechanics live here so the two modes don't drift.
 
 In claude-manager terminology:
 
-- **Park** moves the worker's tmux container out of the manager's window
-  list into a standalone tmux session. The session keeps running.
-  Reversible.
 - **Shutdown** kills the tmux container but keeps the registry entry, so
   the conversation can be resumed later via `claude --resume <id>`.
 - **Wrap** is final. Snapshot, journal entry (written by the manager from
   the worker's `wrap_requested` marker), registry entry removed.
 
-Workers run all three themselves under the registry lock. The manager
+Workers run both themselves under the registry lock. The manager
 observes via its registry watch and handles any follow-up that lives on
-the manager side (journal write for wrap). No renumber afterwards —
-gappy indices are fine, and the registry identifies windows by stable
-`tmux_window_id`. See `claude-manager/SKILL.md` for the manager-side
-mechanics; the modes use the same vocabulary on both sides.
+the manager side (journal write for wrap). See
+`claude-manager/SKILL.md` for the manager-side mechanics; the modes use
+the same vocabulary on both sides.
 
 ## Lock pattern
 
@@ -76,36 +71,6 @@ All three modes start the same way.
    surface both and stop.
 
 After the preamble, branch on `mode`.
-
-## Mode: park
-
-Move the worker's tmux window into a standalone tmux session.
-
-If the entry already has `tmux_session` set (worker is already in a
-standalone tmux session), surface the entry and stop — nothing to
-park.
-
-1. Do the move (`src_session`/`src_window` from the preamble are the
-   worker's current location):
-
-   ```bash
-   target="${1:-$window_name}"
-   tmux new-session -d -s "$target" -n placeholder
-   tmux move-window -d -s "${src_session}:${src_window}" -t "${target}:0" -k
-   ```
-
-2. Acquire the lock, rewrite the entry, release the lock (see
-   Lock pattern). The rewrite:
-
-   - Adds `tmux_session: $target`.
-   - Updates `last_touched`.
-   - Leaves `tmux_window_id` unchanged (the move doesn't change it).
-   - Preserves all other fields and unknown keys.
-
-3. Tell the user `tmux attach -t $target`.
-
-The manager will see the change via its watch and update its task list.
-No prompt to the manager pane is needed.
 
 ## Mode: shutdown
 
@@ -252,11 +217,8 @@ Every failure surfaces evidence and stops. No silent fallthrough.
   a tmux session unrelated to claude-manager.
 - **Lock contention beyond 10 s.** Print the lock path and the holder
   (`ls -ld` to show owner). Don't force-release; ask the user.
-- **Park: worker already in standalone tmux session.** Print the entry
-  and stop.
 - **Shutdown/wrap: JSONL resolution fails.** Print the project dir
   searched and any candidate JSONL files. Ask the user to identify the
   right one or skip the `resumed_session_id` field.
-- **tmux move/kill fails.** Surface the tmux error verbatim. Common
-  causes: target tmux session name already in use (park), invalid
-  target (shutdown).
+- **tmux kill fails.** Surface the tmux error verbatim. Common cause:
+  invalid target (shutdown).

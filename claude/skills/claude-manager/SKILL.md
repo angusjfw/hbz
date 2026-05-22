@@ -55,8 +55,6 @@ this is the formal contract across managers:
 
 - `[active] <session-id>: <ticket or summary>` — live, has a tmux
   container.
-- `[parked] <session-id>: ...` — `tmux_window_id` set with
-  `tmux_session` set (window lives in a standalone tmux session).
 - `[shutdown] <session-id>: ...` — `shutdown` field set, no tmux
   fields.
 - `[wrap requested] <session-id>: ...` — transient; worker has
@@ -70,7 +68,6 @@ to match the prefixes — keep them orthogonal.
 Sync triggers:
 - Spawn or import → add a task at `in_progress` with `[active]`
   prefix.
-- Park → update prefix to `[parked]`.
 - Shutdown → update prefix to `[shutdown]`.
 - Wrap-requested seen on a worker entry → update prefix to
   `[wrap requested]`.
@@ -90,11 +87,8 @@ between turns.
 has one tmux container (a tmux window in the manager's tmux session,
 or its own tmux session) and one or more workers in panes inside it.
 
-Three lifecycle transitions, same names on both sides:
+Two lifecycle transitions, same names on both sides:
 
-- **Park** — move the tmux container out of the manager's window list
-  into a standalone tmux session. Reversible. Phrasings: "park",
-  "move out", "drop into the background".
 - **Shutdown** — kill the tmux container; keep the registry entry for
   later resumption. Phrasings: "shutdown", "kill that one", "pause
   it", "drop tmux".
@@ -170,8 +164,6 @@ Lifecycle state is encoded by which fields are present:
 
 - `tmux_window_id` set, no `tmux_session` → active (window lives in
   the manager's tmux session).
-- `tmux_window_id` set, `tmux_session` set → parked (window lives in
-  a standalone tmux session).
 - No `tmux_window_id`, `shutdown` + `resumed_session_id` set →
   shutdown.
 - No `tmux_window_id`, `wrap_requested: true` set → wrap in progress
@@ -226,12 +218,10 @@ The registry is shared state between the manager and its workers. The
 mkdir lock serialises writes from either side.
 
 **Workers may write to their own entry only.** Allowed fields:
-`last_touched`, `notes`, ticket/branch updates, adding/removing
-`tmux_session` when self-park moves the window (`tmux_window_id`
-itself never changes — same window before and after the move), and
-the shutdown/wrap fields (`shutdown`, `resumed_session_id`, `snapshot`,
-`wrap_requested`). Workers may also write to their own snapshot file
-under `~/.local/state/claude-manager/snapshots/`.
+`last_touched`, `notes`, ticket/branch updates, and the shutdown/wrap
+fields (`shutdown`, `resumed_session_id`, `snapshot`, `wrap_requested`).
+Workers may also write to their own snapshot file under
+`~/.local/state/claude-manager/snapshots/`.
 
 **Workers must not touch:** the header block, any other session's
 entry, or the journal/wiki. Wrap is driven via the `wrap_requested`
@@ -239,13 +229,13 @@ marker; the manager does the journal write.
 
 **Manager continues to own:** header refresh for itself; the spawn
 flow; journal entries and other knowledge work; reconciling against
-`tmux ls`; on-demand window renumbering when the user asks for it.
+`tmux ls`.
 
 Both manager-initiated lifecycle transitions (driven by user requests
 to the manager directly) and worker-initiated transitions (via the
-`/claude-manager-park`, `/claude-manager-shutdown`,
-`/claude-manager-wrap` skills) end up in the same registry state.
-The two paths are described in the Park, Shutdown, and Wrap sections.
+`/claude-manager-shutdown` and `/claude-manager-wrap` skills) end up
+in the same registry state. The two paths are described in the
+Shutdown and Wrap sections.
 
 ## Watching the registry
 
@@ -279,9 +269,8 @@ Lifecycle:
   it; else start a new watch and write the PID.
 - **Reaction loop:** on each `changed:` event, re-read the registry,
   diff against the in-conversation last-known state, surface a brief
-  note for any worker-driven change ("worker `eng-1234` parked itself
-  to tmux session `eng-1234`"), and update the task list per the
-  hygiene rule.
+  note for any worker-driven change ("worker `eng-1234` shut itself
+  down"), and update the task list per the hygiene rule.
 - **Self-writes don't double-fire.** When the manager writes to the
   registry it updates its in-conversation last-known state *before*
   releasing the lock. The watch event arrives next turn and re-reads
@@ -348,57 +337,6 @@ branch (`gh pr view <N> --json headRefName`). The worker's `review-pr`
 skill takes over once the worker starts; the manager just lands it in
 the right worktree.
 
-## Park
-
-Park = move a session's tmux container out of the manager's window
-list into a standalone tmux session. Reversible. Same vocabulary on
-both sides; flexible wording allowed ("park", "move out", "drop into
-the background").
-
-The window's `tmux_window_id` is stable across the move — only
-`tmux_session` is added (parked) or removed (unparked) on the entry.
-Look up the window's current location by id, not by `(session,
-index)`:
-
-```bash
-loc=$(tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}' \
-  | awk -v wid="$tmux_window_id" '$1 == wid {print $2}')
-src_session="${loc%%:*}"; src_window="${loc##*:}"
-```
-
-**Mechanics (split out):**
-
-```bash
-tmux new-session -d -s "$session_id" -n placeholder
-tmux move-window -d -s "${src_session}:${src_window}" -t "${session_id}:0" -k
-```
-
-Update the registry: add `tmux_session: $session_id`. Update
-`last_touched`. `tmux_window_id` is unchanged.
-
-**Mechanics (merge back as a window in the manager's tmux session):**
-
-```bash
-loc=$(tmux list-windows -a -F '#{window_id} #{session_name}:#{window_index}' \
-  | awk -v wid="$tmux_window_id" '$1 == wid {print $2}')
-src_session="${loc%%:*}"; src_window="${loc##*:}"
-tmux move-window -d -s "${src_session}:${src_window}" -t "${manager_tmux_session}:" -k
-tmux kill-session -t "$src_session"
-```
-
-Update the registry: drop `tmux_session`. `tmux_window_id` is
-unchanged. Either move stays visible to `tmux ls`.
-
-**Trigger paths:**
-
-- The user asks the manager directly. Manager runs the mechanics and
-  updates its task list.
-- A worker self-parks via `/claude-manager-park`. The worker performs
-  the move and the registry update. The manager observes via the
-  watch and updates its task list.
-
-The end state is identical either way.
-
 ## Reconcile
 
 On demand, diff the registry against `tmux ls` and the manager's
@@ -428,18 +366,6 @@ Sync the visible task list after reconciling.
 The watch auto-triggers a reconcile pass on any worker write, so
 manual reconcile is mostly only needed for tmux-side drift the watch
 can't see.
-
-## Renumber
-
-On demand only — gappy indices in the manager's tmux session are
-fine and don't break anything (entries identify windows by stable
-`tmux_window_id`, not by index). If the user wants the indices tidy:
-
-```bash
-tmux move-window -r -s "$manager_tmux_session"
-```
-
-No registry updates needed afterwards. Window ids are unchanged.
 
 ## Importing an existing tmux session
 
