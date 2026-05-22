@@ -1,6 +1,6 @@
 ---
 name: claude-manager-wrap
-description: Wrap up a Claude session from inside the worker pane — captures snapshots, gathers any context worth carrying into the journal, marks the registry entry `wrap_requested`, and kills the tmux container. The manager observes via its watch and writes the journal entry per the project's schema, then removes the registry entry. Final state. Use when the work is genuinely done and you want it recorded.
+description: Wrap up a Claude session from inside the worker pane — captures multi-window snapshots, gathers any context worth carrying into the journal, marks the registry entry `wrap_requested`, and kills the tmux session. The manager observes via its watch and writes the journal entry per the project's schema, then removes the registry entry. Final state. Use when the work is genuinely done and you want it recorded.
 ---
 
 # claude-manager-wrap
@@ -18,7 +18,8 @@ This is a thin wrapper. The shared lifecycle flow lives at
 
 The worker handles its phase itself:
 
-1. Captures every pane to a snapshot file.
+1. Walks every window and pane in the tmux session, writing a
+   multi-window snapshot file.
 2. Resolves its Claude conversation's resume id (so the journal can
    record it).
 3. Assesses what context is worth carrying into the journal — the
@@ -27,7 +28,8 @@ The worker handles its phase itself:
    focused question; otherwise doesn't interrupt.
 4. Rewrites its registry entry under the lock: `wrap_requested: true`,
    `snapshot`, `resumed_session_id`, `notes` with the journal context.
-5. Releases the lock and kills the tmux container.
+   Drops `tmux_session`.
+5. Releases the lock and kills the tmux session.
 
 The manager picks up `wrap_requested: true` via its watch, reads the
 project's journal schema, writes the entry, and removes the registry
