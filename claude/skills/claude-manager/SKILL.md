@@ -602,19 +602,29 @@ next reconcile catches the drift.
 ## Wrap
 
 Wrap = final close-out. Journal entry written per the project's
-schema; registry entry removed; tmux container killed. Flexible
+schema; registry entry removed; tmux session killed. Flexible
 wording: "wrap up", "complete", "close out", "finish".
 
 **Mechanics:**
 
-1. Capture `tmux_window_id` (if present on the entry) into a shell
-   var — the registry-removal step below wipes it, so the kill needs
-   it remembered:
-   `wid="$(read it from the registry entry)"`.
-2. For each pane in `claude_panes` (or every pane, when killing the
-   container), capture
-   `tmux capture-pane -p -t <target>.<pane> -S -200` for a final
-   snapshot.
+1. Capture `tmux_session` into a shell var — the registry-removal
+   step below wipes it, so the kill needs it remembered.
+2. Capture pane snapshots for every pane in every window into one
+   snapshot file, with `--- window <w> pane <p> ---` markers (same
+   format as shutdown):
+
+   ```bash
+   snapshot=~/.local/state/claude-manager/snapshots/<session-id>.txt
+   mkdir -p "$(dirname "$snapshot")"
+   tmux list-windows -t "$tmux_session" -F '#{window_index}' | while read w; do
+     tmux list-panes -t "$tmux_session":$w -F '#{pane_index}' | while read p; do
+       echo "--- window $w pane $p ---"
+       tmux capture-pane -p -J -t "${tmux_session}:${w}.${p}" -S -200
+       echo
+     done
+   done > "$snapshot"
+   ```
+
 3. Write the journal entry per the project's schema, using the
    snapshot and any `notes` from the registry entry. If notes are
    thin and there's no obvious narrative from snapshot + recent git
@@ -623,9 +633,11 @@ wording: "wrap up", "complete", "close out", "finish".
 4. Mark the visible task list entry `completed`, then delete it from
    the list.
 5. Remove the entry from the registry.
-6. Kill the tmux container if `wid` was set: `tmux kill-window -t
-   "$wid"`. Pass the stable id directly to avoid the lookup-then-kill
-   race. No renumber afterwards.
+6. Kill the tmux session if it's still alive:
+
+   ```bash
+   tmux kill-session -t "$tmux_session"
+   ```
 
 **Trigger paths:**
 
@@ -634,14 +646,18 @@ wording: "wrap up", "complete", "close out", "finish".
 - A worker self-wraps via `/claude-manager-wrap`. The worker captures
   the snapshot, resolves its `resumed_session_id`, gathers any
   context for the journal into `notes`, sets `wrap_requested: true`
-  on its registry entry, then kills the tmux container. The watch
-  fires; the manager picks up the marker and runs steps 2–4
-  (journal write, task-list completion, registry removal). Step 5
+  on its registry entry, then kills the tmux session. The watch
+  fires; the manager picks up the marker and runs steps 3–5
+  (journal write, task-list completion, registry removal). Step 6
   (kill) is already done.
 
 If the manager isn't running when a worker wraps, the
 `wrap_requested` marker persists on the entry. The next manager
 invocation sees it during reconcile and processes it.
+
+The split (worker pre-captures and kills; manager writes the journal
+and removes the entry) is preserved from the previous design. Shifting
+to a marker-only flow is tracked as a separate followup.
 
 ## Knowledge work
 

@@ -179,10 +179,26 @@ fulfils the journal write.
 
 **Worker phase:**
 
-1. **Capture pane snapshots** as in Shutdown. Same path convention.
+1. **Capture pane snapshots.** Walk every window and every pane in
+   the tmux session, concatenating into one snapshot file with
+   `--- window <w> pane <p> ---` markers (same format as shutdown):
 
-2. **Resolve `resumed_session_id`** as in Shutdown — the journal entry
-   typically wants it.
+   ```bash
+   snapshot="$HOME/.local/state/claude-manager/snapshots/<session-id>.txt"
+   mkdir -p "$(dirname "$snapshot")"
+   tmux list-windows -t "$src_session" -F '#{window_index}' | while read w; do
+     tmux list-panes -t "$src_session":$w -F '#{pane_index}' | while read p; do
+       echo "--- window $w pane $p ---"
+       tmux capture-pane -p -J -t "${src_session}:${w}.${p}" -S -500
+       echo
+     done
+   done > "$snapshot"
+   ```
+
+2. **Resolve `resumed_session_id`** as in Shutdown — the worker is
+   itself a Claude session, so the most-recently-modified JSONL
+   under its project dir is this session by definition. The journal
+   entry typically wants this id.
 
 3. **Assess journal context.** The worker has the conversation, recent
    git activity in the worktree, and the snapshot. If the picture is
@@ -203,18 +219,22 @@ fulfils the journal write.
      file), append to that file instead of overwriting the field.
      Whenever notes reference the resume id, write the full
      `resumed_session_id` — never `<prefix>-...`.
-   - Drops `tmux_window_id`, `tmux_session`, `claude_panes` — the
-     window is about to be killed.
+   - Drops `tmux_session` — the session is about to be killed.
 
-5. **Kill the tmux container** as in Shutdown, after the lock has
-   been released and the registry write has landed.
+5. **Kill the tmux session** after the lock has been released and the
+   registry write has landed. This kills the worker's own pane, so
+   any remaining work must be done first:
+
+   ```bash
+   tmux kill-session -t "$src_session"
+   ```
 
 **Manager phase** (driven by the watch — no action needed from the
 worker after step 5): the manager's reaction loop sees `wrap_requested:
 true`, reads the project's journal schema, reviews the snapshot and
 notes, asks the user a focused question if the picture is thin, writes
 the journal entry, removes the registry entry, and marks the task
-list completed. No renumber.
+list completed.
 
 If the manager isn't running, the marker persists. The next manager
 invocation picks it up.
