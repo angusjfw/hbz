@@ -69,6 +69,7 @@ Sync triggers:
 - Spawn or import → add a task at `in_progress` with `[active]`
   prefix.
 - Shutdown → update prefix to `[shutdown]`.
+- Cold resume → update prefix from `[shutdown]` to `[active]`.
 - Wrap-requested seen on a worker entry → update prefix to
   `[wrap requested]`.
 - Wrap fulfilled → set `completed`, remove the task, remove the
@@ -531,6 +532,72 @@ tmux".
 whole tmux session from the resume_state file (see Cold resume
 below). A manual `claude --resume <resumed_session_id>` from the
 worktree still works as an escape hatch for the primary worker only.
+
+## Cold resume
+
+Cold resume = bring a shutdown session back from disk. Manager-only
+operation; workers can't cold-resume their own dead session (the
+worker doesn't exist yet — cold resume is what creates it).
+
+**Mechanics:**
+
+1. Read the registry shutdown entry plus the `resume_state` file at
+   the path the entry references.
+2. Pre-check name collision: `tmux has-session -t "$session_id"`
+   must return non-zero. Fail loud if alive — there's another tmux
+   session by that name; ask the user before overwriting.
+3. Recreate the session window-by-window. For the first window:
+
+   ```bash
+   tmux new-session -d -s "$session_id" \
+     -n "$window0_name" -c "$pane0_cwd"
+   ```
+
+   For each subsequent window in the resume_state file, in order:
+
+   ```bash
+   tmux new-window -d -t "$session_id": -n "$name" -c "$pane0_cwd"
+   ```
+
+4. For each window, add splits for each pane index > 0 recorded in
+   the resume_state file:
+
+   ```bash
+   tmux split-window -d -t "$session_id":<w> -c "$pane_n_cwd"
+   ```
+
+5. Apply the captured layout to restore the geometry:
+
+   ```bash
+   tmux select-layout -t "$session_id":<w> "$layout"
+   ```
+
+   This must come after the splits (the layout assumes a specific
+   pane count); before sending commands (we want the right panes
+   running the right commands).
+6. Send the recorded command per pane, skipping empty ones (idle
+   shells stay idle):
+
+   ```bash
+   tmux send-keys -t "$session_id":<w>.<p> "$command" Enter
+   ```
+
+   Claude panes get their `claude --resume <claude_session_id>` line
+   verbatim. Other panes get their recorded command.
+7. Update the registry under lock:
+   - Add `tmux_session: $session_id`.
+   - Remove `shutdown`, `snapshot`, `resume_state`,
+     `resumed_session_id`.
+   - Update `last_touched`.
+
+   Delete the on-disk snapshot and resume_state files — the live
+   session supersedes them.
+8. Update the visible task list: prefix `[shutdown]` → `[active]`.
+
+**Manual escape hatch.** A user can always run `claude --resume <id>`
+from the worktree to bring the primary worker back without the
+surrounding scaffold. That route doesn't update the registry; the
+next reconcile catches the drift.
 
 ## Wrap
 
