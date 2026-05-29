@@ -456,8 +456,10 @@ tmux".
    ```
 
 3. **Find Claude session IDs for every Claude pane.** Walk every pane
-   from step 1; filter to those whose `pane_current_command` matches
-   `claude` or whose recent capture shows the Claude TUI. For each:
+   from step 1. A pane is Claude if `pane_current_command` contains
+   `claude`, OR a capture of its last ~30 lines
+   (`tmux capture-pane -p -J -t <pane> -S -30`) contains
+   `esc to interrupt` or ends with a trailing `> ` prompt. For each:
 
    - If this is the primary pane (window 0 pane 0) and the registry
      entry already has `resumed_session_id`, reuse it — `claude
@@ -721,8 +723,10 @@ tmux list-panes -s -t <tmux_session> \
   done
 ```
 
-Filter for Claude panes by `pane_current_command` containing "claude"
-or by sniffing the captured tail for TUI signatures.
+Filter for Claude panes: `pane_current_command` contains `claude`, OR
+the captured tail (last ~30 lines via
+`tmux capture-pane -p -J -t <pane> -S -30`) contains
+`esc to interrupt` or ends with a trailing `> ` prompt.
 
 Heuristics (Claude Code TUI):
 

@@ -108,6 +108,11 @@ covers the worker-side specifics.
    per-pane resolution as in the manager-side mechanics (step 3 of
    `claude-manager/SKILL.md` Shutdown).
 
+   Detect a Claude pane: `pane_current_command` contains `claude`, OR
+   capture the last ~30 lines (`tmux capture-pane -p -J -t <pane> -S -30`)
+   and the content contains `esc to interrupt` or ends with a trailing
+   `> ` prompt.
+
    ```bash
    # for each pane that looks like Claude:
    cwd="<pane_current_path>"
