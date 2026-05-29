@@ -41,6 +41,10 @@ Out of scope, deferred to a worker:
   user has explicitly asked for.
 - Running tests, builds, linters.
 - Anything where the manager would learn something new.
+- Packing analysis, candidate scopes, reproductions, or prescribed
+  fixes into a worker's spawn brief. Same as doing the work from the
+  manager, just one step removed; the worker reads it as authoritative
+  and bends to it. See the brief step in Spawning a session.
 
 When in doubt, spawn a worker. The manager may read worker pane output
 (`tmux capture-pane -p`). It does not send keys or prompts to workers
@@ -309,12 +313,38 @@ net.
    names window 0 after the session id for tidiness; the user is free
    to rename later. Additional windows or panes inside this session
    are user free space — the registry doesn't track them while alive.
-5. Start Claude in window 0 pane 0 (the primary worker). Kickoff:
+5. Decide the brief — what the manager types into the worker's input
+   box on the first prompt. Default is narrow: one line stating the
+   working directory and the topic the user named, optionally one
+   line of obvious context (existing branch, open todos, files to
+   start with). Hand back to the user for direction inside the
+   session.
+
+   Do NOT include: multi-step plan, list of candidate scopes,
+   reproductions, prescribed commits, implicit time pressure, or
+   directive phrasings the worker will fixate on ("read-only, hand
+   back after", "ONLY do X"). Those are manager work disguised as a
+   brief; they bias the worker before they've read the room.
+
+   If I have observations worth surfacing, list them to the user in
+   chat *before* spawning. They can fold them into the brief, ignore,
+   or defer.
+
+   Exceptions where a fuller brief is fine:
+   - The user explicitly described the work in their message.
+   - The worker is for research on a ticket the user pinged.
+   - The user said "spawn a worker that does X" rather than "open a
+     session for me to work on X".
+
+   If the user asks for a "blank" or "empty" spawn, send no brief at
+   all — they'll type the first prompt themselves.
+6. Start Claude in window 0 pane 0 (the primary worker). Kickoff:
    launch `claude`, poll the pane until the TUI input line is ready,
-   then send the prompt text and `Enter` as separate `send-keys`
-   calls. Capture the pane afterwards to confirm the prompt left the
-   input box. The polling check must match what the current TUI
-   renders — capture first and adapt the regex.
+   send the brief from step 5 (skip the send-keys when the brief is
+   blank), then `Enter` as separate `send-keys` calls. Capture the
+   pane afterwards to confirm the prompt left the input box. The
+   polling check must match what the current TUI renders — capture
+   first and adapt the regex.
 
    ```bash
    target="${session_id}:0.0"
@@ -323,13 +353,15 @@ net.
    until tmux capture-pane -p -t "$target" -S -5 | grep -q '<marker>'; do
      sleep 0.5
    done
-   tmux send-keys -t "$target" "$prompt"
-   tmux send-keys -t "$target" Enter
+   if [ -n "$brief" ]; then
+     tmux send-keys -t "$target" "$brief"
+     tmux send-keys -t "$target" Enter
+   fi
    tmux capture-pane -p -t "$target" -S -5
    ```
-6. Add the session to the registry with `tmux_session: $session_id`.
+7. Add the session to the registry with `tmux_session: $session_id`.
    Add to the visible task list (`[active]` prefix).
-7. Tell the user how to switch to it (see Switch UX).
+8. Tell the user how to switch to it (see Switch UX).
 
 All session-creating tmux commands include `-d` so spawning sessions
 never steals the user's focus. Hard rule.

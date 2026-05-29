@@ -67,12 +67,6 @@ registry's `tmux_session` becomes stale. Reconcile catches it as
 registry id against `#{session_name}` across the server when the
 recorded name doesn't exist.
 
-## Over-prompting on spawn briefs
-
-"Open a session to work on X" briefs should stay narrow. Repo-side
-todo: whether the skill itself should codify the expected brief
-format.
-
 ## hbz convention awareness in spawn flow
 
 Spawning a worker in hbz should not instruct worktrunk / branches / PRs
