@@ -7,15 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Pane base-index assumption in cold resume
-
-Cold resume implicitly assumes `pane-base-index 0` (and `base-index 0`).
-Shutdown writes whatever tmux reports for `#{pane_index}` /
-`#{window_index}`; cold resume splits "for each pane n>0", which
-mis-handles non-zero base-index. Detect base-indexes at resume time or
-rewrite the split rule as "(n-1) splits where n = panes recorded for
-the window".
-
 ## Resume-replay of mid-wrap
 
 A session killed mid-`/claude-manager-wrap` or
@@ -43,13 +34,6 @@ Worker self-wrap runs steps 1–5 including the kill; manager-wrap runs
 journal write + remove. Wrap state can drift between the two views.
 Candidate fix: shift fully to the `wrap_requested` marker flow so the
 manager owns the kill and the asymmetry collapses.
-
-## Claude pane detection specification
-
-SKILL and FLOW say "by `pane_current_command` containing claude or
-content sniff" without specifying the sniff. Should be concrete:
-capture last ~30 lines and grep for `esc to interrupt` or a trailing
-`> ` prompt before treating a pane as Claude.
 
 ## Multi-window wrap journal coverage
 
@@ -81,11 +65,6 @@ file. Kept by design so the registry alone is enough to fire a manual
 `claude --resume` for the common single-worker case; the resume_state
 file is authoritative for full cold resume. Worth revisiting if the
 field grows confusing.
-
-## Vestigial preamble vars in FLOW.md
-
-After the sessions pivot, the worker preamble still captures
-`src_window` but no longer references it. Drop it.
 
 ## Manager cwd drifts when spawning
 
