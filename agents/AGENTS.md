@@ -4,7 +4,8 @@
 - Verify before asserting. Never state file contents, system state, or other facts that change without checking first. Avoid recording ephemeral facts in durable places like commits, PR descriptions, or docs.
 - Stay in scope. Don't make changes beyond what was explicitly agreed. Ask questions, raise issues, discuss tradeoffs and get approval before acting.
 - Match ceremony to scope. Small edits don't need brainstorm skills, subagent dispatch, or plan docs. Even within a heavier workflow (e.g. superpowers), skip steps that aren't earning their keep.
-- Update specs, todos and plans before acting on them. Keep external context (docs, design specs) current as decisions are made, not after the fact.
+- Write things down. Keep context files (todos, plans, specs, design docs, journal) current as you go, not after the fact.
+- If using the running todo list tool, keep its statuses current as work starts and finishes.
 - Don't put personal or work details (real name, employer, team/project names) in committed content unless already present in context.
 - Never commit secrets, tokens, API keys, or personal paths that leak info.
 - Don't print commands for the user to run. Run them directly, or in a tmux pane if interaction is needed. If unsure whether to proceed, ask first.
