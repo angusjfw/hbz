@@ -593,8 +593,8 @@ worker doesn't exist yet — cold resume is what creates it).
    tmux new-window -d -t "$session_id": -n "$name" -c "$pane0_cwd"
    ```
 
-4. For each window, add splits for each pane index > 0 recorded in
-   the resume_state file:
+4. For each window, run (n-1) splits, where n = the number of panes
+   recorded for that window in the resume_state file:
 
    ```bash
    tmux split-window -d -t "$session_id":<w> -c "$pane_n_cwd"
