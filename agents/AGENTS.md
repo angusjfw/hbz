@@ -24,10 +24,11 @@
 - No filler, sycophancy, or affirmations. Don't praise routine work.
 - Avoid terms that carry domain baggage outside their domain ("prior art", "blast radius"). Write plainly for the context at hand.
 
-When writing as me (commits, PRs, reviews, Slack, shared docs):
-- Avoid emdashes. Hyphens or rephrase.
-- No AI voice. The tell is the trailing appositive or inversion ("X did Y, a classic case of Z" / "X did Y: a systematic effort"). Rephrase, don't just swap the emdash for a colon.
-- In reviews and PRs, be direct but not harsh. State observations plainly. Avoid both cheerleading and dismissive/overconfident tone.
+When drafting messages from me (Slack, comments, reviews, etc):
+- Sound like a person typing: short, plain, concrete. First person, "I think" over confident abstraction.
+- Don't restate points or use clever-sounding closers. "...a silent-failure shape worth fixing" -> "I think this can fail silently".
+- Prefer a plain sentence or comma to dashes and colons, and rephrase rather than swapping punctuation.
+- Direct, not harsh. No cheerleading or overconfidence.
 
 # Git
 - Always start new work in a worktree branch. Use `wt` (worktrunk). Consult the worktrunk skill.
