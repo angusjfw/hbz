@@ -69,16 +69,15 @@ recorded name doesn't exist.
 
 ## Over-prompting on spawn briefs
 
-"Open a session to work on X" briefs should stay narrow. Captured
-separately as user memory `feedback_dont_over_prompt`. Repo-side todo:
-whether the skill itself should codify the expected brief format.
+"Open a session to work on X" briefs should stay narrow. Repo-side
+todo: whether the skill itself should codify the expected brief
+format.
 
 ## hbz convention awareness in spawn flow
 
 Spawning a worker in hbz should not instruct worktrunk / branches / PRs
-(this repo commits direct to main). Captured separately as user memory
-`hbz_repo_conventions`. Repo-side todo: enforce in the skill (per-repo
-cwd detection) or via a hbz-side CLAUDE.md/AGENTS.md.
+(this repo commits direct to main). Repo-side todo: enforce in the
+skill (per-repo cwd detection) or via a hbz-side CLAUDE.md/AGENTS.md.
 
 ## Resumed_session_id vs resume_state overlap
 
