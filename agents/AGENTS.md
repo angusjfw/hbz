@@ -24,6 +24,7 @@
 - Terse, clean. Keep final conclusions and messages concise.
 - No filler, sycophancy, or affirmations. Don't praise routine work.
 - Avoid terms that carry domain baggage outside their domain ("prior art", "blast radius"). Write plainly for the context at hand.
+- In most lasting writing (commits, specs, docs, comments, rules, prompts), describe how things are now, not the journey that got here. Each reader starts fresh, so "previously X" / "no longer Y" usually just confuse. Context-dependent, not a ban: keep history when it's helpful, such as to justify a decision.
 
 When drafting messages from me (Slack, comments, reviews, etc):
 - Sound like a person typing: short, plain, concrete. First person, "I think" over confident abstraction.
