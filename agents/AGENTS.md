@@ -57,7 +57,7 @@ When drafting messages from me (Slack, comments, reviews, etc):
 
 # tmux
 - Use tmux panes for showing output, running long-running commands (servers, test suites), and any deeper interactivity when the user's input is needed.
-- Be aware of the tmux layout and external changes to it when creating, sending to or killing panes (`tmux list-panes -a -F '#{window_index} #{pane_id} #{pane_current_command} #{pane_current_path}'`).
+- Be aware of the tmux layout and external changes to it when creating, sending to or killing panes (`tmux list-panes -a -F '#{window_index} #{pane_id} #{pane_current_command} #{pane_current_path}'`). I often close panes once I'm done with them; a pane you created going missing is normal, not an error.
 - Consider good arrangement, sizing and reuse of the panes. Prefer vertical split for tools alongside conversation, horizontal for output-heavy content.
 - Claude's own pane is `$TMUX_PANE`. Print new pane IDs (`-P -F '#{pane_id}'`)
     to reference internally.
