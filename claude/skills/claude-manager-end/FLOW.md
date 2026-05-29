@@ -55,9 +55,6 @@ All three modes start the same way.
    ```bash
    pane="$TMUX_PANE"
    src_session=$(tmux display-message -p -t "$pane" '#S')
-   src_window=$(tmux display-message -p -t "$pane" '#I')
-   src_pane=$(tmux display-message -p -t "$pane" '#P')
-   window_name=$(tmux display-message -p -t "$pane" '#W')
    ```
 
 2. Read the registry (no lock — reads are full-file, last-write-wins
