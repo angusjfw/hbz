@@ -34,14 +34,12 @@ Plug 'hail2u/vim-css3-syntax'
 Plug 'ap/vim-css-color'
 "Plug 'mxw/vim-jsx' weird unindenting bug
 Plug 'martinda/Jenkinsfile-vim-syntax'
-Plug 'JamshedVesuna/vim-markdown-preview'
 Plug 'othree/html5.vim'
 Plug 'Quramy/tsuquyomi'
 Plug 'leafgarland/typescript-vim'
 " Plug 'tpope/vim-fugitive'
 Plug 'APZelos/blamer.nvim'
 Plug 'mhinz/vim-mix-format'
-Plug 'iamcco/markdown-preview.nvim', { 'do': 'cd app && npx --yes yarn install' }
 Plug 'nvim-treesitter/nvim-treesitter', { 'do': ':TSUpdate' }
 Plug 'nvim-tree/nvim-web-devicons'
 Plug 'MeanderingProgrammer/render-markdown.nvim'
@@ -160,9 +158,6 @@ lua << EOF
 require('render-markdown').setup({})
 EOF
 
-let vim_markdown_preview_github=1
-let vim_markdown_preview_browser='chromium'
-let vim_markdown_preview_use_xdg_open=1
 " NERDTree
 let NERDTreeMapHelp='<f1>'
 nmap <leader>d :NERDTreeToggle<CR>
