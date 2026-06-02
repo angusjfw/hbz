@@ -21,6 +21,13 @@ the manager side (journal write for wrap). See
 `claude-manager/SKILL.md` for the manager-side mechanics; the modes use
 the same vocabulary on both sides.
 
+**Cross-references to `claude-manager/SKILL.md` are deliberate.** This
+flow is the worker side of the lifecycle; mechanics shared with the
+manager (pane process detection, JSONL session-id lookup, resume_state
+format) live in the manager skill as the single source of truth. Load
+referenced sections on demand when this flow points to them — don't
+pre-load the whole manager skill.
+
 ## Lock pattern
 
 Every registry rewrite happens under a `mkdir` lock. Acquire just
@@ -75,16 +82,15 @@ be cold-resumed later via the manager. The full mechanics are
 mirrored in `claude-manager/SKILL.md` under Shutdown — this section
 covers the worker-side specifics.
 
-1. **Discover structure.** Walk every window and every pane in the
-   tmux session:
+1. **Discover structure.** Window layouts:
 
    ```bash
    tmux list-windows -t "$src_session" \
      -F '#{window_index} #{window_name} #{window_layout}'
-   # per window:
-   tmux list-panes -t "$src_session":<w> \
-     -F '#{pane_index} #{pane_current_path} #{pane_current_command}'
    ```
+
+   Per-pane foreground process and command: see
+   `claude-manager/SKILL.md` § Detect pane processes.
 
 2. **Capture pane snapshots** for every pane in every window into one
    snapshot file, with `--- window <w> pane <p> ---` markers:
@@ -101,17 +107,12 @@ covers the worker-side specifics.
    done > "$snapshot"
    ```
 
-3. **Resolve Claude session ids for every Claude pane.** The calling
-   worker is itself a Claude session; the most-recently-modified
-   JSONL under its project dir is this session by definition. For
-   other Claude panes (forked workers in other windows), do the same
-   per-pane resolution as in the manager-side mechanics (step 3 of
-   `claude-manager/SKILL.md` Shutdown).
-
-   Detect a Claude pane: `pane_current_command` contains `claude`, OR
-   capture the last ~30 lines (`tmux capture-pane -p -J -t <pane> -S -30`)
-   and the content contains `esc to interrupt` or ends with a trailing
-   `> ` prompt.
+3. **Resolve Claude session ids for every Claude pane** identified in
+   step 1. The calling worker is itself a Claude session; the
+   most-recently-modified JSONL under its project dir is this session
+   by definition. For other Claude panes (forked workers in other
+   windows), do the same per-pane resolution as in the manager-side
+   mechanics (step 3 of `claude-manager/SKILL.md` Shutdown).
 
    ```bash
    # for each pane that looks like Claude:
@@ -143,10 +144,10 @@ covers the worker-side specifics.
    `~/.local/state/claude-manager/resume/<session-id>.md`. Markdown,
    one window per `## window <n>: <name>` block with a `layout:` field,
    one pane per `### pane <n>` sub-block with `cwd:`, `command:`, and
-   on Claude panes `claude_session_id:`. For panes whose
-   `pane_current_command` is a shell (`bash`, `zsh`, `fish`), leave
-   `command:` empty — auto-replaying an idle shell on resume is noise.
-   See `claude-manager/SKILL.md` Shutdown for the full example.
+   on Claude panes `claude_session_id:`. Idle-shell panes (per
+   `claude-manager/SKILL.md` § Detect pane processes) get `command:`
+   empty — auto-replaying an idle shell on resume is noise. See
+   `claude-manager/SKILL.md` Shutdown for the full example.
 
 5. **Acquire the lock, rewrite the entry, release the lock** (see
    Lock pattern). The rewrite:

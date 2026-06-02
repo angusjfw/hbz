@@ -418,6 +418,73 @@ can't see.
    `last_touched`. Add to the visible task list (`[active]` prefix).
 5. Hand over the switch handle (see Switch UX).
 
+## Detect pane processes
+
+When Shutdown, Wrap, Cold resume or Idle-detection needs to know what's
+running in each pane, walk the process tree rather than reading pane
+content. The tree gives full argv (so Cold resume can replay any
+command verbatim) and avoids the cost and brittleness of capture-pane
+sniffing.
+
+Per session, one tmux sweep plus a per-pane process lookup:
+
+```bash
+tmux list-panes -s -t "$tmux_session" \
+  -F '#{window_index} #{pane_index} #{pane_pid} #{pane_current_path}'
+```
+
+For each pane row, identify the foreground process. Usually the pane
+is rooted in a shell that has spawned one foreground child (the
+running command). Occasionally the shell `exec`'d into a process
+directly, in which case `pane_pid` itself is the foreground process.
+
+```bash
+# macOS quirks: `comm` returns the full path ("/bin/zsh") and `ucomm`
+# returns the basename but pads with trailing spaces to a fixed width
+# (which defeats exact case matches). Use `comm` and strip to the
+# basename with parameter expansion.
+shell_comm=$(ps -p "$pane_pid" -o comm= 2>/dev/null)
+shell_comm="${shell_comm##*/}"
+case "$shell_comm" in
+  bash|zsh|fish|sh|-bash|-zsh|-fish)
+    fg_pid=$(pgrep -P "$pane_pid" 2>/dev/null | head -1)
+    ;;
+  *)
+    fg_pid="$pane_pid"
+    ;;
+esac
+[ -n "$fg_pid" ] && ps -p "$fg_pid" -o command= 2>/dev/null
+```
+
+Classify each pane by the `ps -p $fg_pid -o command=` output:
+
+- **No `fg_pid`** (idle shell, no foreground child) → resume_state's
+  `command:` for this pane is empty.
+- **argv matches `node\b.*\bclaude` or `\bclaude(-code)?( |$)`** →
+  Claude pane. Record the pid; the JSONL session-id lookup proceeds
+  per Shutdown § step 3.
+- **Anything else** → capture the full argv verbatim and record it as
+  resume_state's `command:` for this pane. Cold resume replays it.
+  No hardcoded "known patterns" list — `yarn dev`, `task foo`,
+  `npm run watch`, `python -m`, `nvim`, `tail -F`, etc., all captured
+  as-is.
+
+Notes:
+- `pane_current_command` (from `tmux list-panes`) reports the OS comm
+  field, which Claude Code overrides to its version string (e.g.
+  `2.1.150`). Fast first signal but not reliable on its own; other
+  tools also override their process titles. The `pgrep`/`ps` walk is
+  authoritative.
+- Cost: one tmux call plus one `ps`+`pgrep` per pane (~50–150ms per
+  session of 1–5 panes). Bounded and fast.
+- Don't use `tmux capture-pane` for detection. Slow, depends on TUI
+  state (vim mode, busy indicator, last frame rendered), false-
+  positives against any tool with similar visual conventions.
+  Capture-pane is fine for content snapshotting (Shutdown step 2,
+  Wrap step 1) and for busy/idle classification of *already
+  identified* Claude panes (Idle-detection) — just not for "is this
+  Claude".
+
 ## Shutdown
 
 Shutdown = kill the tmux session; keep the registry entry so the
@@ -428,16 +495,17 @@ tmux".
 
 **Mechanics:**
 
-1. **Discover structure.** Walk every window and every pane in the
-   tmux session, capturing window layouts and per-pane metadata:
+1. **Discover structure.** Window layouts:
 
    ```bash
    tmux list-windows -t "$tmux_session" \
      -F '#{window_index} #{window_name} #{window_layout}'
-   # per window:
-   tmux list-panes -t "$tmux_session":<w> \
-     -F '#{pane_index} #{pane_current_path} #{pane_current_command}'
    ```
+
+   Per-pane foreground process and command: see § Detect pane
+   processes. The output identifies which panes are Claude (each
+   with a discovered pid) and the verbatim command for any other
+   pane that has one.
 
 2. **Capture pane snapshots.** Concatenate every pane in every
    window into one snapshot file, with `--- window <w> pane <p> ---`
@@ -455,11 +523,8 @@ tmux".
    done > "$snapshot"
    ```
 
-3. **Find Claude session IDs for every Claude pane.** Walk every pane
-   from step 1. A pane is Claude if `pane_current_command` contains
-   `claude`, OR a capture of its last ~30 lines
-   (`tmux capture-pane -p -J -t <pane> -S -30`) contains
-   `esc to interrupt` or ends with a trailing `> ` prompt. For each:
+3. **Find Claude session IDs for every Claude pane** identified in
+   step 1. For each:
 
    - If this is the primary pane (window 0 pane 0) and the registry
      entry already has `resumed_session_id`, reuse it — `claude
@@ -500,9 +565,8 @@ tmux".
    same idiom as the registry. One window per `## window <n>: <name>`
    block with a `layout:` field; one pane per `### pane <n>` sub-block
    with `cwd:`, `command:`, and on Claude panes `claude_session_id:`.
-   For panes whose `pane_current_command` is just a shell (`bash`,
-   `zsh`, `fish`), set `command:` empty — auto-replaying an idle
-   shell on resume is noise. Example:
+   Idle-shell panes (per § Detect pane processes) get `command:`
+   empty — auto-replaying an idle shell on resume is noise. Example:
 
    ```markdown
    # Resume state: eng-1234
@@ -711,28 +775,17 @@ Read the relevant store's schema before writing. Follow it.
 ## Idle-detection query
 
 "Which workers are waiting for input?" — for each registry session
-with `tmux_session` set, walk every pane in the session and capture
-the recent tail:
+with `tmux_session` set, identify Claude panes per § Detect pane
+processes, then capture each Claude pane's recent tail:
 
 ```bash
-tmux list-panes -s -t <tmux_session> \
-  -F '#{window_index} #{pane_index} #{pane_current_command}' \
-  | while read w p cmd; do
-    [ -n "$cmd" ] || continue
-    tmux capture-pane -p -t "<tmux_session>:${w}.${p}" -S -30
-  done
+tmux capture-pane -p -J -t "<tmux_session>:<w>.<p>" -S -30
 ```
 
-Filter for Claude panes: `pane_current_command` contains `claude`, OR
-the captured tail (last ~30 lines via
-`tmux capture-pane -p -J -t <pane> -S -30`) contains
-`esc to interrupt` or ends with a trailing `> ` prompt.
-
-Heuristics (Claude Code TUI):
+Heuristics (Claude Code TUI), applied only to known-Claude panes:
 
 - **Idle**: trailing `> ` prompt; no `esc to interrupt`; no spinner.
 - **Busy**: `esc to interrupt` present; spinner; streaming output.
-- **Not running Claude**: shell prompt or other tool signature.
 
 Heuristic, not authoritative. Report best-effort with evidence.
 
