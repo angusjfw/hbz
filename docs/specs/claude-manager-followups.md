@@ -86,3 +86,13 @@ field grows confusing.
 
 After the sessions pivot, the worker preamble still captures
 `src_window` but no longer references it. Drop it.
+
+## Manager cwd drifts when spawning
+
+Spawning sessions and creating worktrees run `cd <path>` inside Bash
+tool calls; the tool's working directory persists across calls, so the
+manager's own cwd drifts away from where it started (recently ended up
+in `off_the_job` after a spawn). Cosmetic — the manager's statusline
+misreports its location mid-session, which is confusing. Mitigation:
+prefer `git -C <path>`, absolute paths, and the `-c`/`-C` flags on
+`wt`/`tmux` so the manager's own cwd stays put.
