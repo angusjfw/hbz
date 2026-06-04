@@ -96,3 +96,15 @@ in `off_the_job` after a spawn). Cosmetic — the manager's statusline
 misreports its location mid-session, which is confusing. Mitigation:
 prefer `git -C <path>`, absolute paths, and the `-c`/`-C` flags on
 `wt`/`tmux` so the manager's own cwd stays put.
+
+## Paused state for sessions
+
+A third lifecycle state between active and shutdown: paused. The tmux
+session stays alive and the worker keeps its state; the manager just
+flags it so it sorts to the bottom of the tmux leader+w switcher and
+shows a paused marker alongside existing identifiers in the title.
+Use case: sessions waiting on review or other external state — the
+switcher should distinguish "what I'm working on now" from "what's
+parked for later" without killing tmux. Distinct from the retired
+park concept, which moved sessions out of the manager's window list;
+this one just relabels and reorders.
