@@ -705,6 +705,71 @@ from the worktree to bring the primary worker back without the
 surrounding scaffold. That route doesn't update the registry; the
 next reconcile catches the drift.
 
+## Reopening from disk
+
+Cold resume (above) rebuilds a `shutdown` entry from its `resume_state`
+file. Two other cases reach a session that exists on disk but has no
+`resume_state` to rebuild from. Both are manager-only.
+
+### Untracked cold resume
+
+The session isn't in the registry at all — its entry was wrapped and
+removed, or never recorded — but the user wants the conversation back.
+Find the Claude JSONL by content, then resume it.
+
+macOS gotcha throughout: encoded project dirs start with `-`, which
+breaks bare `stat` / `basename` / grep flag parsing. Always use
+absolute paths and `--` separators.
+
+1. Encode the worktree/cwd and grep its project dir for the ticket id
+   or topic (encoding per Shutdown § step 3):
+
+   ```bash
+   encoded=$(echo "$cwd" | sed 's|[/._]|-|g')
+   proj_dir="$HOME/.claude/projects/$encoded"
+   grep -rl -- "<ticket-id-or-topic>" "$proj_dir"/*.jsonl 2>/dev/null
+   ```
+
+2. Rank candidates by `mtime` + hit-count + first-prompt match.
+   Exclude the manager's own JSONL and any live manager's JSONL — a
+   manager conversation matches topic greps for the sessions it
+   spawned. Resolve each live manager's project dir from its
+   `manager:` header pane (pane → `pane_current_path` → encoded dir).
+
+3. Recreate the tmux session and resume the chosen id (`-d` so focus
+   isn't stolen):
+
+   ```bash
+   tmux new-session -d -s "$session_id" -n "$session_id" -c "$cwd"
+   tmux send-keys -t "${session_id}:0.0" "claude --resume <id>" Enter
+   ```
+
+4. Register the entry with `tmux_session`, `started`, `last_touched`;
+   add the task list entry with `[active]` prefix.
+
+### Reopen a wrap_requested entry
+
+The entry carries `wrap_requested: true` but shouldn't have wrapped —
+wrap was premature (e.g. more review work landed). The higher-context
+case: the registry entry already holds `resumed_session_id` and
+`snapshot`, so there's no JSONL hunt.
+
+1. Recreate the tmux session and resume the primary worker:
+
+   ```bash
+   tmux new-session -d -s "$session_id" -n "$session_id" -c "$cwd"
+   tmux send-keys -t "${session_id}:0.0" \
+     "claude --resume <resumed_session_id>" Enter
+   ```
+
+2. Rewrite the entry under the lock: clear `wrap_requested`, re-add
+   `tmux_session: $session_id`, update `last_touched`.
+3. Set the task list prefix back to `[active]`.
+
+The manager owes no journal entry until the session next wraps.
+Keeping the wrap backlog at ≤1 (see Watching the registry) is what
+stops premature wraps from accumulating into this case.
+
 ## Wrap
 
 Wrap = final close-out. Journal entry written per the project's

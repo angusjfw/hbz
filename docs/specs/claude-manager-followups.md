@@ -7,32 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Reopening sessions from disk (untracked or wrap_requested)
-
-Manager doesn't yet document how to reopen a session that exists on
-disk but isn't currently live in tmux. Two flavours:
-
-- **Untracked cold resume.** Session isn't in the registry; user wants
-  it back. Recipe: grep `~/.claude/projects/<encoded-cwd>/*.jsonl` for
-  the ticket id / topic in JSONL contents, rank candidates by `mtime`
-  + hit-count + first-prompt match, exclude the manager's own JSONL
-  and any other live managers' JSONLs. macOS gotcha: encoded project
-  dirs start with `-` which breaks bare `stat` / `basename` / grep
-  flag parsing — use absolute paths and `--` separators.
-- **Reopen a `wrap_requested` entry.** Marker is set but the worker
-  shouldn't have wrapped yet (common when wrap was premature, e.g.
-  more review work landed). Recipe: recreate the tmux session, run
-  `claude --resume <id>`, clear `wrap_requested` from the registry
-  entry, re-add `tmux_session`, set the task prefix back to
-  `[active]`. The manager owes no journal entry until the session
-  next wraps.
-
-The wrap_requested case is the higher-context special case of the
-untracked-cold-resume flow — the registry entry carries more state to
-restore from. Frequency seen: ~6 wrap_requested reopens in one
-manager session. The cadence issue (see Wrap-fulfilment cadence) is
-the upstream driver.
-
 ## Spawn brief Enter gets swallowed
 
 When the manager sends a brief via `tmux send-keys`, the brief text
