@@ -7,15 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Resumed_session_id vs resume_state overlap
-
-Post sessions pivot, the registry's `resumed_session_id` field
-duplicates the primary worker's `claude_session_id` in the resume_state
-file. Kept by design so the registry alone is enough to fire a manual
-`claude --resume` for the common single-worker case; the resume_state
-file is authoritative for full cold resume. Worth revisiting if the
-field grows confusing.
-
 ## Paused state for sessions
 
 A third lifecycle state between active and shutdown: paused. The tmux
