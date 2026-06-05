@@ -27,3 +27,15 @@ switcher should distinguish "what I'm working on now" from "what's
 parked for later" without killing tmux. Distinct from the retired
 park concept, which moved sessions out of the manager's window list;
 this one just relabels and reorders.
+
+Switcher feasibility (deferred): leader+w is stock `choose-tree -Zw` —
+no custom binding in the tmux config. `choose-tree`'s only ordering
+control is `-O index|name|time`; there's no per-session custom sort
+key, so "sort paused to the bottom" isn't natively simple. Two routes:
+(a) rename paused sessions with a sort-affecting prefix/marker — but
+that collides with the `tmux_session == registry id` convention; or
+(b) replace `choose-tree` with a custom popup switcher (`display-popup`
++ `fzf` over `tmux list-sessions`) where ordering and a paused marker
+are both trivial and can be driven off the registry's paused flag
+rather than the session name. (b) is the cleaner path and the reason
+this is more than a relabel.
