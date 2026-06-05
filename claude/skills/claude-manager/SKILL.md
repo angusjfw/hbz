@@ -1,13 +1,14 @@
 ---
 name: claude-manager
-description: Use when the user types /claude-manager, or when running a Claude conversation whose role is to oversee parallel sessions across tmux rather than execute them. Tracks a per-machine session registry, spawns workers in standalone tmux sessions (one tmux session per registry session), and owns journal, wiki and harness-knowledge upkeep that workers tend to skip. Manager does not do session work itself; it delegates implementation to spawned workers and defers to them.
+description: Use when the user explicitly invokes /claude-manager. Manager-role conversations are created deliberately, normally one at a time — not auto-loaded for any meta-management session. Tracks a per-machine session registry, spawns workers in standalone tmux sessions (one tmux session per registry session), and ensures docs and journal stay complete across sessions. Manager doesn't do session work itself; it delegates implementation to spawned workers and defers to them.
 ---
 
 # Claude manager
 
 Coordinator role for a Claude conversation running inside tmux. Tracks a
-registry of sessions, spawns workers on request, owns the project's
-recordkeeping (journal, wiki, harness notes).
+registry of sessions, spawns workers on request, and ensures docs and
+journal stay complete across sessions — workers contribute as they go,
+the manager fills gaps and owns the cross-session view.
 
 ## Hard boundary: meta work only
 
@@ -225,13 +226,20 @@ fields (`shutdown`, `resumed_session_id`, `snapshot`, `resume_state`,
 under `~/.local/state/claude-manager/snapshots/` and resume_state
 file under `~/.local/state/claude-manager/resume/`.
 
-**Workers must not touch:** the header block, any other session's
-entry, or the journal/wiki. Wrap is driven via the `wrap_requested`
-marker; the manager does the journal write.
+**Workers must not touch:** the header block, or any other session's
+entry. Workers DO write to journals, wikis, runbooks and other
+knowledge stores when their own work warrants it — own-session notes,
+wiki updates, runbook additions, anything they can see from inside
+the session. The manager's wrap journal entry is additive: it
+captures the cross-session/meta view a worker can't (lifecycle,
+cross-worker context, what the user reviewed and approved). Wrap is
+driven via the `wrap_requested` marker; the manager does the wrap
+journal write.
 
 **Manager continues to own:** header refresh for itself; the spawn
-flow; journal entries and other knowledge work; reconciling against
-`tmux ls`.
+flow; the wrap journal entry; ensuring knowledge stores stay complete
+(filling gaps the workers couldn't see, adding the cross-session/meta
+view); reconciling against `tmux ls`.
 
 Both manager-initiated lifecycle transitions (driven by user requests
 to the manager directly) and worker-initiated transitions (via the
@@ -759,18 +767,24 @@ to a marker-only flow is tracked as a separate followup.
 
 ## Knowledge work
 
-The manager owns the project's recordkeeping.
+The manager doesn't own the project's recordkeeping outright; workers
+contribute as they work (wiki pages, runbook additions, own-session
+notes), and the manager ensures it stays complete across sessions.
 
 When the project rulebook (already in Claude's context on startup)
-points to a journal, wiki, investigations dir or similar, write into
-them at:
+points to a journal, wiki, investigations dir or similar, the
+manager writes into them at:
 
-- Session wrap (the snapshot from the wrap flow goes here).
+- Session wrap (the wrap journal entry — manager-side, capturing the
+  cross-session/meta view a worker can't see).
 - Mid-session decisions, conventions or lessons worth outliving the
-  worker.
+  worker that a worker has surfaced but not yet recorded.
+- Filling gaps when a worker's contribution is incomplete or scoped
+  too narrowly.
 - On request.
 
-Read the relevant store's schema before writing. Follow it.
+Workers write directly when their own work warrants it; the manager
+doesn't gate that. Read the relevant store's schema before writing.
 
 ## Idle-detection query
 
