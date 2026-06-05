@@ -953,3 +953,42 @@ needed.
 If workers report claimed ports, dev servers etc, capture under the
 session's notes. Warn on plausible conflicts when spawning a new
 session. No automatic scanning.
+
+## Ending the manager session
+
+Distinct from the per-session Shutdown and Wrap above: this closes out
+the *coordinator* conversation itself. Without it, registry entries
+keep pointing at tmux sessions that won't survive the user ending the
+day or restarting the machine, and the watch process is left orphaned.
+
+Trigger phrasings: "wrap up the manager", "I'm done for the day",
+"shut the manager down".
+
+1. **Walk every live entry** (those with `tmux_session`). For each,
+   confirm it's actually alive (`tmux has-session`) and resolve it
+   with the user — one of:
+   - **Leave running** — the user keeps the tmux session up past the
+     manager. Nothing to change; the entry stays active and the next
+     manager invocation re-adopts it on its registry read. If the
+     machine restarts before then, that invocation's reconcile catches
+     the now-dead entry.
+   - **Shut down** — kill tmux, keep the entry for cold resume (per
+     Shutdown).
+   - **Wrap** — final close-out (per Wrap).
+2. **Reconcile dead entries** the walk surfaces (entry with
+   `tmux_session` set but no live session) — per Reconcile.
+3. **Stop the watch.** Kill the watch process and remove its PID file
+   so a future manager doesn't read it as live:
+
+   ```bash
+   sanitised=$(echo "$mgr_pane" | tr ':.' '--')
+   pidfile="$HOME/.local/state/claude-manager/watch.${sanitised}.pid"
+   [ -f "$pidfile" ] && kill "$(cat "$pidfile")" 2>/dev/null
+   rm -f "$pidfile"
+   ```
+
+4. **Drop this manager's header line.** Under the lock, remove the
+   `manager: $mgr_pane` line for this pane from the header block (leave
+   other managers' lines alone), then release.
+5. Exit. Live worker sessions left running are fine — they're
+   self-contained tmux sessions; only the coordinator is ending.

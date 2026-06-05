@@ -7,14 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Manager shutdown flow
-
-A single termination procedure for the manager: walk every live
-registry entry, resolve each one with the user (shut down, wrap, or
-reconcile), then exit. Currently no documented end-of-session flow —
-entries linger pointing at tmux sessions that no longer exist after
-the user ends the day or restarts the machine.
-
 ## Asymmetric worker/manager wrap roles
 
 Worker self-wrap runs steps 1–5 including the kill; manager-wrap runs
