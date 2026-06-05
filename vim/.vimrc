@@ -155,9 +155,13 @@ else
 endif
 
 " Plugin settings
+" render-markdown — nvim-only; pcall so a fresh checkout loads without erroring.
+if has('nvim')
 lua << EOF
-require('render-markdown').setup({})
+local ok, rm = pcall(require, 'render-markdown')
+if ok then rm.setup({}) end
 EOF
+endif
 
 " which-key — leader (,) popup. nvim-only; plain vim skips it.
 " pcall so a fresh checkout (plugin not yet installed) loads without erroring.
