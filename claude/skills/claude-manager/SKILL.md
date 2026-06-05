@@ -299,9 +299,22 @@ net.
 ## Spawning a session
 
 1. Clarify ticket, worktree, branch — only what matters.
-2. If a worktree is wanted, create it first. Worktrees must exist
-   before Claude starts inside them: `cwd` cannot change later. Use
-   whatever the project rules say.
+2. If a worktree is wanted, create it first — worktrees must exist
+   before Claude starts inside them (`cwd` cannot change later). Use
+   whatever the project rules say. Two cautions:
+
+   - **Never bare `cd` in the manager shell.** The Bash tool's working
+     directory persists across calls, so a `cd` into a repo or
+     worktree drifts the manager's own cwd and misreports its
+     statusline location for the rest of the session. Subshell it
+     (`( cd <repo> && wt … )`) or use path flags: `git -C <repo>`,
+     `wt -C <repo>`, `tmux … -c <cwd>`.
+   - **Base the worktree on a fresh ref when recency matters.** `wt`
+     (and bare `git worktree`) branch off the *local* default branch,
+     which is often stale relative to `origin`. If the work depends on
+     a recent merge, `git -C <repo> fetch origin <default-branch>`
+     first, then branch from `origin/<default-branch>` (or
+     `reset --hard` the new branch to that ref).
 3. Pre-check name collision:
 
    ```bash

@@ -7,16 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Worktree base staleness
-
-`wt` branches off the LOCAL `master` / `main`, which is often stale
-relative to `origin`. When the work depends on a recent merge, the
-worker ends up on a base that doesn't contain it (hit today for
-ASY-2522 needing ASY-2519). Spawn recipe should
-`git -C <repo> fetch origin <default-branch>` first, then either
-branch from `origin/<default-branch>` or `reset --hard` the wt branch
-to that ref when recency matters.
-
 ## Resume-replay of mid-wrap
 
 A session killed mid-`/claude-manager-wrap` or
@@ -93,17 +83,6 @@ file. Kept by design so the registry alone is enough to fire a manual
 `claude --resume` for the common single-worker case; the resume_state
 file is authoritative for full cold resume. Worth revisiting if the
 field grows confusing.
-
-## Manager cwd drifts when spawning
-
-Spawning sessions and creating worktrees run `cd <path>` inside Bash
-tool calls; the tool's working directory persists across calls, so the
-manager's own cwd drifts away from where it started. Cosmetic — the
-manager's statusline misreports its location mid-session, which is
-confusing. Working recipe: subshell the cd (`( cd <repo> && wt … )`)
-so the parent shell's cwd is unaffected, or use `git -C <repo>` and
-`wt -C <repo>` / `tmux -c <cwd>` flags. Never bare `cd` in the manager
-shell.
 
 ## Paused state for sessions
 
