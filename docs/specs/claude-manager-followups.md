@@ -7,13 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Asymmetric worker/manager wrap roles
-
-Worker self-wrap runs steps 1–5 including the kill; manager-wrap runs
-journal write + remove. Wrap state can drift between the two views.
-Candidate fix: shift fully to the `wrap_requested` marker flow so the
-manager owns the kill and the asymmetry collapses.
-
 ## Resumed_session_id vs resume_state overlap
 
 Post sessions pivot, the registry's `resumed_session_id` field

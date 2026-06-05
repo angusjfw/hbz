@@ -909,8 +909,9 @@ If the manager isn't running when a worker wraps, the
 invocation sees it during reconcile and processes it.
 
 The split (worker pre-captures and kills; manager writes the journal
-and removes the entry) is preserved from the previous design. Shifting
-to a marker-only flow is tracked as a separate followup.
+and removes the entry) is intentional: the worker tears its own session
+down promptly on wrap rather than leaving it alive until a manager
+happens to process the marker.
 
 **Forked workers.** Wrap records only the calling (primary) worker's
 `resumed_session_id`, by design: wrap is final, so per-fork resume ids
