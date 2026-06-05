@@ -15,7 +15,7 @@ set bell-style none
 if command -v brew >/dev/null 2>&1; then
   fpath+=("$(brew --prefix)/share/zsh/site-functions")
 fi
-fpath+=('/home/angus/.npm-global/lib/node_modules/pure-prompt/functions')
+fpath+=("$HOME/.npm-global/lib/node_modules/pure-prompt/functions")
 autoload -U promptinit && promptinit
 prompt pure
 

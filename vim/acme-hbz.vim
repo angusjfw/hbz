@@ -6,7 +6,7 @@ let g:colors_name = "acme-hbz"
 " In keeping with Acme, it doesn't do syntax highlighting.
 " Instead, colors are (almost) only used to define vim's interface.
 " Made by Oliver Taylor <olivertaylor.net>.
-" Modified by Angus Whitehead <angusjfw@gmail.com>.
+" Modified for the hbz dotfiles.
 "
 " It requires your terminal theme to be set to matching colors.
 "

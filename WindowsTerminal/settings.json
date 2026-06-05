@@ -1,4 +1,4 @@
-// /mnt/c/Users/angus/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
+// /mnt/c/Users/<user>/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
 {
     "$schema": "https://aka.ms/terminal-profiles-schema",
     "defaultProfile": "{58ad8b0c-3ef8-5f4d-bc6f-13e4c00f2530}",
@@ -35,7 +35,7 @@
                 "hidden": false,
                 "name": "Debian",
                 "source": "Windows.Terminal.Wsl",
-                "startingDirectory": "//wsl$/Debian/home/angus"
+                "startingDirectory": "//wsl$/Debian/home/<user>"
             },
             {
                 "guid": "{b453ae62-4e3d-5e58-b989-0a998ec441b8}",
