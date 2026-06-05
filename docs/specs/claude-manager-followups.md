@@ -14,14 +14,6 @@ journal write + remove. Wrap state can drift between the two views.
 Candidate fix: shift fully to the `wrap_requested` marker flow so the
 manager owns the kill and the asymmetry collapses.
 
-## External rename-session stale `tmux_session`
-
-If the user runs `tmux rename-session` outside the manager, the
-registry's `tmux_session` becomes stale. Reconcile catches it as
-"session not found" and asks; could be tightened by matching the
-registry id against `#{session_name}` across the server when the
-recorded name doesn't exist.
-
 ## hbz convention awareness in spawn flow
 
 Spawning a worker in hbz should not instruct worktrunk / branches / PRs

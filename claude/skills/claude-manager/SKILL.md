@@ -435,8 +435,14 @@ back the session id; the user navigates.
 On demand, diff the registry against `tmux ls`:
 
 - Entry with `tmux_session` set: `tmux has-session -t <tmux_session>`.
-  If alive, fine. If not alive, the session died unexpectedly —
-  surface and ask: finished, shutdown unexpectedly, or unknown?
+  If alive, fine. If not alive, check for an external rename before
+  assuming the session died: scan live sessions for one matching this
+  entry by registry id, or by a pane's `pane_current_path` equalling
+  the entry's worktree/cwd. A match is almost certainly the same
+  session renamed outside the manager (`tmux rename-session`) — surface
+  it and offer to re-link (update `tmux_session`), don't treat it as
+  dead. Otherwise surface and ask: finished, shutdown unexpectedly, or
+  unknown?
 
   If *many* entries fail lookup at once, suspect a tmux server
   restart and surface aggregately before changing any state. Unlike
