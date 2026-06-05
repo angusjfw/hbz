@@ -349,10 +349,15 @@ net.
 6. Start Claude in window 0 pane 0 (the primary worker). Kickoff:
    launch `claude`, poll the pane until the TUI input line is ready,
    send the brief from step 5 (skip the send-keys when the brief is
-   blank), then `Enter` as separate `send-keys` calls. Capture the
-   pane afterwards to confirm the prompt left the input box. The
-   polling check must match what the current TUI renders — capture
-   first and adapt the regex.
+   blank), then `Enter` as a separate `send-keys` call. A TUI banner
+   — "N setup issues", a paste-expand prompt, an MOTD — often captures
+   that first `Enter`, so the brief lands in the input box but never
+   submits; the spawn looks successful from the manager's side while
+   the brief sits there. After sending `Enter`, capture the pane and
+   confirm the prompt actually submitted (busy indicator present,
+   input box cleared); re-send `Enter` until it does. Both the
+   readiness poll and the submit check must match what the current TUI
+   renders — capture first and adapt the regex.
 
    ```bash
    target="${session_id}:0.0"
@@ -363,7 +368,15 @@ net.
    done
    if [ -n "$brief" ]; then
      tmux send-keys -t "$target" "$brief"
-     tmux send-keys -t "$target" Enter
+     # The first Enter is the one a banner eats. Re-send until the
+     # prompt submits — signalled by a busy indicator ("esc to
+     # interrupt") or the input box clearing.
+     for _ in 1 2 3; do
+       tmux send-keys -t "$target" Enter
+       sleep 0.5
+       tmux capture-pane -p -J -t "$target" -S -5 \
+         | grep -q 'esc to interrupt' && break
+     done
    fi
    tmux capture-pane -p -t "$target" -S -5
    ```

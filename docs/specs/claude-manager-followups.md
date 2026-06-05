@@ -7,18 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Spawn brief Enter gets swallowed
-
-When the manager sends a brief via `tmux send-keys`, the brief text
-often lands in the worker's input box but the trailing `Enter` is
-eaten — typically by a TUI banner ("2 setup issues", paste-expand
-prompt, MOTD) that captures the first keypress. The spawn step
-appears successful from the manager's side but the brief sits
-unsubmitted. Spawn recipe should: after `send-keys`, capture the
-pane and verify the input box is cleared / a spinner or busy
-indicator is present. If the brief is still sitting in the input,
-re-send `Enter`.
-
 ## Wrap/shutdown drops the attached client out of tmux
 
 The final step of both modes is `tmux kill-session -t "$src_session"`
