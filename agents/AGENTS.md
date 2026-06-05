@@ -59,10 +59,9 @@ When drafting messages from me (Slack, comments, reviews, etc):
 
 # tmux
 - Use tmux panes for showing output, running long-running commands (servers, test suites), and any deeper interactivity when the user's input is needed.
-- Be aware of the tmux layout and external changes to it when creating, sending to or killing panes (`tmux list-panes -a -F '#{window_index} #{pane_id} #{pane_current_command} #{pane_current_path}'`). I often close panes once I'm done with them; a pane you created going missing is normal, not an error.
+- Be aware of the tmux layout and external changes to it when creating, sending to or killing panes (`tmux list-panes -a -F '#{window_index} #{pane_id} #{pane_current_command} #{pane_current_path}'`); this is also how you notice other sessions running concurrently, which may overlap with your work (e.g. editing the same repo). I often close panes once I'm done with them; a pane you created going missing is normal, not an error.
 - Consider good arrangement, sizing and reuse of the panes. Prefer vertical split for tools alongside conversation, horizontal for output-heavy content.
-- Claude's own pane is `$TMUX_PANE`. Print new pane IDs (`-P -F '#{pane_id}'`)
-    to reference internally.
+- Claude's own pane is `$TMUX_PANE`; its session is your default workspace — for routine pane work, stay in it rather than reaching across the server for panes to reuse. Deliberately using or spawning another session is fine whenever the work calls for it, explicitly or implicitly — this isn't only a session-manager thing. Print new pane IDs (`-P -F '#{pane_id}'`) to reference internally.
 - Open files for editing/review in nvim. If a vim pane exists, you may open a new tab in it (`tmux send-keys -t {pane_id} Escape ':tabnew +{line} {file}' Enter`); but be aware of trampling the user's session.
 - Open diffs in a tmux pane when reviewing with the user. `git diff` shows nothing for untracked files, so use `git add --intent-to-add` first if those need including.
 - Git output in panes: `bash -c 'git <cmd> --color=always | less -R'` (flags before paths). Don't pipe git output through vim.

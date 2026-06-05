@@ -7,21 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Workers reach outside their own session for panes
-
-A worker's free space is its own tmux session (Spawn step 4), but when
-one needs a pane mid-work — run a server, open an editor, show output —
-it sometimes scans the whole server (`tmux list-panes -a`) and reuses,
-splits, sends keys to, or kills a pane in another session: the
-manager's, another worker's, or the user's. Cross-session pane ops
-trample the other occupant. Fix: workers scope every pane operation to
-their own session (`-t <own-session>`); `-a` is for read-only layout
-awareness, not a target list. Open question is the fix location — the
-spawn brief (against the narrow-brief rule), the worker-side skills
-(only loaded at wrap/shutdown, too late for normal work), or the global
-tmux rulebook (right reach since every worker loads it, but it also
-governs unmanaged sessions and currently recommends `list-panes -a`).
-
 ## Paused state for sessions
 
 A third lifecycle state between active and shutdown: paused. The tmux
