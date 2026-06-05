@@ -119,9 +119,13 @@ Map flexible wording to the canonical mode before acting.
    `# Sessions` heading. Leave other manager lines alone (multiple
    managers are allowed). Refresh on later registry-touching
    actions so the line stays current.
-3. **Start the registry watch** (see Watching the registry). If a live
-   watch process for this manager already exists (PID file present and
-   PID alive), reuse it; otherwise spawn a fresh one.
+3. **Start the registry watch and attach a `Monitor` to it** (see
+   Watching the registry). Spawning the background watch without wiring
+   a `Monitor` onto its stdout is inert — the watch logs every worker
+   write but the manager never reacts, so self-wraps and shutdowns go
+   unnoticed until a manual re-read. If a live watch process for this
+   manager already exists (PID file present and PID alive), reuse it
+   (re-attach the Monitor); otherwise spawn a fresh one.
 
 That's it. Project rulebook, tmux state and knowledge stores are
 read lazily when a query needs them.
@@ -276,7 +280,8 @@ done
 ```
 
 Spawn it via `Bash` with `run_in_background: true` and consume its
-stdout via `Monitor`. Each `changed:` line is a notification — the
+stdout via `Monitor`. The spawn and the Monitor are a unit — a watch
+nobody consumes is inert. Each `changed:` line is a notification — the
 manager reacts between turns.
 
 Lifecycle:
@@ -297,7 +302,12 @@ Lifecycle:
   is empty and nothing is surfaced.
 - **`wrap_requested: true`** is a special diff: trigger the
   manager-side wrap-fulfilment phase (journal write, registry
-  removal — see Wrap).
+  removal — see Wrap) as the marker surfaces, not later. Don't let
+  markers queue — fulfil each as the watch reports it (or at the next
+  idle moment) and keep the pending count at ≤1. When more than one is
+  outstanding, surface the count periodically so the backlog stays
+  visible. An unfulfilled-wrap backlog is the upstream driver of the
+  `wrap_requested`-reopen case (see Reopening from disk).
 
 Fallback: if the watch process is missing on a registry-touching
 action (it died, or this is a fresh `claude --resume`), the manager

@@ -7,16 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Wrap-fulfilment cadence
-
-Manager should process `wrap_requested` markers as the watch surfaces
-them (or at the next idle moment), not let them queue. Backlog of 16
-hit today before any were processed. At minimum the manager should
-surface the count of pending wraps periodically so the backlog stays
-visible; the goal is to keep it at ≤1. Backlog is the upstream
-driver of the wrap_requested-reopen case in "Reopening sessions from
-disk" above.
-
 ## Manager shutdown flow
 
 A single termination procedure for the manager: walk every live
@@ -74,19 +64,3 @@ switcher should distinguish "what I'm working on now" from "what's
 parked for later" without killing tmux. Distinct from the retired
 park concept, which moved sessions out of the manager's window list;
 this one just relabels and reorders.
-
-## Watch is inert without consuming its output
-
-Starting the registry watch (background Bash) is only half the
-mechanism — the manager must wire a `Monitor` onto the watch's stdout
-and treat each `changed:` line as the trigger for the reaction loop
-(re-read registry, diff against last-known, surface worker-driven
-changes, sync the task list, process any `wrap_requested`). Without
-that consumption, the watch faithfully logs every worker write but the
-manager never reacts: wraps and shutdowns are only discovered on a
-manual registry re-read or when the user flags them. Observed: a full
-manager session ran the watch the entire time but never Monitored it,
-so every worker self-wrap went unnoticed until manual reconcile and a
-16-deep wrap backlog built up. The on-invocation step "Start the
-registry watch" should explicitly include attaching the Monitor, not
-just spawning the background process — the two are useless apart.
