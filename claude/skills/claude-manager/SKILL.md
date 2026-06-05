@@ -746,6 +746,20 @@ worker doesn't exist yet — cold resume is what creates it).
    session supersedes them.
 8. Update the visible task list: prefix `[shutdown]` → `[active]`.
 
+**Partial-failure recovery.** The registry rewrite (step 7) is the last
+step, so any failure before it leaves the entry in `shutdown` already —
+correct, nothing to undo there. What's left behind is a half-built tmux
+session. If `new-window` / `split-window` / `select-layout` / `send-keys`
+fails (worktree missing, malformed layout), kill the partial session and
+leave the registry in `shutdown` so the user can retry from a clean
+slate:
+
+```bash
+tmux kill-session -t "$session_id" 2>/dev/null
+```
+
+Surface the failing command's error; don't half-update the registry.
+
 **Manual escape hatch.** A user can always run `claude --resume <id>`
 from the worktree to bring the primary worker back without the
 surrounding scaffold. That route doesn't update the registry; the

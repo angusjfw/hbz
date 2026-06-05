@@ -7,15 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Cold-resume partial-failure recovery
-
-If `tmux new-session` succeeds but a later `new-window` /
-`split-window` / `select-layout` fails (worktree missing, layout
-malformed), the tmux session is half-built and the registry stays in
-`shutdown`. No documented rollback. Minimum: on failure,
-`tmux kill-session -t <id>` and leave the registry in `shutdown` so the
-user can retry.
-
 ## Edit-tool blindness to stale file state
 
 Wrap-time registry rewrites by workers sometimes succeed against an
