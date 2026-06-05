@@ -43,6 +43,7 @@ Plug 'mhinz/vim-mix-format'
 Plug 'nvim-treesitter/nvim-treesitter', { 'do': ':TSUpdate' }
 Plug 'nvim-tree/nvim-web-devicons'
 Plug 'MeanderingProgrammer/render-markdown.nvim'
+Plug 'folke/which-key.nvim'
 Plug 'pantharshit00/vim-prisma'
 " post install (yarn install | npm install) then load plugin only for editing supported files
 Plug 'prettier/vim-prettier', { 'do': 'yarn install --frozen-lockfile --production' }
@@ -157,6 +158,22 @@ endif
 lua << EOF
 require('render-markdown').setup({})
 EOF
+
+" which-key — leader (,) popup. nvim-only; plain vim skips it.
+" pcall so a fresh checkout (plugin not yet installed) loads without erroring.
+if has('nvim')
+lua << EOF
+local ok, wk = pcall(require, 'which-key')
+if ok then
+  wk.setup({})
+  wk.add({
+    { '<leader>d', desc = 'nerdtree-toggle' },
+    { '<leader>p', desc = 'prettier' },
+    { '<leader>h', group = 'git-hunk' },
+  })
+end
+EOF
+endif
 
 " NERDTree
 let NERDTreeMapHelp='<f1>'
