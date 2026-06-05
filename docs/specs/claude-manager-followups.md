@@ -45,6 +45,18 @@ pane and verify the input box is cleared / a spinner or busy
 indicator is present. If the brief is still sitting in the input,
 re-send `Enter`.
 
+## Wrap/shutdown drops the attached client out of tmux
+
+The final step of both modes is `tmux kill-session -t "$src_session"`
+(wrap step 5, shutdown step 6 in `claude-manager-end/FLOW.md`). The
+user is attached to that session as a client, so the kill detaches
+them to the parent shell instead of leaving them in tmux. Nothing
+switches the attached client to another live session first. Candidate
+fix: before the kill, if a client is attached to `$src_session`,
+`tmux switch-client` it to the manager session (or any other live
+session), then kill. Edge case: if it's the only session on the
+server the kill always drops to the shell — nothing tmux can do.
+
 ## Worktree base staleness
 
 `wt` branches off the LOCAL `master` / `main`, which is often stale
@@ -154,3 +166,19 @@ switcher should distinguish "what I'm working on now" from "what's
 parked for later" without killing tmux. Distinct from the retired
 park concept, which moved sessions out of the manager's window list;
 this one just relabels and reorders.
+
+## Watch is inert without consuming its output
+
+Starting the registry watch (background Bash) is only half the
+mechanism — the manager must wire a `Monitor` onto the watch's stdout
+and treat each `changed:` line as the trigger for the reaction loop
+(re-read registry, diff against last-known, surface worker-driven
+changes, sync the task list, process any `wrap_requested`). Without
+that consumption, the watch faithfully logs every worker write but the
+manager never reacts: wraps and shutdowns are only discovered on a
+manual registry re-read or when the user flags them. Observed: a full
+manager session ran the watch the entire time but never Monitored it,
+so every worker self-wrap went unnoticed until manual reconcile and a
+16-deep wrap backlog built up. The on-invocation step "Start the
+registry watch" should explicitly include attaching the Monitor, not
+just spawning the background process — the two are useless apart.
