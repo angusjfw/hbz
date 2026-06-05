@@ -506,6 +506,29 @@ Notes:
   identified* Claude panes (Idle-detection) — just not for "is this
   Claude".
 
+## Killing a session
+
+`tmux kill-session` on a session a user is attached to detaches them to
+the parent shell instead of leaving them in tmux. Before any kill, move
+attached clients to another live session (the manager prefers its own):
+
+```bash
+# target_session = the session about to be killed.
+other=$(tmux list-sessions -F '#{session_name}' \
+  | grep -vx "$target_session" | head -1)
+if [ -n "$other" ]; then
+  tmux list-clients -t "$target_session" -F '#{client_name}' \
+    | while read -r c; do tmux switch-client -c "$c" -t "$other"; done
+fi
+tmux kill-session -t "$target_session"
+```
+
+If it's the only session on the server, the kill drops to the shell no
+matter what — nothing tmux can do. The manager runs this against an
+entry's `tmux_session`; a self-wrapping/shutting-down worker runs it
+against its own `$src_session` (it is killing the session it sits in,
+so the user is almost always the attached client).
+
 ## Shutdown
 
 Shutdown = kill the tmux session; keep the registry entry so the
@@ -628,11 +651,8 @@ tmux".
    - Appends to `notes`: "Tmux killed <date>; resume via the manager."
    - Removes `tmux_session`.
 
-6. **Kill the tmux session** (after the lock is released):
-
-   ```bash
-   tmux kill-session -t "$tmux_session"
-   ```
+6. **Kill the tmux session** (after the lock is released), moving any
+   attached client off it first — see § Killing a session.
 
 7. **Update the visible task list:** set the description prefix to
    `[shutdown]` per the Task list hygiene rule.
@@ -817,11 +837,8 @@ wording: "wrap up", "complete", "close out", "finish".
 4. Mark the visible task list entry `completed`, then delete it from
    the list.
 5. Remove the entry from the registry.
-6. Kill the tmux session if it's still alive:
-
-   ```bash
-   tmux kill-session -t "$tmux_session"
-   ```
+6. Kill the tmux session if it's still alive, moving any attached
+   client off it first — see § Killing a session.
 
 **Trigger paths:**
 

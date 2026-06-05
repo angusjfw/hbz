@@ -164,7 +164,10 @@ covers the worker-side specifics.
 
 6. **Kill the tmux session.** Only do this after the lock has been
    released and the registry write has landed; this kills the
-   worker's own pane, so any remaining work must be done first.
+   worker's own pane, so any remaining work must be done first. Move
+   any attached client off `$src_session` before the kill — see
+   `claude-manager/SKILL.md` § Killing a session — or the user is
+   dropped to a bare shell instead of staying in tmux.
 
    ```bash
    tmux kill-session -t "$src_session"
@@ -226,7 +229,10 @@ fulfils the journal write.
 
 5. **Kill the tmux session** after the lock has been released and the
    registry write has landed. This kills the worker's own pane, so
-   any remaining work must be done first:
+   any remaining work must be done first. Move any attached client off
+   `$src_session` before the kill — see `claude-manager/SKILL.md`
+   § Killing a session — or the user is dropped to a bare shell
+   instead of staying in tmux.
 
    ```bash
    tmux kill-session -t "$src_session"

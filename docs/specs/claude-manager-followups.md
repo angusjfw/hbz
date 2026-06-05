@@ -7,18 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Wrap/shutdown drops the attached client out of tmux
-
-The final step of both modes is `tmux kill-session -t "$src_session"`
-(wrap step 5, shutdown step 6 in `claude-manager-end/FLOW.md`). The
-user is attached to that session as a client, so the kill detaches
-them to the parent shell instead of leaving them in tmux. Nothing
-switches the attached client to another live session first. Candidate
-fix: before the kill, if a client is attached to `$src_session`,
-`tmux switch-client` it to the manager session (or any other live
-session), then kill. Edge case: if it's the only session on the
-server the kill always drops to the shell — nothing tmux can do.
-
 ## Worktree base staleness
 
 `wt` branches off the LOCAL `master` / `main`, which is often stale
