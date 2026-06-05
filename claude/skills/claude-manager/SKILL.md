@@ -182,9 +182,18 @@ rewrite — not across snapshot capture or tmux moves:
 _reg="$HOME/.local/state/claude-manager/sessions.md"
 _lock="${_reg}.lock"
 while ! mkdir "$_lock" 2>/dev/null; do sleep 0.1; done
-# read $_reg, mutate, write $_reg (Edit tool is fine)
+# Now that the lock is held, Read $_reg FRESH (see below), then mutate
+# and write with Edit. Don't reuse an earlier in-conversation read.
 rmdir "$_lock"
 ```
+
+**Re-read under the lock.** A manager and its workers share this file,
+so the in-conversation Read that an Edit or Write builds on may predate
+another process's write. Always Read the registry fresh *after*
+acquiring the lock and construct the rewrite from that read — otherwise
+a full-file Write clobbers a concurrent write, and an Edit either
+matches stale content or fails its `old_string`. The lock without the
+re-read still races.
 
 Each Bash tool call is a fresh shell — `trap`-based release does not
 survive across calls, so don't rely on it. Release explicitly. If a

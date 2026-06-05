@@ -42,9 +42,16 @@ while ! mkdir "$_lock" 2>/dev/null; do
   sleep 0.1; t=$((t+1))
   [ $t -ge 100 ] && { echo "lock held >10s, aborting"; exit 1; }
 done
-# read registry, mutate own entry, write registry (Edit tool is fine)
+# Lock held: Read the registry FRESH now, mutate own entry, write
+# with Edit. Don't reuse an earlier in-conversation read.
 rmdir "$_lock"
 ```
+
+**Re-read under the lock.** The manager and other workers may have
+written since this conversation last read the file, so an Edit or Write
+built on a stale in-conversation read can clobber a concurrent write or
+match the wrong content. Read the registry fresh *after* acquiring the
+lock and build the rewrite from that read.
 
 Each Bash tool call runs in a fresh shell — `trap`-based release
 does NOT survive across calls, so don't rely on it. The acquire and

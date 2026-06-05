@@ -7,12 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Edit-tool blindness to stale file state
-
-Wrap-time registry rewrites by workers sometimes succeed against an
-in-memory view that no longer matches disk, or fail silently. Points at
-needing a mandatory re-read under lock before write.
-
 ## Wrap-fulfilment cadence
 
 Manager should process `wrap_requested` markers as the watch surfaces
