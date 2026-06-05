@@ -7,12 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Resume-replay of mid-wrap
-
-A session killed mid-`/claude-manager-wrap` or
-`/claude-manager-shutdown` and later resumed re-runs the wrap mechanics
-against stale state. Repeatable today.
-
 ## Cold-resume partial-failure recovery
 
 If `tmux new-session` succeeds but a later `new-window` /

@@ -75,6 +75,27 @@ All three modes start the same way.
 
 After the preamble, branch on `mode`.
 
+## Idempotency guard
+
+Resume-replay: a worker killed mid-flow and later resumed — the harness
+replays pending steps, or the model picks up where it left off — must
+not re-run the mechanics against an entry that already shows the flow
+completed. A second pass re-snapshots, fails the registry rewrite on a
+stale `old_string`, or (worst) re-kills the freshly resumed session.
+
+After the preamble, before anything destructive, check this session's
+entry:
+
+- **Already done** — no entry at all (wrap removed it), or an entry
+  whose `tmux_session` is gone and which carries `wrap_requested: true`
+  (wrap) or `shutdown` + `resume_state` (shutdown). Report what was
+  found and stop. Don't re-snapshot, re-write or re-kill.
+- **Active** — `tmux_session` matches `$src_session`. Proceed.
+
+The preamble's match-by-`tmux_session` already fails closed once the
+field is dropped; this guard makes the "already done" case explicit so
+a replay stops cleanly instead of erroring mid-rewrite.
+
 ## Mode: shutdown
 
 Kill the tmux session; preserve the registry entry so the session can
