@@ -14,12 +14,6 @@ journal write + remove. Wrap state can drift between the two views.
 Candidate fix: shift fully to the `wrap_requested` marker flow so the
 manager owns the kill and the asymmetry collapses.
 
-## hbz convention awareness in spawn flow
-
-Spawning a worker in hbz should not instruct worktrunk / branches / PRs
-(this repo commits direct to main). Repo-side todo: enforce in the
-skill (per-repo cwd detection) or via a hbz-side CLAUDE.md/AGENTS.md.
-
 ## Resumed_session_id vs resume_state overlap
 
 Post sessions pivot, the registry's `resumed_session_id` field
