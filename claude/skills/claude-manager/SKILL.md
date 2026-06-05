@@ -906,6 +906,14 @@ The split (worker pre-captures and kills; manager writes the journal
 and removes the entry) is preserved from the previous design. Shifting
 to a marker-only flow is tracked as a separate followup.
 
+**Forked workers.** Wrap records only the calling (primary) worker's
+`resumed_session_id`, by design: wrap is final, so per-fork resume ids
+serve nothing — a wrapped session isn't resumed. The forks' context
+isn't lost; the snapshot walks every window and pane (step 2), so the
+manager sees each fork's output when writing the journal. Contrast
+Shutdown, which records every Claude pane's `claude_session_id`
+precisely because the session will be rebuilt.
+
 ## Knowledge work
 
 The manager doesn't own the project's recordkeeping outright; workers

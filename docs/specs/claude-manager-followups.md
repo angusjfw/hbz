@@ -14,14 +14,6 @@ journal write + remove. Wrap state can drift between the two views.
 Candidate fix: shift fully to the `wrap_requested` marker flow so the
 manager owns the kill and the asymmetry collapses.
 
-## Multi-window wrap journal coverage
-
-Shutdown captures every Claude pane's `claude_session_id` in
-resume_state. Wrap only captures the calling worker's
-`resumed_session_id`; forked workers in other windows don't appear in
-the journal entry. Decide whether that's correct (the calling worker
-is "the" worker) or whether the journal should record forks.
-
 ## External rename-session stale `tmux_session`
 
 If the user runs `tmux rename-session` outside the manager, the
