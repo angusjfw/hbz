@@ -76,7 +76,8 @@ ai:
 	@# instructions
 	mkdir -p ~/.claude/hooks ~/.claude/skills ~/.claude/agents
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
-	@# settings — symlinked; local-only fields (model, effortLevel) stay uncommitted
+	@# settings — live file is gitignored (holds machine/work-local fields); seed from the committed baseline, then symlink
+	@test -f ${DIR}/claude/settings.json || cp ${DIR}/claude/settings.json.example ${DIR}/claude/settings.json
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
 	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done

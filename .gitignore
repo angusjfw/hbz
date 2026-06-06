@@ -12,3 +12,7 @@ docs/plans/
 
 # Work-specific packages
 brew/Brewfile.work
+
+# Local Claude settings — live file holds machine/work-local fields;
+# seeded from claude/settings.json.example by `make ai`
+claude/settings.json
