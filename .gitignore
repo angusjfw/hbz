@@ -9,6 +9,7 @@ zsh/.zsh-history-substring-search.zsh
 # Private working docs
 docs/design.md
 docs/plans/
+docs/notes/
 
 # Work-specific packages
 brew/Brewfile.work
