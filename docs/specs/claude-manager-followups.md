@@ -7,30 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Paused state for sessions
-
-A third lifecycle state between active and shutdown: paused. The tmux
-session stays alive and the worker keeps its state; the manager just
-flags it so it sorts to the bottom of the tmux leader+w switcher and
-shows a paused marker alongside existing identifiers in the title.
-Use case: sessions waiting on review or other external state — the
-switcher should distinguish "what I'm working on now" from "what's
-parked for later" without killing tmux. Distinct from the retired
-park concept, which moved sessions out of the manager's window list;
-this one just relabels and reorders.
-
-Switcher feasibility (deferred): leader+w is stock `choose-tree -Zw` —
-no custom binding in the tmux config. `choose-tree`'s only ordering
-control is `-O index|name|time`; there's no per-session custom sort
-key, so "sort paused to the bottom" isn't natively simple. Two routes:
-(a) rename paused sessions with a sort-affecting prefix/marker — but
-that collides with the `tmux_session == registry id` convention; or
-(b) replace `choose-tree` with a custom popup switcher (`display-popup`
-+ `fzf` over `tmux list-sessions`) where ordering and a paused marker
-are both trivial and can be driven off the registry's paused flag
-rather than the session name. (b) is the cleaner path and the reason
-this is more than a relabel.
-
 ## Manager-exit vs worker "-end" naming clash
 
 The coordinator close-out is only a section in `claude-manager/SKILL.md`
@@ -51,3 +27,20 @@ session (e.g. default session `0`), where killing tmux would drop the
 user to a bare shell. The flow should state the rule explicitly — kill a
 dedicated manager session, leave a shared/primary one — rather than
 leaving it to "Exit".
+
+## Demote paused sessions in the switcher
+
+The paused state itself shipped (see
+`2026-06-07-claude-manager-paused-state.md`): a `paused` registry field,
+a `@cm_paused` tmux option, and a `⏸ paused` badge in `prefix+w`. What's
+deferred is *demotion* — sorting parked sessions to the bottom of the
+switcher rather than just badging them in place.
+
+`choose-tree`'s only ordering control is `-O index|name|time`; there's
+no per-session custom sort key, and the badge approach deliberately
+leaves the session name unchanged (it stays `== registry id`), so the
+name-prefix sort hack is out. Demotion therefore needs a custom popup
+switcher: `display-popup` + `fzf` over `tmux list-sessions`, where
+ordering and the paused marker are both trivial and driven off the
+registry's `paused` flag. Only worth it if badges prove insufficient at
+higher session counts.
