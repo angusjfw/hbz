@@ -30,3 +30,24 @@ that collides with the `tmux_session == registry id` convention; or
 are both trivial and can be driven off the registry's paused flag
 rather than the session name. (b) is the cleaner path and the reason
 this is more than a relabel.
+
+## Manager-exit vs worker "-end" naming clash
+
+The coordinator close-out is only a section in `claude-manager/SKILL.md`
+("Ending the manager session") with no command of its own, while the
+`claude-manager-end` skill dir actually holds the *worker* shutdown/wrap
+shared flow (FLOW.md). "End" is overloaded across the two and it reads as
+confusing when invoking. Candidate: name the manager close-out "exit"
+(`/claude-manager-exit`?) — but confirm it's clearly distinct from the
+worker shutdown/wrap and from the `-end` shared-flow dir before settling.
+Decide: rename the worker `-end` dir, give the manager exit its own named
+entry point, or both.
+
+Related gap: the exit flow's step 5 is just "Exit" and says nothing about
+the manager's own tmux session. Workers kill their tmux on wrap/shutdown;
+the manager exit doesn't, so the asymmetry is confusing. It also can't
+blanket-kill: the manager often runs in the user's primary/attached
+session (e.g. default session `0`), where killing tmux would drop the
+user to a bare shell. The flow should state the rule explicitly — kill a
+dedicated manager session, leave a shared/primary one — rather than
+leaving it to "Exit".
