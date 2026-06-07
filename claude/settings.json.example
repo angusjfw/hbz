@@ -48,5 +48,7 @@
         "repo": "max-sixty/worktrunk"
       }
     }
-  }
+  },
+  "theme": "light",
+  "editorMode": "vim"
 }

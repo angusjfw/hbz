@@ -76,8 +76,10 @@ ai:
 	@# instructions
 	mkdir -p ~/.claude/hooks ~/.claude/skills ~/.claude/agents
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
-	@# settings — live file is gitignored (holds machine/work-local fields); seed from the committed baseline, then symlink
-	@test -f ${DIR}/claude/settings.json || cp ${DIR}/claude/settings.json.example ${DIR}/claude/settings.json
+	@# settings — live file is gitignored (holds machine/work-local fields); merge the committed
+	@# baseline under any existing local fields (local wins), so shared config self-heals each run
+	@test -f ${DIR}/claude/settings.json || echo '{}' > ${DIR}/claude/settings.json
+	@jq -s '.[0] * .[1]' ${DIR}/claude/settings.json.example ${DIR}/claude/settings.json > ${DIR}/claude/settings.json.tmp && mv ${DIR}/claude/settings.json.tmp ${DIR}/claude/settings.json
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
 	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
