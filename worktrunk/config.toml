@@ -1,5 +1,6 @@
 # Worktree path: ~/code/trees/<repo>/<branch>
 worktree-path = "{{ repo_path }}/../trees/{{ repo }}/{{ branch | sanitize }}"
+skip-commit-generation-prompt = true
 
 [post-start]
 copy = "wt step copy-ignored"
