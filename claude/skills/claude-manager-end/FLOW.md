@@ -187,7 +187,7 @@ covers the worker-side specifics.
    - Updates `last_touched`.
    - Appends a `notes` line: "Shutdown by self <date>; resume via the
      manager."
-   - Drops `tmux_session`.
+   - Drops `tmux_session` and `paused` (active-only).
    - Preserves all other fields and prose.
 
 6. **Kill the tmux session.** Only do this after the lock has been
@@ -253,7 +253,8 @@ fulfils the journal write.
      file), append to that file instead of overwriting the field.
      Whenever notes reference the resume id, write the full
      `resumed_session_id` — never `<prefix>-...`.
-   - Drops `tmux_session` — the session is about to be killed.
+   - Drops `tmux_session` (and `paused`, if set) — the session is about
+     to be killed.
 
 5. **Kill the tmux session** after the lock has been released and the
    registry write has landed. This kills the worker's own pane, so

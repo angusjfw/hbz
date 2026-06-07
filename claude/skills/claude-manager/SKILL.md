@@ -60,6 +60,8 @@ this is the formal contract across managers:
 
 - `[active] <session-id>: <ticket or summary>` — live, has a tmux
   container.
+- `[paused] <session-id>: ...` — active but parked (`paused` field set,
+  tmux still alive).
 - `[shutdown] <session-id>: ...` — `shutdown` field set, no tmux
   fields.
 - `[wrap requested] <session-id>: ...` — transient; worker has
@@ -73,6 +75,7 @@ to match the prefixes — keep them orthogonal.
 Sync triggers:
 - Spawn or import → add a task at `in_progress` with `[active]`
   prefix.
+- Pause / unpause → toggle the prefix between `[active]` and `[paused]`.
 - Shutdown → update prefix to `[shutdown]`.
 - Cold resume → update prefix from `[shutdown]` to `[active]`.
 - Wrap-requested seen on a worker entry → update prefix to
@@ -93,13 +96,20 @@ between turns.
 has one tmux container (a tmux window in the manager's tmux session,
 or its own tmux session) and one or more workers in panes inside it.
 
-Two lifecycle transitions, same names on both sides:
+Two lifecycle transitions kill the tmux container, same names on both
+sides:
 
 - **Shutdown** — kill the tmux container; keep the registry entry for
-  later resumption. Phrasings: "shutdown", "kill that one", "pause
-  it", "drop tmux".
+  later resumption. Phrasings: "shutdown", "kill that one", "drop
+  tmux".
 - **Wrap** — final close-out: journal entry, registry removal.
   Phrasings: "wrap up", "complete", "close out", "finish".
+
+**Pause** is different — it flags an active session as parked without
+killing anything; tmux and the worker stay alive (see Pause). Phrasings:
+"pause", "pause it", "park it"; the inverse is "unpause", "resume it".
+For a *paused* (live) session "resume" means unpause; for a *shutdown*
+session it means cold resume — the session's state tells them apart.
 
 Map flexible wording to the canonical mode before acting.
 
@@ -126,6 +136,8 @@ Map flexible wording to the canonical mode before acting.
    unnoticed until a manual re-read. If a live watch process for this
    manager already exists (PID file present and PID alive), reuse it
    (re-attach the Monitor); otherwise spawn a fresh one.
+4. Install the paused-session switcher binding (see Pause § Switcher
+   badge). Idempotent — safe to re-run every invocation.
 
 That's it. Project rulebook, tmux state and knowledge stores are
 read lazily when a query needs them.
@@ -164,6 +176,11 @@ Recognised session fields:
   `~/.local/state/claude-manager/resume/` written at shutdown. See
   the Shutdown section for format.
 - `resume_target` — expected resume date (optional, free-form)
+- `paused` — timestamp; set on an active entry to mark it parked
+  (waiting on review or other external state). Active-only: present
+  alongside `tmux_session`, dropped when the session shuts down or
+  wraps. Mirrored by a `@cm_paused` tmux option on the session that
+  drives the switcher badge (see Pause).
 - `wrap_requested` — `true` when a worker has requested wrap; the
   manager fulfils the journal-write phase and removes the entry
 - `notes` — string OR a path to a file (typically a journal entry)
@@ -171,6 +188,7 @@ Recognised session fields:
 Lifecycle state is encoded by which fields are present:
 
 - `tmux_session` set → active.
+- `tmux_session` set **and** `paused` set → active, parked.
 - No `tmux_session`, `shutdown` + `resumed_session_id` + `resume_state`
   set → shutdown.
 - No `tmux_session`, `wrap_requested: true` set → wrap in progress
@@ -233,11 +251,11 @@ The registry is shared state between the manager and its workers. The
 mkdir lock serialises writes from either side.
 
 **Workers may write to their own entry only.** Allowed fields:
-`last_touched`, `notes`, ticket/branch updates, and the shutdown/wrap
-fields (`shutdown`, `resumed_session_id`, `snapshot`, `resume_state`,
-`wrap_requested`). Workers may also write their own snapshot file
-under `~/.local/state/claude-manager/snapshots/` and resume_state
-file under `~/.local/state/claude-manager/resume/`.
+`last_touched`, `notes`, ticket/branch updates, `paused`, and the
+shutdown/wrap fields (`shutdown`, `resumed_session_id`, `snapshot`,
+`resume_state`, `wrap_requested`). Workers may also write their own
+snapshot file under `~/.local/state/claude-manager/snapshots/` and
+resume_state file under `~/.local/state/claude-manager/resume/`.
 
 **Workers must not touch:** the header block, or any other session's
 entry. Workers DO write to journals, wikis, runbooks and other
@@ -442,7 +460,8 @@ On demand, diff the registry against `tmux ls`:
   session renamed outside the manager (`tmux rename-session`) — surface
   it and offer to re-link (update `tmux_session`), don't treat it as
   dead. Otherwise surface and ask: finished, shutdown unexpectedly, or
-  unknown?
+  unknown? If the live entry carries `paused`, apply the auto-clear
+  check (see Pause § Auto-clear).
 
   If *many* entries fail lookup at once, suspect a tmux server
   restart and surface aggregately before changing any state. Unlike
@@ -572,8 +591,7 @@ so the user is almost always the attached client).
 Shutdown = kill the tmux session; keep the registry entry so the
 session can be cold-resumed later via the manager. Sits between
 active and Wrap (final, journal entry written, entry removed).
-Flexible wording: "shutdown", "kill that one", "pause it", "drop
-tmux".
+Flexible wording: "shutdown", "kill that one", "drop tmux".
 
 **Mechanics:**
 
@@ -687,7 +705,7 @@ tmux".
    - Adds `resume_target: <date>` if known.
    - Updates `last_touched`.
    - Appends to `notes`: "Tmux killed <date>; resume via the manager."
-   - Removes `tmux_session`.
+   - Removes `tmux_session` and `paused` (if set).
 
 6. **Kill the tmux session** (after the lock is released), moving any
    attached client off it first — see § Killing a session.
@@ -920,6 +938,76 @@ isn't lost; the snapshot walks every window and pane (step 2), so the
 manager sees each fork's output when writing the journal. Contrast
 Shutdown, which records every Claude pane's `claude_session_id`
 precisely because the session will be rebuilt.
+
+## Pause
+
+Pause flags an active session as parked — waiting on review or other
+external state — without killing anything. The tmux session and worker
+stay alive; only the label changes, so a parked session is easy to skip
+in the `prefix+w` switcher and in the task list. It is a modifier on the
+active state, distinct from Shutdown (kills tmux) and Wrap (final).
+
+Both sides drive it. A worker self-serves via `/claude-manager-pause`
+(a toggle); the manager pauses or unpauses any session on the user's
+request. Either path lands the state in the same two places: the
+registry `paused` field and a per-session `@cm_paused` tmux option.
+
+The registry rewrite uses the same lock and re-read-under-lock
+discipline as everything else (see Registry). A worker acting on its own
+entry resolves and matches it the same way the shutdown/wrap flow does
+(`claude-manager-end/FLOW.md` § Common preamble).
+
+**Pause** (active → parked):
+
+1. Under the lock, add `paused: <today>` to the entry and update
+   `last_touched`. A reason, if given, goes in `notes`.
+2. Set the marker: `tmux set-option -t <tmux_session> @cm_paused 1`.
+3. Ensure the switcher binding is installed (§ Switcher badge).
+4. Set the task-list prefix to `[paused]`.
+
+**Unpause** (parked → active):
+
+1. Under the lock, remove `paused` from the entry; update
+   `last_touched`.
+2. Clear the marker: `tmux set-option -u -t <tmux_session> @cm_paused`.
+3. Set the task-list prefix back to `[active]`.
+
+`@cm_paused` lives on the tmux session, so it vanishes when the session
+is killed — shutdown and wrap need no marker cleanup, only the `paused`
+field drop.
+
+### Auto-clear
+
+During a reconcile or idle-detection pass, if a parked session's primary
+Claude pane reads **busy** (per § Idle-detection query — `esc to
+interrupt`, spinner), the manager unpauses it: the session is clearly
+active again. Idle-at-prompt is *not* activity — a parked session sits
+idle, so don't auto-unpause on idle. Explicit unpause is the reliable
+path; auto-clear is best-effort.
+
+### Switcher badge
+
+The marker renders in `prefix+w` via a custom `choose-tree` format,
+installed at runtime rather than added to the user's `tmux.conf` — so
+the feature travels with the skill:
+
+```bash
+tmux bind-key w choose-tree -Zw -F '#{?session_format,#{?#{@cm_paused},⏸ paused · ,}#{session_windows}w#{?session_attached, (attached),},#{?window_format,#{window_name}#{window_flags},#{pane_current_command}}}'
+```
+
+Install it idempotently on manager invocation and whenever a pause is
+set, so the badge shows whenever a parked session exists, with or
+without a manager running. It is purely additive — identical to the
+stock `choose-tree -Zw` except for the `⏸ paused` badge on sessions
+whose `@cm_paused` is set. The session name is untouched (it stays equal
+to the registry id); `choose-tree` draws the name and shortcut key
+itself, and the format only adds the trailing description.
+
+Caveats, accepted as the price of keeping it skill-owned: the rebind is
+global and reverts to the user's `tmux.conf` on a tmux **server
+restart**, re-installing on the next invocation or pause — so between a
+restart and the next manager activity, badges don't render. If the user
+has customised their own `w` binding, the runtime install overrides it.
 
 ## Knowledge work
 

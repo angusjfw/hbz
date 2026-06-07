@@ -27,6 +27,12 @@ Both sides can pause and unpause:
 - **Worker** self-serves via `/claude-manager-pause` from its own pane.
 - **Manager** pauses/unpauses any session on the user's say-so.
 
+Terminology note: "pause it" was previously listed as a phrasing for
+*shutdown* (kill tmux). It is reassigned to this state — "pause" /
+"park" now mean the no-kill parked state, and shutdown keeps
+"shutdown" / "kill that one" / "drop tmux". For a paused (live) session
+"resume" means unpause; for a shutdown session it means cold resume.
+
 ## Registry encoding
 
 Reuses the existing "state = which fields are present" convention in
@@ -43,8 +49,11 @@ Lifecycle encoding gains one line:
 `paused` is added to the recognised session fields and to the
 worker-writable field list (workers self-pause). A reason, if any, goes
 in the existing `notes` field — no dedicated field. `paused` is an
-active-only field: the shutdown and wrap rewrites drop it along with
-`tmux_session`.
+active-only field: the shutdown rewrite drops it with `tmux_session`
+(the entry is kept); wrap removes the whole entry, so nothing to drop.
+The worker-side shutdown/wrap rewrites in `FLOW.md` drop it too, since a
+worker-wrapped entry persists (with `wrap_requested`) until the manager
+removes it.
 
 ## tmux marker — no rename
 
@@ -89,18 +98,19 @@ Consequences, accepted as the price of keeping it skill-owned:
   overrides it; fold the `-F` in or accept the override.
 
 The `-F` format applies to window and pane rows too (not just sessions),
-so it must guard on node type — render the badge line only for sessions,
-and reproduce the stock-ish line for windows/panes:
+so it guards on node type — the badge branch only for sessions, a
+stock-ish line for windows/panes. Verified exact format (tmux 3.6a):
 
 ```
-#{?session_format,
-   #{?#{@cm_paused},⏸ paused · ,}#{session_windows} windows#{?session_attached,\, attached,},
-   #{?window_format,#{window_index}: #{window_name}#{window_flags},#{pane_current_command}}}
+#{?session_format,#{?#{@cm_paused},⏸ paused · ,}#{session_windows}w#{?session_attached, (attached),},#{?window_format,#{window_name}#{window_flags},#{pane_current_command}}}
 ```
 
-Illustrative; exact format finalised in implementation. The non-paused
-session branch reproduces the useful default bits (window count, attached
-marker) so active lines do not look bare.
+`choose-tree` draws the node's name and shortcut key itself and prepends
+the window/pane index on those rows, so the format only supplies the
+trailing description (no index repeated). The non-paused session branch
+keeps the useful default bits (window count, attached marker) so active
+lines do not look bare. A paused session renders as
+`name: ⏸ paused · 2w`, an active one as `name: 1w`.
 
 ## Command surface
 
@@ -147,10 +157,11 @@ idempotent binding install.
 ## Files touched
 
 - `claude-manager/SKILL.md` — new `## Pause` section; Registry edits
-  (`paused` field, lifecycle-encoding line, worker-writable list); a line
-  in Reconcile / idle-detection for auto-clear; binding install on
-  invocation; `[paused]` task-list prefix; drop `paused` in the
-  manager-side Shutdown and Wrap rewrites.
+  (`paused` field, lifecycle-encoding line, worker-writable list);
+  Terminology + Shutdown phrasing ("pause it" reassigned off shutdown);
+  a line in Reconcile for auto-clear; binding install on invocation;
+  `[paused]` task-list prefix; drop `paused` in the manager-side Shutdown
+  rewrite (wrap removes the entry).
 - `claude-manager-pause/SKILL.md` — new thin wrapper (toggle).
 - `claude-manager-end/FLOW.md` — drop `paused` in the shutdown/wrap
   rewrites (one line each).
