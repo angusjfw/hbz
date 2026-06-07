@@ -3,7 +3,7 @@
 Rules for authoring and maintaining skills in this repo.
 
 ## Composition and de-coupling
-- Decouple via discovery, not reference. A skill's body and description should not name other skills. Claude sees all available skills in the environment and picks them up as needed; cross-references create brittle dependencies that drift.
+- Decouple via discovery, not reference. A skill's body and description should not name other skills, and never cite one as a prerequisite, since a named skill may be absent. Claude sees all available skills in the environment and picks them up as needed; cross-references create brittle dependencies that drift. A skill should stand on its own, with related skills enhancing it when present.
 - Namespace coupled skills with a shared prefix (e.g. `claude-manager-*`) when they're operationally related. The prefix signals coupling at the naming level without requiring cross-references.
 
 ## Invocation
