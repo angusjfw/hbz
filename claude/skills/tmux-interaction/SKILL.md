@@ -1,6 +1,6 @@
 ---
 name: tmux-interaction
-description: Patterns for Claude to read from and write to tmux panes via send-keys and capture-pane. Covers literal sends, control keys, vim-mode interaction (always start with Escape), the lost-leading-character workaround, capture-pane verification after a send, and polling pane output via wait-for-text. Use when input needs to land in another tmux target, or pane output needs to be observed.
+description: Use when sending input to or reading output from a tmux pane other than the one in focus: running a command, dev server, REPL, or long-running process in a pane and waiting for it to print a prompt, port, or result; reading or scrolling pane output; or driving a shell, vim/neovim, or another agent via send-keys and capture-pane. Also when input appears to land but doesn't submit, or keystrokes get dropped.
 ---
 
 # tmux-interaction
