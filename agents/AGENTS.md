@@ -1,5 +1,5 @@
 # Rules
-- At the start of each session, read any AGENTS.md in the working directory. Those rules take precedence.
+- At the start of each session, read any AGENTS.md in the working directory and its parents. Those rules take precedence.
 - Prefer AGENTS.md for new rulebooks. Treat existing CLAUDE.md or equivalent vendor-named files as equivalent — read and respect them without renaming.
 - Verify before asserting. Never state file contents, system state, or other facts that change without checking first. Avoid recording ephemeral facts in durable places like commits, PR descriptions, or docs.
 - Stay in scope. Don't make changes beyond what was explicitly agreed. Ask questions, raise issues, discuss tradeoffs and get approval before acting.
