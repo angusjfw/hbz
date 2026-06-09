@@ -396,40 +396,25 @@ net.
 
    If the user asks for a "blank" or "empty" spawn, send no brief at
    all — they'll type the first prompt themselves.
-6. Start Claude in window 0 pane 0 (the primary worker). Kickoff:
-   launch `claude`, poll the pane until the TUI input line is ready,
-   send the brief from step 5 (skip the send-keys when the brief is
-   blank), then `Enter` as a separate `send-keys` call. A TUI banner
-   — "N setup issues", a paste-expand prompt, an MOTD — often captures
-   that first `Enter`, so the brief lands in the input box but never
-   submits; the spawn looks successful from the manager's side while
-   the brief sits there. After sending `Enter`, capture the pane and
-   confirm the prompt actually submitted (busy indicator present,
-   input box cleared); re-send `Enter` until it does. Both the
-   readiness poll and the submit check must match what the current TUI
-   renders — capture first and adapt the regex.
+6. Start Claude in window 0 pane 0 (the primary worker): launch
+   `claude` in `${session_id}:0.0`, wait for the TUI input line to be
+   ready, send the brief from step 5 (skip the send when the brief is
+   blank), then submit. Two traps this flow must handle, whatever the
+   mechanics:
 
-   ```bash
-   target="${session_id}:0.0"
-   tmux send-keys -t "$target" "claude" Enter
-   # Example shape — adapt the check to whatever this TUI renders:
-   until tmux capture-pane -p -t "$target" -S -5 | grep -q '<marker>'; do
-     sleep 0.5
-   done
-   if [ -n "$brief" ]; then
-     tmux send-keys -t "$target" "$brief"
-     # The first Enter is the one a banner eats. Re-send until the
-     # prompt submits — signalled by a busy indicator ("esc to
-     # interrupt") or the input box clearing.
-     for _ in 1 2 3; do
-       tmux send-keys -t "$target" Enter
-       sleep 0.5
-       tmux capture-pane -p -J -t "$target" -S -5 \
-         | grep -q 'esc to interrupt' && break
-     done
-   fi
-   tmux capture-pane -p -t "$target" -S -5
-   ```
+   - **Wait on a marker with a timeout.** Poll for a TUI-ready marker
+     before sending, and bound the wait so a failed launch surfaces
+     instead of hanging. Use tmux interaction patterns or skills for
+     the poll; never blind-sleep.
+   - **The first Enter often doesn't submit.** A TUI banner — "N setup
+     issues", a paste-expand prompt, an MOTD — captures it, so the
+     brief lands in the input box but never sends; the spawn looks
+     successful from the manager's side while the brief just sits
+     there. After submitting, confirm it actually went (busy indicator
+     present, input box cleared) and re-send until it does.
+
+   Every marker is TUI-specific — capture the pane first and match what
+   the current version renders; don't hardcode a string.
 7. Add the session to the registry with `tmux_session: $session_id`.
    Add to the visible task list (`[active]` prefix).
 8. Tell the user how to switch to it (see Switch UX).
@@ -1034,7 +1019,8 @@ doesn't gate that. Read the relevant store's schema before writing.
 
 "Which workers are waiting for input?" — for each registry session
 with `tmux_session` set, identify Claude panes per § Detect pane
-processes, then capture each Claude pane's recent tail:
+processes, then capture each Claude pane's recent tail (use tmux
+interaction patterns or skills for the capture):
 
 ```bash
 tmux capture-pane -p -J -t "<tmux_session>:<w>.<p>" -S -30
