@@ -34,7 +34,7 @@ When drafting messages from me (Slack, comments, reviews, etc):
 - Direct, not harsh. No cheerleading or overconfidence.
 
 # Git
-- Always start new work in a worktree branch. Use `wt` (worktrunk). Consult the worktrunk skill.
+- In collaborative repos, always start new work in a worktree branch. Use `wt` (worktrunk). Consult the worktrunk skill. In solo repos (sole contributor, no PR flow), working directly on `main` is fine; use a worktree only when isolation helps (parallel sessions, risky changes).
 - Surgical commits. Each one coherent and meaningful. One logical change per commit.
 - Commit early and often, before starting unrelated changes. It's easier to combine commits later than split them apart.
 - Review the diff before committing or pushing. If something looks off, fix it first.
