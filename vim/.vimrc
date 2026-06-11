@@ -53,7 +53,7 @@ call plug#end()
 let mapleader = ','
 
 map <C-f> :FZF<CR>
-let $FZF_DEFAULT_COMMAND = 'find . -printf "%P\\n"'
+let $FZF_DEFAULT_COMMAND = 'find . -mindepth 1 | cut -c3-'
 map <C-g> :Goyo<CR>
 map <C-p> :%!python3 -m json.tool<CR>
 if executable('ag')
