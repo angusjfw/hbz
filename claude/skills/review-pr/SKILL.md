@@ -179,10 +179,13 @@ even if you have already read the diff. The sub-agents bring
 specialized perspective you haven't applied. If you find yourself
 thinking "I've already done this" — you haven't.
 
-For the named area(s), spawn focused sub-agents on the dimensions
-that apply to *this* PR (informed by the intent grouping from the
-previous phase).
-Don't blanket-dispatch every dimension. Pick from:
+Spawn the sub-agents as a basic full sweep of the whole PR — every
+changed file, not just the area the user named for the deeper dive.
+This is broad baseline coverage; it backstops the targeted semantic
+review you and the user do on the key changes, it doesn't replace it.
+Pick the dimensions that apply to *this* PR (informed by the intent
+grouping); don't blanket-dispatch every dimension, but each one you
+run covers the full diff. Pick from:
 
 - **General quality** (`code-reviewer`) — project rules in
   CLAUDE.md/AGENTS.md, framework conventions, naming, declarations,
@@ -202,19 +205,29 @@ Don't blanket-dispatch every dimension. Pick from:
 
 Each agent is invoked via the Agent tool with `subagent_type` set
 to its name. They live as personal agents at `~/.claude/agents/`
-and are not plugin-namespaced. Run each scoped to a specific set
-of files with a focused prompt; score each issue by confidence
-(0-100); only carry forward findings ≥ 80. Confidence scores are
-for internal filtering — how to present them to the user is
-handled in the categorize step.
+and are not plugin-namespaced. Run each over the full set of changed
+files by default; only split an agent across file subsets for a PR
+too large for one pass, and then so the splits cover all of it, never
+to review only part. Score each issue by confidence (0-100); only
+carry forward findings ≥ 80. Confidence scores are for internal
+filtering — how to present them to the user is handled in the
+categorize step.
+
+Don't stop at the agents. They review the diff cold; you have the
+worktree, the surrounding code, and the reason for the change. Add
+your own findings from what they can't see — judge each change
+against the callers, callees, and control flow around it, not the
+hunk alone. Carry these into the challenge and categorize steps
+alongside the agent findings.
 
 #### 4b. Adversarial challenge
 
-Most unfiltered agent findings turn out to be unnecessary, wrong, or
-context-blind. Apply the filter here, before the user sees them, not
-as pushback after the fact. The user has been explicit that this
-filter needs to be sharp, especially in colleague review where the
-cost of noise is high.
+Curate the findings before the user sees them, here, not as pushback
+after the fact. Capable agents are mostly right, so the aim isn't to
+assume they're wrong — it's to drop what's context-blind, already
+known, or too low-value to put in front of a colleague. The filter
+matters most in colleague review, where the cost of noise is high; in
+self-review it can be lighter.
 
 For each finding from 4a:
 
@@ -241,10 +254,12 @@ For each finding from 4a:
    record which agent surfaced it and your post-steelman
    confidence, to be expressed in the categorize step below.
 
-Bias toward dropping. A missed finding is a future discussion; a
-noisy review gets dismissed wholesale. In colleague review, raise
-the bar further: anything you'd be embarrassed to put in front of
-the author should not survive this step.
+In colleague review, lean toward dropping anything you'd be
+embarrassed to put in front of the author — a noisy review gets
+dismissed wholesale. But a finding you haven't actually investigated
+isn't noise yet: do the tracing to confirm or reject it before
+filtering on confidence. The failure mode here is both noise and a
+real issue dropped unexamined.
 
 #### 4c. Categorize and propose handling
 

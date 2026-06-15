@@ -20,6 +20,8 @@ Three representative scenarios:
 
 By default, review unstaged changes from `git diff`. The user may specify different files or scope to review.
 
+Read past the diff. Judge a change against the code it lands in — the enclosing function, callers, and callees — not the hunk alone; some issues are only legible there.
+
 ## Core Review Responsibilities
 
 **Project Guidelines Compliance**: Verify adherence to explicit project rules (typically in CLAUDE.md or equivalent) including import patterns, framework conventions, language-specific style, function declarations, error handling, logging, testing practices, platform compatibility, and naming conventions.
