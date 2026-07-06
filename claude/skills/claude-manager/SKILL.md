@@ -51,6 +51,42 @@ When in doubt, spawn a worker. The manager may read worker pane output
 (`tmux capture-pane -p`). It does not send keys or prompts to workers
 unless asked.
 
+The grunt of meta-work itself — a read-only search, or drafting an entry
+from material the manager hands over — may go to a cheap subagent; the
+judgement and any lock-held write stay with the manager. See Delegating
+grunt meta-work.
+
+## Delegating grunt meta-work
+
+Meta-work splits into judgement and grunt. Judgement stays with the
+manager: deciding what to spawn and record, reconciling state, holding
+the cross-session view. Grunt — a read-only content search, or composing
+an entry from material the manager hands over — can go to a cheap
+subagent, so the manager stays fast and its context stays clean (the
+subagent's greps and file reads never enter it). It's the meta-work
+counterpart to spawning a worker for substantive work: same instinct,
+cheaper mechanism.
+
+Pick the subagent's model with the same rubric as a spawn:
+
+- Read-only or mechanical search (the JSONL hunt in Untracked cold
+  resume, registry or journal greps) → `haiku`.
+- Composing from a snapshot and notes (the wrap journal draft) →
+  `sonnet`. The manager still decides to write it, supplies the
+  cross-session context a subagent can't see, and reviews and records
+  the result; the subagent only drafts.
+
+Two practical notes: dispatch a fresh subagent with the model set, not a
+fork — a fork inherits the manager's model and ignores the override. And
+effort isn't a per-dispatch lever for a subagent the way `--effort` is
+for a spawned worker, so it follows the subagent's own default; the model
+is the lever here.
+
+What never leaves the manager: anything holding the mkdir lock, any
+registry write, the tmux lifecycle (spawn, shutdown, wrap kill), and
+task-list sync. Delegating lock-held coordination risks a stale-read
+clobber and costs more than it saves.
+
 ## Task list hygiene
 
 The in-conversation task list mirrors the registry. Sync them in the
@@ -945,7 +981,9 @@ wording: "wrap up", "complete", "close out", "finish".
    snapshot and any `notes` from the registry entry. If notes are
    thin and there's no obvious narrative from snapshot + recent git
    activity in the worktree, ask the user a focused question before
-   writing. Otherwise proceed.
+   writing. Otherwise proceed. The drafting can go to a `sonnet`
+   subagent (see Delegating grunt meta-work); the manager supplies the
+   snapshot, notes and cross-session context, then reviews and records.
 4. Mark the visible task list entry `completed`, then delete it from
    the list.
 5. Remove the entry from the registry.
