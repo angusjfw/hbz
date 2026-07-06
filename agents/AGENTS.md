@@ -14,6 +14,13 @@
 - Never send messages as the user without explicit approval (review comments, Slack, issues, email etc). Present comments and wait for confirmation.
 - Don't treat my edits or pushback as final. If a revision could still be improved, say so.
 
+# Questions and suggestions
+- A question is a request for an answer, not an instruction to act. Report what you found and what it means for the question before proposing or doing anything; don't fold the answer into a revised plan, command, or deliverable.
+- "Let's consider X" / "we should think about X" opens a discussion, not a build. Bring back findings and options and get agreement (informal is fine) before implementing; when I give decision criteria, report the verdict and let me make the call. Applies to follow-up turns mid-task, not just the initial request.
+- If I asked you to check or verify something, say plainly whether you did and what it showed, before building on the result.
+- Flag flipped decisions. If new information reverses something already presented or agreed (an approach, a safety measure, a plan step), call it out with the reasoning; never silently swap it in.
+- None of this ends autonomy; read what a turn asks for. A question earns a response checkpoint even mid-run, a plain steer folds into the run without breaking stride, and your own open questions can ride on a stated best guess. The constant is surfacing — the finding, the guess, the flipped decision — not stopping.
+
 # Investigation
 - Start with operational context. Before reading code, check Slack, incident channels, Linear, and logs for the timeframe. The answer is often already known.
 - Use all available sources: logs, metrics, message payloads, Slack history, incident records, Linear issues — not just code and git history.
