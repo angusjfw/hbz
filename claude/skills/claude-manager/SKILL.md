@@ -164,6 +164,12 @@ Recognised session fields:
   the tmux session is alive. Find the session with
   `tmux has-session -t <tmux_session>`.
 - `worktree`, `branch`, `cwd`
+- `model` — model alias the worker was spawned on (`opus`/`sonnet`/
+  `haiku`). Recorded intention; informational, since resume restores
+  the model itself.
+- `effort` — effort level the worker was spawned on
+  (`low`/`medium`/`high`/`xhigh`/`max`). Replayed on cold resume;
+  unlike the model, effort isn't restored per transcript.
 - `started`, `last_touched`, `shutdown` — timestamps, format flexible
 - `resumed_session_id` — Claude `--resume` token for the primary
   worker (window 0 pane 0), captured at shutdown or wrap. Always
@@ -236,6 +242,8 @@ ticket: ENG-1234
 tmux_session: eng-1234-payment-bug
 worktree: ~/code/repo-foo/_wt/eng-1234
 branch: fix/eng-1234-payment-bug
+model: opus
+effort: high
 started: 2026-04-29 14:00
 last_touched: 2026-04-29 16:20
 notes: ~/code/journal/2026-04-29-eng-1234.md
@@ -396,8 +404,35 @@ net.
 
    If the user asks for a "blank" or "empty" spawn, send no brief at
    all — they'll type the first prompt themselves.
-6. Start Claude in window 0 pane 0 (the primary worker): launch
-   `claude` in `${session_id}:0.0`, wait for the TUI input line to be
+6. **Choose the model and effort.** Classify the spawn from surface
+   signals only — the meta-only boundary bars investigating to gauge
+   complexity, so use what the request already tells you: how the user
+   framed it (routine vs hard, any urgency), the kind of work
+   (mechanical / implementation / investigation / design / review), its
+   breadth and ambiguity, and whether it's the PR-review path.
+
+   Two independent axes: capability need picks the model, task size and
+   latency-sensitivity pick the effort. Lean powerful — under-powering
+   costs more than over-powering.
+
+   The mapping (retune this as the model set and expectations change;
+   the classification above is the stable part):
+
+   - Model: smallest mechanical, mostly just invoking a skill → `haiku`;
+     simple, clear-scope work → `sonnet`; real engineering, design,
+     cross-system work, debugging, non-trivial review, and the
+     when-unsure default → `opus`.
+   - Effort (`low`/`medium`/`high`/`xhigh`/`max`): mechanical or small →
+     `low`; moderate → `medium`; large, ambiguous or genuinely hard →
+     `high`, up to `xhigh`/`max`. Effort varies by size even at a fixed
+     model — a small `opus` task runs `--effort low` so it doesn't
+     overthink and stay slow.
+
+   Thin signal or a blank spawn defaults to `opus --effort medium`. The
+   choice is infrastructure — it does not go into the worker's brief.
+7. Start Claude in window 0 pane 0 (the primary worker): launch
+   `claude --model <alias> --effort <level>` (the pick from step 6) in
+   `${session_id}:0.0`, wait for the TUI input line to be
    ready, send the brief from step 5 (skip the send when the brief is
    blank), then submit. Two traps this flow must handle, whatever the
    mechanics:
@@ -415,9 +450,12 @@ net.
 
    Every marker is TUI-specific — capture the pane first and match what
    the current version renders; don't hardcode a string.
-7. Add the session to the registry with `tmux_session: $session_id`.
-   Add to the visible task list (`[active]` prefix).
-8. Tell the user how to switch to it (see Switch UX).
+8. Add the session to the registry with `tmux_session: $session_id`,
+   plus `model:` and `effort:` from step 6. Add to the visible task
+   list (`[active]` prefix).
+9. Tell the user how to switch to it (see Switch UX), stating the chosen
+   model and effort with a one-line reason. The user can override; ask
+   up front only for a genuinely ambiguous or blank spawn.
 
 All session-creating tmux commands include `-d` so spawning sessions
 never steals the user's focus. Hard rule.
@@ -425,7 +463,9 @@ never steals the user's focus. Hard rule.
 For **PR review** tasks specifically, the worktree is off the PR's
 branch (`gh pr view <N> --json headRefName`). The worker's `review-pr`
 skill takes over once the worker starts; the manager just lands it in
-the right worktree.
+the right worktree. Model and effort follow the review class — `opus` at
+`high` effort — dropping to `sonnet` or lower effort only for a small or
+trivial PR.
 
 ## Switch UX
 
@@ -651,7 +691,10 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
    block with a `layout:` field; one pane per `### pane <n>` sub-block
    with `cwd:`, `command:`, and on Claude panes `claude_session_id:`.
    Idle-shell panes (per § Detect pane processes) get `command:`
-   empty — auto-replaying an idle shell on resume is noise. Example:
+   empty — auto-replaying an idle shell on resume is noise. The primary
+   Claude pane's `command:` carries `--effort <effort>` from the registry
+   `effort` field, but not `--model` — resume restores the model itself
+   (see Cold resume). Example:
 
    ```markdown
    # Resume state: eng-1234
@@ -663,7 +706,7 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
 
    ### pane 0
    cwd: ~/code/.../eng-1234
-   command: claude --resume abc-123
+   command: claude --effort high --resume abc-123
    claude_session_id: abc-123
 
    ## window 3: dev
@@ -763,7 +806,21 @@ worker doesn't exist yet — cold resume is what creates it).
    ```
 
    Claude panes get their `claude --resume <claude_session_id>` line
-   verbatim. Other panes get their recorded command.
+   verbatim (the primary worker's recorded command also carries
+   `--effort`; see Shutdown). Other panes get their recorded command.
+
+   **Model vs effort on resume.** Model is not re-passed: resume restores
+   the session's last model itself, so re-passing `--model` would override
+   a mid-session `/model` change. Effort has no such per-transcript
+   restore, so the recorded `--effort` is replayed deliberately — it
+   restores the spawn-time choice at the cost of overriding a mid-session
+   `/effort` change. That trade is chosen because reverting to the default
+   effort is worse than losing an occasional mid-session tweak, and the
+   live effort can't be recovered at shutdown (the transcript stores no
+   readable effort level). Two limits: the wrap_requested-reopen and
+   untracked-cold-resume paths below have no recorded effort, so they come
+   back at the default; and `max`, being session-only, survives a resume
+   only where this recorded `--effort max` replays it.
 7. Update the registry under lock:
    - Add `tmux_session: $session_id`.
    - Remove `shutdown`, `snapshot`, `resume_state`,
