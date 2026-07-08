@@ -196,7 +196,8 @@ run covers the full diff. Pick from:
 - **Tests** (`pr-test-analyzer`) — behavioral coverage gaps, test
   quality, missing edge cases, flaky-prone patterns.
 - **Comments** (`comment-analyzer`) — accuracy vs the code, rot,
-  completeness for non-obvious bits.
+  completeness for non-obvious bits. Not just comments the diff added —
+  existing comments the change should have updated but didn't.
 - **Types** (`type-design-analyzer`) — encapsulation, invariants,
   usefulness of the abstraction.
 - **Simplification** (`code-simplifier`) — duplication, complex
