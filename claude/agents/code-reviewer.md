@@ -30,29 +30,53 @@ Read past the diff. Judge a change against the code it lands in — the enclosin
 
 **Code Quality**: Evaluate significant issues like code duplication, missing critical error handling, accessibility problems, and inadequate test coverage.
 
-## Issue Confidence Scoring
+## Candidate findings (triage)
 
-Rate each issue from 0-100:
+Produce candidate findings from the responsibilities above. Give each a
+rough self-estimate (0-100), but this is only a triage bar for deciding
+what's worth verifying — it is **not** the gate for what you report.
+Discard obvious noise; send anything genuinely plausible to a skeptic.
+Do not rely on your own score for the final decision — an independent
+skeptic sets that.
 
-- **0-25**: Likely false positive or pre-existing issue
-- **26-50**: Minor nitpick not explicitly in CLAUDE.md
-- **51-75**: Valid but low-impact issue
-- **76-90**: Important issue requiring attention
-- **91-100**: Critical bug or explicit CLAUDE.md violation
+## Verify before returning (independent skeptic)
 
-**Only report issues with confidence ≥ 80**
+You do not score your own findings for keeps. For each candidate that
+clears the triage bar, dispatch the `skeptic` agent (Agent tool,
+`subagent_type: "skeptic"`) to try to refute it. Dispatch skeptics for
+multiple findings in parallel — one message, multiple Agent calls.
+
+Pass each skeptic:
+
+- the finding: file:line, the claim, the suggested change
+- the diff range under review (base..head, or the changed files)
+- your reasoning for flagging it
+
+Keep only findings the skeptic scores **≥ 80**, and attach the skeptic's
+verdict and steelman to each survivor.
+
+For a **Critical candidate** (a likely bug, regression, security, or
+data-loss issue), dispatch **three** skeptics with distinct lenses —
+`correctness`, `reproduce`, `security` — and keep it only if **≥ 2**
+score ≥ 80. Diversity of angle, not repetition.
+
+If nothing survives verification, say so plainly; do not pad.
 
 ## Output Format
 
-Start by listing what you're reviewing. For each high-confidence issue provide:
+Start by listing what you're reviewing. Report only skeptic-confirmed
+survivors. For each provide:
 
-- Clear description and confidence score
+- Clear description
 - File path and line number
 - Specific CLAUDE.md rule or bug explanation
 - Concrete fix suggestion
+- The skeptic's score, one-line verdict, and steelman
 
-Group issues by severity (Critical: 90-100, Important: 80-89).
+Group issues by severity using the skeptic's score (Critical: 90-100,
+Important: 80-89).
 
-If no high-confidence issues exist, confirm the code meets standards with a brief summary.
+If nothing survived verification, confirm the code meets standards with a
+brief summary of what you checked.
 
 Be thorough but filter aggressively - quality over quantity. Focus on issues that truly matter.

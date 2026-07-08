@@ -1,7 +1,7 @@
 ---
 name: pr-test-analyzer
 description: Use this agent when you need to review a pull request for test coverage quality and completeness. This agent should be invoked after a PR is created or updated to ensure tests adequately cover new functionality and edge cases. Typical triggers include the user asking whether tests on a freshly-created PR are thorough, an updated PR adding new logic that needs coverage analysis, and a final pre-merge double-check before marking a PR ready. See "When to invoke" in the agent body for worked scenarios.
-model: inherit
+model: opus
 color: cyan
 ---
 
@@ -55,9 +55,31 @@ Three representative scenarios:
 - 3-4: Nice-to-have coverage for completeness
 - 1-2: Minor improvements that are optional
 
+**Verify before returning (independent skeptic):**
+
+You do not decide alone what to report. For each coverage gap or
+test-quality issue you would otherwise report, dispatch the `skeptic`
+agent (Agent tool, `subagent_type: "skeptic"`) to try to refute it —
+dispatch skeptics for multiple findings in parallel (one message,
+multiple Agent calls).
+
+Pass each skeptic:
+
+- the gap/issue: file:line, the claim (what's untested or brittle), the test you'd add or change
+- the diff range under review (base..head, or the changed files)
+- your reasoning, including why existing tests don't already cover it
+
+Keep only gaps the skeptic scores **≥ 80** — the skeptic will drop gaps
+already covered by existing or integration tests. For a criticality 9-10
+gap, dispatch **three** skeptics with distinct lenses — `correctness`,
+`reproduce`, `security` — and keep it only if **≥ 2** score ≥ 80.
+
+If nothing survives, say so plainly; do not pad.
+
 **Output Format:**
 
-Structure your analysis as:
+Report only gaps/issues that survived skeptic verification, each with its
+skeptic score, verdict, and steelman attached. Structure your analysis as:
 
 1. **Summary**: Brief overview of test coverage quality
 2. **Critical Gaps** (if any): Tests rated 8-10 that must be added

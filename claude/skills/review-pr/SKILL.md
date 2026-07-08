@@ -208,58 +208,59 @@ to its name. They live as personal agents at `~/.claude/agents/`
 and are not plugin-namespaced. Run each over the full set of changed
 files by default; only split an agent across file subsets for a PR
 too large for one pass, and then so the splits cover all of it, never
-to review only part. Score each issue by confidence (0-100); only
-carry forward findings ≥ 80. Confidence scores are for internal
-filtering — how to present them to the user is handled in the
-categorize step.
+to review only part.
+
+Each diagnostic agent verifies its own findings internally: it
+dispatches an independent `skeptic` sub-agent per candidate finding and
+returns only those the skeptic scores ≥ 80, with a verdict and steelman
+attached. So what comes back is already adversarially filtered — you do
+not re-run that filter (see 4b). (`code-simplifier` is exempt; it's
+polish, not findings.) Confidence is for internal filtering; how to
+present it is handled in the categorize step.
+
+Dispatch all chosen agents in one message so they run concurrently, then
+wait for their results. Do not poll, create tracking tasks, or schedule
+wakeups — background sub-agents notify you when they finish.
+
+Size the sweep to the diff: a tiny change may need only one or two
+agents, where the skeptic pass adds little; a large PR gets every
+applicable dimension, split across file subsets that together cover all
+of it. Agents run on Opus; drop to Sonnet only for mechanical drilling
+(code search, caller/callee tracing).
 
 Don't stop at the agents. They review the diff cold; you have the
 worktree, the surrounding code, and the reason for the change. Add
 your own findings from what they can't see — judge each change
 against the callers, callees, and control flow around it, not the
-hunk alone. Carry these into the challenge and categorize steps
+hunk alone. Carry these into the synthesis and categorize steps
 alongside the agent findings.
 
-#### 4b. Adversarial challenge
+#### 4b. Cross-cutting synthesis
 
-Curate the findings before the user sees them, here, not as pushback
-after the fact. Capable agents are mostly right, so the aim isn't to
-assume they're wrong — it's to drop what's context-blind, already
-known, or too low-value to put in front of a colleague. The filter
-matters most in colleague review, where the cost of noise is high; in
-self-review it can be lighter.
+The per-finding adversarial filter now happens inside the agents (4a):
+every finding you receive already survived an independent skeptic, with a
+verdict and steelman attached. Don't re-litigate that finding by finding.
+Your job here is the cross-cutting work no single agent could do — each
+saw only its own dimension over the diff, not the whole picture:
 
-For each finding from 4a:
+1. **Dedup and merge across dimensions.** The same underlying issue can
+   surface from several agents; merge them and keep all sources.
+2. **Check against existing PR comments.** Has a finding already been
+   raised by the author, another reviewer, or a bot? If so the bar to
+   surface it again rises sharply — only re-raise if you genuinely
+   disagree with how it was resolved, and frame it as engaging with the
+   prior discussion, not a fresh finding.
+3. **Verify your own findings.** Anything you added from the worktree
+   context (4a) did not go through a skeptic. Trace it against the
+   callers, callees, and surrounding code and confirm or drop it
+   yourself before carrying it forward.
+4. **Weigh for the mode.** In colleague review, drop anything you'd be
+   embarrassed to put in front of the author — a noisy review gets
+   dismissed wholesale. In self-review the bar is lower.
 
-1. **State it.** Location, claim, suggested change.
-2. **Steelman the existing code.** Why might it be deliberately
-   like this? Convention in the file or module? Decision recorded
-   in commit messages, ticket comments, or nearby tests? A
-   constraint the agent didn't see (perf, ordering, framework
-   gotcha, intentional duplication for clarity)?
-3. **Cross-check against the wider diff and surrounding code.**
-   The agent only saw what was passed in. Read the rest of the
-   change and any callers or callees that bear on the claim.
-   Look for evidence that contradicts the finding before evidence
-   that confirms it.
-4. **Check against existing PR comments.** Has this already been
-   raised by the author, another reviewer, or a bot? If yes, the
-   bar to surface it again rises sharply. Only re-raise if you
-   genuinely disagree with how it was resolved, and frame it as
-   engaging with the prior discussion, not as a fresh finding.
-5. **Re-score confidence.** Drop anything below 80. Merge findings
-   that overlap. Internal tracking labels (e.g. "A", "T4",
-   "B/2/3") and raw numeric scores are for your own bookkeeping —
-   do not carry them into user-facing output. For survivors,
-   record which agent surfaced it and your post-steelman
-   confidence, to be expressed in the categorize step below.
-
-In colleague review, lean toward dropping anything you'd be
-embarrassed to put in front of the author — a noisy review gets
-dismissed wholesale. But a finding you haven't actually investigated
-isn't noise yet: do the tracing to confirm or reject it before
-filtering on confidence. The failure mode here is both noise and a
-real issue dropped unexamined.
+Carry survivors — the agents' verified findings plus your own confirmed
+ones — into the categorize step, each with its source and the skeptic's
+steelman so confidence can be expressed there.
 
 #### 4c. Categorize and propose handling
 
@@ -311,6 +312,11 @@ with them per-item:
 
 Phrase it as "make this change?" / "open a follow-up?" / "look
 into this later?", not "draft a comment".
+
+After applying a batch of in-worktree fixes, offer (don't force) a
+targeted re-review: re-run the relevant dimension agent over just the
+changed hunks to confirm the fix holds and didn't introduce a new issue.
+Opt-in — skip it on trivial edits the user is confident in.
 
 **Colleague review.** For each finding the user wants to land:
 - Draft the comment in conversation. Show exact text and target
