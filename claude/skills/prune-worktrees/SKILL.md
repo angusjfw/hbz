@@ -249,7 +249,17 @@ protected list, and the REVIEW queue left for the user.
   one ticket is checked out on an unrelated branch. Always look up the
   PR by `branch --show-current`.
 - **Squash merges hide "merged".** Ancestry checks miss them; gate on
-  `gh pr list`.
+  `gh pr list`. (worktrunk's own `wt remove` uses ancestry to decide
+  branch deletion, so after a squash merge it removes the worktree but
+  keeps the local branch — harmless; clean up branches separately if
+  wanted.)
+- **Set reclaim expectations: `du` lies under CoW.** If the manager
+  clones gitignored deps with APFS copy-on-write (worktrunk does), each
+  worktree shares blocks with its main repo and `du` counts them at full
+  size. Removing a worktree frees only its *diverged* blocks — often
+  tens of MB against a multi-GB `du`. Pruning is worth it for hygiene,
+  not for disk: the honest reclaim is the `df` delta, and the real disk
+  hogs are usually caches, Docker images, and Trash, not the worktrees.
 - **`gh` has no `-C`.** `cd` into the worktree instead.
 - **No-remote repos.** A personal workspace root can be a local-only
   git repo; `gh` errors there. Exclude repos whose origin isn't GitHub.
