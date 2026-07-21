@@ -423,10 +423,28 @@ net.
    session.
 
    Do NOT include: multi-step plan, list of candidate scopes,
-   reproductions, prescribed commits, implicit time pressure, or
+   reproductions, prescribed commits, implicit time pressure,
    directive phrasings the worker will fixate on ("read-only, hand
-   back after", "ONLY do X"). Those are manager work disguised as a
-   brief; they bias the worker before they've read the room.
+   back after", "ONLY do X"), or assertions about how a system works
+   or what the setup/fix mechanism is ("you'll need to run the auth
+   flow", "it authenticates via OAuth", "the fix lives in module X").
+   Those are manager work disguised as a brief; they bias the worker
+   before they've read the room. A stated mechanism is stickier than a
+   directive — the worker reads it as established fact, not a claim to
+   test — and the manager can't have verified it, since that's worker
+   work. It's a guess dressed as context.
+
+   When the task points at a guide, doc, runbook or thread, the brief
+   points at it and lets it drive: give the link and the goal, and let
+   the worker read the guide for the how. Do not restate, summarize or
+   pre-empt what the guide says — least of all how a tool authenticates
+   or what the setup steps are. The manager hasn't read it (reading it
+   is worker work), so the guide is the authority and any mechanism the
+   brief states is just a guess that biases the worker against what the
+   guide actually says. If the user's own framing guesses at the
+   mechanism, pass it as an assumption to check, not a step to take
+   ("user thinks this may need an OAuth step — confirm against the
+   guide").
 
    If I have observations worth surfacing, list them to the user in
    chat *before* spawning. They can fold them into the brief, ignore,
