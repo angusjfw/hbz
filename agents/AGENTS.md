@@ -2,6 +2,7 @@
 - At the start of each session, read any AGENTS.md in the working directory and its parents. Those rules take precedence.
 - Prefer AGENTS.md for new rulebooks. Treat existing CLAUDE.md or equivalent vendor-named files as equivalent — read and respect them without renaming.
 - Verify before asserting. Never state file contents, system state, or other facts that change without checking first. Avoid recording ephemeral facts in durable places like commits, PR descriptions, or docs.
+- Fetch and pull the current branch before reading the code.
 - Stay in scope. Don't make changes beyond what was explicitly agreed. Ask questions, raise issues, discuss tradeoffs and get approval before acting.
 - Match ceremony to scope. Small edits don't need brainstorm skills, subagent dispatch, or plan docs. Even within a heavier workflow (e.g. superpowers), skip steps that aren't earning their keep.
 - Compose skills, don't inline them. Prefer an existing skill from the registry over re-deriving mechanics it already covers; name capabilities by intent rather than hardcoding another skill's path.
