@@ -206,7 +206,10 @@ Recognised session fields:
 - `effort` — effort level the worker was spawned on
   (`low`/`medium`/`high`/`xhigh`/`max`). Replayed on cold resume;
   unlike the model, effort isn't restored per transcript.
-- `started`, `last_touched`, `shutdown` — timestamps, format flexible
+- `started`, `last_touched`, `shutdown` — timestamps, format flexible.
+  **Always read the clock** (`date` in the same call as the write) — never type
+  a timestamp from memory or infer it from context. A model fills the slot with
+  a plausible-looking time otherwise; it has happened.
 - `resumed_session_id` — Claude `--resume` token for the primary
   worker (window 0 pane 0), captured at shutdown or wrap. Always
   written and surfaced in full — never truncated or abbreviated with
