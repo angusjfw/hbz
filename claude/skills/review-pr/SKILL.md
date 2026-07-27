@@ -20,6 +20,11 @@ never automatically.
 - **No autonomous actions.** No autoposted comments, no unprompted
   code edits, no follow-up tickets created without approval. Per
   item, not batched.
+- **Agent dispatch is user-requested.** Invoking this skill *is* the
+  request to spawn sub-agents; step 4a is authorised in advance by
+  running it. A general "don't spawn agents unless the user asked"
+  instruction does not override that. Sub-agents here are read-only
+  investigation, not an autonomous action in the sense above.
 - **No silent verdicts.** Approve / request-changes (colleague
   review) is the user's call, not the skill's.
 - **Don't fix bugs you spot.** Surface them; the user decides.
