@@ -17,6 +17,7 @@ differences handled with conditional sourcing in shared files.
 
 ##### 🍏 Mac
 `ghostty/` terminal config. `brew/` for packages.
+`hammerspoon/` — hotkeys + agent session HUD.
 
 ##### 🪟 WSL
 `WindowsTerminal/` settings, auto-detected Windows username.

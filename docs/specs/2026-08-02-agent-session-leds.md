@@ -13,7 +13,7 @@ client to that session. An on-screen twin renders the same state with labels.
 | working | blue | prompt submitted, agent busy (UserPromptSubmit) |
 | done | green | turn finished (Stop) |
 | needs input | yellow | permission request / waiting notification (Notification) |
-| error | red | session crashed or hook-reported failure (detection TBD — spike) |
+| error | red | tmux session died without a clean SessionEnd (renderer detects) |
 | off | unlit | slot unassigned |
 
 `done` is sticky until the session is focused or a new prompt starts, then
@@ -31,13 +31,13 @@ Single entry point, e.g. `agent-status`. Subcommands:
 - `event` — invoked by Claude Code hooks; reads hook JSON on stdin,
   maps hook event → state, writes the store. All hooks point here;
   they stay one-liners in `settings.json`.
-- `set <session> <state>` — manual/manager override.
-- `list` / `watch` — for renderers and debugging.
+- `set <session> <state>` — manual override.
+- `list` / `clear [<session>]` — inspection and cleanup.
 
 Store: `~/.local/state/agent-status/<session>.json` with
-`{state, slot, tmux_session, label, ts}`. File mtime is the change
-signal (fswatch/inotify). Shell or python, no exotic deps — must run
-on macOS, Linux, WSL.
+`{state, slot, tmux_session, label, session_id, ts}`; renderers
+re-read it on their poll cycle. Python stdlib only — must run on
+macOS, Linux, WSL.
 
 ### Slot mapping (claude-manager integration)
 
@@ -100,8 +100,8 @@ Repurpose layer 3 (numpad — unused) as the **agent layer**:
   freezes the whole board (see spike findings). Revisit via firmware
   raw HID if wanted.
 
-Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
-`keyboard/README.md` flow).
+Done in `keyboard/voyager/src` directly (Oryx can't import source);
+build and flash per `keyboard/README.md`.
 
 ## Repo layout
 
@@ -169,7 +169,7 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
 - **Errors** (item 6): hooks can't report a crashed process. Cheapest
   honest signal: renderer/manager watch marks a slot red when its
   tmux session or Claude process dies without a clean `SessionEnd`.
-  Deferred to the manager-integration milestone.
+  Implemented in the renderer (dead session → red).
 
 ## Plan
 
@@ -197,7 +197,12 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
    driven by the daemon through `hammerspoon://` URL events. The same
    transitions flash the slot LED ~1s from other layers (whole-board
    takeover, display-only, then restored).
-7. claude-manager slot assignment in the skill.
+7. ~~claude-manager slots~~ — spawn/cold-resume assign, shutdown/wrap
+   drop (SKILL.md + end FLOW.md). The CLI re-reads the registry slot
+   on every event since the manager's registry write lands after the
+   worker's first hooks. Keymapp is now self-serve too:
+   `make keymapp-api` flips the sqlite config, and the daemon launches
+   Keymapp itself when the socket is missing.
 8. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
    No manager coupling: the daemon and CLI are standalone; the manager
    only ever contributes `slot` fields via the registry.

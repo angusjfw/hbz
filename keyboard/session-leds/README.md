@@ -28,11 +28,15 @@ client to it (adapter pending). Spec and design decisions:
   keyboard disconnects.
 
 ##### 📋 Requirements
-- Keymapp ≥ 1.3.2 running with its API enabled (`api_enabled` in the
-  `config` table of Keymapp's sqlite, plus `startup_autoconnect`)
-- [kontroll](https://github.com/zsa/kontroll) on PATH
+- Keymapp ≥ 1.3.2 (Brewfile) with its API enabled — `make keymapp-api`
+  flips the config; the daemon launches Keymapp itself when needed
+- [kontroll](https://github.com/zsa/kontroll) on PATH (`make
+  session-leds` downloads it on macOS)
 - Hooks wired in Claude settings (`make ai`) and tools symlinked
   (`make session-leds`, included in `make common`)
+
+New machine: `make common keymapp-api session-leds-daemon hammerspoon`,
+flash the firmware, grant Hammerspoon Accessibility.
 
 ##### 🚀 Run
 `make session-leds-daemon` installs and starts the launchd agent
