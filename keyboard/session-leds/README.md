@@ -42,4 +42,13 @@ sessions; `set`/`clear` for manual control.
 
 Pressing a session key sends Hyper+letter; the Hammerspoon config
 (`hammerspoon/`, `make hammerspoon`) switches the most recently active
-tmux client to that slot's session and focuses the terminal.
+tmux client to that slot's session, focuses the terminal, and dismisses
+the agent layer (`kontroll set-layer 0`).
+
+##### 🖥️ Desktop
+While the agent layer is on, Hammerspoon shows a heads-up display of
+sessions with labels and states (driven by the daemon via
+`hammerspoon://agent-hud`). On a state change worth noticing (done,
+needs input, error) while on other layers, the daemon flashes the
+slot's LED for ~1s (whole-board takeover, display only — key mapping is
+unaffected) and Hammerspoon shows a matching toast bottom-right.

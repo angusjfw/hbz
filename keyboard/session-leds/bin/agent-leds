@@ -32,6 +32,10 @@ COLORS = {
 }
 OFF = "#000000"
 
+# states worth a main-layer LED flash + desktop toast when entered
+NOTIFY_STATES = {"done", "needs_input", "error"}
+FLASH_S = 1.2
+
 if sys.platform == "darwin":
     DEFAULT_SOCK = os.path.expanduser(
         "~/Library/Application Support/.keymapp/keymapp.sock")
@@ -64,10 +68,10 @@ def current_layer():
 
 
 def read_states():
-    """slot -> state, plus the set of tmux sessions marked done."""
-    slots, done_sessions = {}, {}
+    """slot -> state, slot -> label, plus tmux sessions marked done."""
+    slots, labels, done_sessions = {}, {}, {}
     if not os.path.isdir(STATE_DIR):
-        return slots, done_sessions
+        return slots, labels, done_sessions
     for name in os.listdir(STATE_DIR):
         if not name.endswith(".json"):
             continue
@@ -85,7 +89,8 @@ def read_states():
             if session and not tmux_session_alive(session):
                 state = "error"
             slots[slot] = state
-    return slots, done_sessions
+            labels[slot] = e.get("label") or session or f"slot {slot}"
+    return slots, labels, done_sessions
 
 
 _alive_cache = {}
@@ -157,15 +162,42 @@ def restore():
     kontroll("restore-rgb-leds")
 
 
+def notify_hs(event, **params):
+    """Fire-and-forget a hammerspoon:// URL event (macOS only)."""
+    if sys.platform != "darwin":
+        return
+    import urllib.parse
+    url = f"hammerspoon://{event}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    subprocess.Popen(["open", "-g", url],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def flash(changes, labels):
+    """Briefly paint changed slots on the otherwise-dark board, then
+    hand colours back. One takeover per state change; input mapping is
+    unaffected throughout."""
+    for slot, state in changes.items():
+        kontroll("set-rgb", "-l", str(BASE_LED + slot - 1),
+                 "-c", COLORS[state])
+        notify_hs("agent-toast", label=labels.get(slot, f"slot {slot}"),
+                  state=state)
+    time.sleep(FLASH_S)
+    restore()
+
+
 def main():
     painting = False
     last_painted = None
     last_connect_try = 0.0
     last_focus_check = 0.0
+    prev_slots = None  # None = first read, never flash on startup
 
     def bail(signum, frame):
         if painting:
             restore()
+        notify_hs("agent-hud", show="0")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, bail)
@@ -177,24 +209,37 @@ def main():
         if layer is None:
             if painting:
                 painting, last_painted = False, None
+                notify_hs("agent-hud", show="0")
             if time.time() - last_connect_try > 5:
                 last_connect_try = time.time()
                 kontroll("connect-any")
             time.sleep(1)
             continue
 
-        slots, done_sessions = read_states()
+        slots, labels, done_sessions = read_states()
         if time.time() - last_focus_check > FOCUS_CHECK_S:
             last_focus_check = time.time()
             demote_done_on_focus(done_sessions)
 
+        changes = {}
+        if prev_slots is not None:
+            changes = {s: st for s, st in slots.items()
+                       if st in NOTIFY_STATES and prev_slots.get(s) != st}
+        prev_slots = slots
+
         if layer == AGENT_LAYER:
+            if not painting:
+                notify_hs("agent-hud", show="1")
             if not painting or slots != last_painted:
                 paint(slots, last_painted if painting else None)
                 painting, last_painted = True, slots
-        elif painting:
-            restore()
-            painting, last_painted = False, None
+        else:
+            if painting:
+                restore()
+                painting, last_painted = False, None
+                notify_hs("agent-hud", show="0")
+            if changes:
+                flash(changes, labels)
 
         time.sleep(POLL_S)
 

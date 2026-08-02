@@ -190,13 +190,18 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
    daemon before flashing — its API connection blocks Keymapp's flash.
 5. ~~Hammerspoon adapter~~ — `hammerspoon/agent-sessions.lua`, verified
    with physical keys. Uses hs.task (hs.execute's login-shell wrapper
-   mangles quoting). Canvas twin pending.
-6. claude-manager slot assignment in the skill.
-7. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
+   mangles quoting). Self-dismisses the agent layer after a switch via
+   `kontroll set-layer -i 0`.
+6. ~~Canvas twin~~ — HUD grid (labels + states) while the agent layer
+   is on, plus bottom-right toasts on done/needs-input/error; both
+   driven by the daemon through `hammerspoon://` URL events. The same
+   transitions flash the slot LED ~1s from other layers (whole-board
+   takeover, display-only, then restored).
+7. claude-manager slot assignment in the skill.
+8. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
    No manager coupling: the daemon and CLI are standalone; the manager
    only ever contributes `slot` fields via the registry.
-8. Later: Linux/sway adapter; WSL; aggregate base-layer indicator;
-   canvas twin.
+9. Later: Linux/sway adapter; WSL; aggregate base-layer indicator.
 
 ## Non-goals (v1)
 
