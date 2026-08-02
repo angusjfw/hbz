@@ -41,11 +41,12 @@ on macOS, Linux, WSL.
 
 ### Slot mapping (claude-manager integration)
 
-New optional registry field `slot: <1..N>` on session entries.
-Manager assigns the lowest free slot on spawn, clears it on wrap/
-shutdown (pause keeps it). The status CLI reads slot + tmux_session
-from the registry; sessions without a slot get state tracking but no
-key. Unmanaged sessions: out of scope for v1.
+18 slots — the three right-hand letter rows, slot 1 = Y position
+(LED 26) through slot 18 (LED 43). New optional registry field
+`slot: <1..N>` on session entries: manager assigns the lowest free
+slot on spawn, clears it on wrap/shutdown (pause keeps it). The
+status CLI prefers the registry slot; sessions without one (including
+unmanaged) get the lowest free slot auto-assigned on first event.
 
 ### LED renderer (portable core)
 
@@ -65,7 +66,9 @@ host control. The daemon must also survive keyboard disconnects
 
 ### Input adapter (per-platform, thin)
 
-Agent-layer keys send F13+. Adapter maps F13+n → focus terminal +
+Agent-layer keys send Hyper+A…Hyper+R (Ctrl+Alt+Shift+GUI): F13–F24
+only covers 12 keys, Hyper combos scale to all 18 and dodge the Linux
+F13+ keysym quirk. Adapter maps Hyper+<letter> → slot → focus terminal +
 `tmux switch-client -t <tmux_session>` (target resolved from the store
 by slot). Per platform:
 
@@ -89,9 +92,10 @@ open for a cross-platform mini-app later.
 Repurpose layer 3 (numpad — unused) as the **agent layer**:
 
 - Keep `TG(3)` on the bottom-right key as the toggle.
-- Right-hand main block: session keys 1–N sending F13+.
-- LEDs on this layer default dark in the ledmap; the renderer paints
-  status colours.
+- Right-hand letter rows: session keys 1–18 sending Hyper+A…R
+  (row-major: Y position = slot 1 = Hyper+A).
+- Clear the layer's per-key LED colours — a dark layer means nothing
+  flashes in the poll gap before the renderer takes host control.
 - Always-visible base-layer indicators are out for v1: host control
   freezes the whole board (see spike findings). Revisit via firmware
   raw HID if wanted.
@@ -168,17 +172,22 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
 
 ## Plan
 
-1. Spike (above) — outcome recorded back into this spec.
-2. Status CLI + hook wiring; verify states change during real sessions.
-3. LED renderer painting slots from the store.
+1. ~~Spike~~ — findings above.
+2. ~~Status CLI + hook wiring~~ — `keyboard/session-leds/bin/agent-status`,
+   hooks in `claude/settings.json.example`. Verified live: hook events
+   were picked up without restarting running sessions, and a real
+   Notification painted its key yellow mid-test.
+3. ~~LED renderer~~ — `keyboard/session-leds/bin/agent-leds`.
+   Diff-paints concurrently; done→idle demotion on focus and
+   dead-session→error detection live here.
 4. Oryx layout change (agent layer), flash, end-to-end LED test.
-5. Hammerspoon adapter (F13+n switching) + canvas twin.
+5. Hammerspoon adapter (Hyper+letter switching) + canvas twin.
 6. claude-manager slot assignment in the skill.
-7. Later: Linux/sway adapter; WSL; aggregate base-layer indicator.
+7. Later: Linux/sway adapter; WSL; aggregate base-layer indicator;
+   daemon under launchd or manager supervision.
 
 ## Non-goals (v1)
 
-- Unmanaged (non-registry) session tracking
 - Command keys beyond switch-to-session (accept/reject/push-to-talk)
 - Standalone GUI app
 - WSL support

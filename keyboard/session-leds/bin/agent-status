@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Track Claude Code session status per tmux session.
+
+Fed by Claude Code hooks (`agent-status event` with hook JSON on stdin),
+read by renderers (keyboard LEDs, on-screen twin). State lives in
+~/.local/state/agent-status/<tmux-session>.json:
+
+    {"tmux_session", "state", "slot", "label", "session_id", "ts"}
+
+States: idle, working, done, needs_input, error.
+Slots come from the claude-manager registry when present, otherwise
+the lowest free slot is auto-assigned on first event.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+STATE_DIR = os.path.expanduser("~/.local/state/agent-status")
+REGISTRY = os.path.expanduser("~/.local/state/claude-manager/sessions.md")
+MAX_SLOTS = 18
+
+EVENT_STATES = {
+    "SessionStart": "idle",
+    "UserPromptSubmit": "working",
+    "Stop": "done",
+    "Notification": "needs_input",
+}
+
+STATES = ("idle", "working", "done", "needs_input", "error")
+
+
+def state_path(tmux_session):
+    return os.path.join(STATE_DIR, f"{tmux_session}.json")
+
+
+def read_all():
+    entries = {}
+    if not os.path.isdir(STATE_DIR):
+        return entries
+    for name in os.listdir(STATE_DIR):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(STATE_DIR, name)) as f:
+                e = json.load(f)
+            entries[e["tmux_session"]] = e
+        except (json.JSONDecodeError, KeyError, OSError):
+            continue
+    return entries
+
+
+def write(entry):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    entry["ts"] = int(time.time())
+    tmp = state_path(entry["tmux_session"]) + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(entry, f)
+    os.replace(tmp, state_path(entry["tmux_session"]))
+
+
+def current_tmux_session():
+    if "TMUX" not in os.environ:
+        return None
+    try:
+        out = subprocess.run(
+            ["tmux", "display-message", "-p", "#{session_name}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return out.stdout.strip() or None
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
+def registry_slot(tmux_session):
+    """slot field from the claude-manager registry entry, if any."""
+    try:
+        with open(REGISTRY) as f:
+            text = f.read()
+    except OSError:
+        return None
+    for section in re.split(r"^## ", text, flags=re.M)[1:]:
+        fields = dict(re.findall(r"^(\w+):\s*(.+)$", section, flags=re.M))
+        if fields.get("tmux_session") == tmux_session and "slot" in fields:
+            try:
+                return int(fields["slot"])
+            except ValueError:
+                return None
+    return None
+
+
+def assign_slot(tmux_session, entries):
+    slot = registry_slot(tmux_session)
+    if slot is not None:
+        return slot
+    taken = {e.get("slot") for e in entries.values()}
+    for n in range(1, MAX_SLOTS + 1):
+        if n not in taken:
+            return n
+    return None  # more sessions than slots: tracked, unlit
+
+
+def cmd_event():
+    try:
+        hook = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        return 0  # never break the hook chain
+    event = hook.get("hook_event_name", "")
+    tmux_session = current_tmux_session()
+    if tmux_session is None:
+        return 0  # not in tmux: nothing to track against
+
+    entries = read_all()
+    if event == "SessionEnd":
+        try:
+            os.remove(state_path(tmux_session))
+        except OSError:
+            pass
+        return 0
+    state = EVENT_STATES.get(event)
+    if state is None:
+        return 0
+
+    entry = entries.get(tmux_session) or {
+        "tmux_session": tmux_session,
+        "slot": assign_slot(tmux_session, entries),
+        "label": os.path.basename(hook.get("cwd", "") or "") or tmux_session,
+    }
+    entry["state"] = state
+    entry["session_id"] = hook.get("session_id", entry.get("session_id"))
+    write(entry)
+    return 0
+
+
+def cmd_set(tmux_session, state):
+    if state not in STATES:
+        print(f"unknown state {state!r}, want one of {', '.join(STATES)}",
+              file=sys.stderr)
+        return 1
+    entries = read_all()
+    entry = entries.get(tmux_session) or {
+        "tmux_session": tmux_session,
+        "slot": assign_slot(tmux_session, entries),
+        "label": tmux_session,
+    }
+    entry["state"] = state
+    write(entry)
+    return 0
+
+
+def cmd_list():
+    entries = sorted(read_all().values(), key=lambda e: e.get("slot") or 99)
+    for e in entries:
+        slot = e.get("slot")
+        print(f"{slot if slot else '-':>2}  {e['state']:<11} "
+              f"{e['tmux_session']}  ({e.get('label', '')})")
+    return 0
+
+
+def cmd_clear(tmux_session=None):
+    if tmux_session:
+        try:
+            os.remove(state_path(tmux_session))
+        except OSError:
+            pass
+    elif os.path.isdir(STATE_DIR):
+        for name in os.listdir(STATE_DIR):
+            if name.endswith(".json"):
+                os.remove(os.path.join(STATE_DIR, name))
+    return 0
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        print(__doc__.strip(), file=sys.stderr)
+        return 1
+    cmd, rest = args[0], args[1:]
+    if cmd == "event":
+        return cmd_event()
+    if cmd == "set" and len(rest) == 2:
+        return cmd_set(*rest)
+    if cmd == "list":
+        return cmd_list()
+    if cmd == "clear":
+        return cmd_clear(rest[0] if rest else None)
+    print(f"usage: agent-status event|set <session> <state>|list|clear [session]",
+          file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

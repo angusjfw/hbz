@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds help
 
 install: mac ## Default target: full macOS install
 
@@ -15,7 +15,7 @@ wsl: common ## WSL setup (common + Windows Terminal settings)
 	ln -sf ${DIR}/WindowsTerminal/settings.json \
 	  /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
 
-common: zsh vim nvim tmux ai worktrunk git vscode ## Cross-platform configs (shell, editor, tmux, ai, git)
+common: zsh vim nvim tmux ai worktrunk git vscode session-leds ## Cross-platform configs (shell, editor, tmux, ai, git)
 
 brew: ## Install Homebrew bundle (+ work overlay if present)
 	brew bundle --file=${DIR}/brew/Brewfile
@@ -57,6 +57,11 @@ z: ## Fetch the z.sh directory jumper
 
 git: ## Wire git/.gitconfig into the global include path
 	git config --global include.path ${DIR}/git/.gitconfig
+
+session-leds: ## Symlink agent session status tools into ~/.local/bin
+	mkdir -p ~/.local/bin
+	ln -sf ${DIR}/keyboard/session-leds/bin/agent-status ~/.local/bin/agent-status
+	ln -sf ${DIR}/keyboard/session-leds/bin/agent-leds ~/.local/bin/agent-leds
 
 vscode: ## Symlink VS Code settings (macOS or Linux path)
 ifeq ($(shell uname),Darwin)
