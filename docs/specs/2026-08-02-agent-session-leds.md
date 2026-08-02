@@ -54,11 +54,14 @@ Daemon that watches the store and paints keys via
 (v1.3.2+, API enabled; Unix socket on macOS/Linux, TCP port on
 Windows). `set-rgb <led-index>` per slot, `restore-rgb-leds` on exit.
 
-Known constraint: host RGB control takes over the whole board and the
-firmware's per-layer colours yield (`rawhid_state.rgb_control`). The
-renderer therefore either (a) paints only while the agent layer is
-active, or (b) repaints the active layer's ledmap colours itself plus
-the status keys. Spike decides.
+Host RGB control is all-or-nothing: while active the firmware paints
+nothing (`rawhid_state.rgb_control`) — no layer colours, frozen board.
+The renderer therefore only owns the board while the agent layer is
+active: it polls `GetStatus` (~100ms, 15ms round-trip) for
+`current_layer`, paints status keys when layer 3 engages, and
+`restore-rgb-leds` the moment it leaves. Normal typing is never under
+host control. The daemon must also survive keyboard disconnects
+(boards re-enumerate; reconnect via `GetKeyboards`/`ConnectAny`).
 
 ### Input adapter (per-platform, thin)
 
@@ -89,9 +92,9 @@ Repurpose layer 3 (numpad — unused) as the **agent layer**:
 - Right-hand main block: session keys 1–N sending F13+.
 - LEDs on this layer default dark in the ledmap; the renderer paints
   status colours.
-- Maybe later: one always-visible aggregate indicator on the base
-  layer (e.g. yellow if any session needs input) — depends on spike
-  finding (b) viable.
+- Always-visible base-layer indicators are out for v1: host control
+  freezes the whole board (see spike findings). Revisit via firmware
+  raw HID if wanted.
 
 Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
 `keyboard/README.md` flow).
@@ -132,9 +135,23 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
   the cask install isn't — every call needs
   `-p "$HOME/Library/Application Support/.keymapp/keymapp.sock"`.
   The renderer should wrap this.
-- **API**: handshake works (Keymapp 1.3.7 / Kontroll 1.0.4).
-  LED paint semantics and index map (items 1–2) still open — need the
-  Voyager plugged in.
+- **Paint semantics** (item 1): `set-rgb` engages host control for
+  the whole board — unpainted LEDs go dark and firmware layer colours
+  freeze entirely until `restore-rgb-leds`. ~6ms per LED, restore is
+  instant and clean. `--sustain <ms>` auto-reverts a paint. So: no
+  passive overlay on the base layer; the renderer owns the board only
+  while the agent layer is toggled. An always-visible base-layer
+  aggregate indicator is out for v1 (would need firmware raw HID).
+- **LED index map** (item 2): authoritative from `rgb_matrix.layout`
+  in ZSA's QMK fork (`keyboards/zsa/voyager/keyboard.json`), verified
+  on hardware. Row-major, left half 0–25 (thumbs 24–25), right half
+  26–51 (thumbs 50–51). Right top row Y..\\ = 26–31.
+- **Layer tracking**: `GetStatus.current_layer` reports MO holds and
+  TG toggles reliably (100ms poll caught 1s holds; round-trip 15ms).
+  The automouse layer (4) does not show up via the API — fine, only
+  layer 3 matters. Connections drop when the board re-enumerates;
+  the daemon needs a reconnect loop (`startup_autoconnect` only
+  applies at Keymapp launch).
 - **F13–F24** (item 3): assignable in Oryx. Linux caveat: some map to
   `XF86*`/`NoSymbol` keysyms by default; fix is the
   `fkeys:basic_13-24` XKB option
