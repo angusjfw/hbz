@@ -185,10 +185,12 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
    Oryx can't import source, so the repo keymap is now the source of
    truth and `make firmware` builds it against ZSA's QMK fork. The
    navigator/scroll keycodes moved to the `zsa/navigator_trackball`
-   module. Flash of both boards pending.
-5. Hammerspoon adapter (Hyper+letter switching) — written
-   (`hammerspoon/agent-sessions.lua`), test after flashing. Canvas
-   twin pending.
+   module. Home board flashed and verified end-to-end (LEDs + physical
+   key switching); work board pending. Gotcha: stop the agent-leds
+   daemon before flashing — its API connection blocks Keymapp's flash.
+5. ~~Hammerspoon adapter~~ — `hammerspoon/agent-sessions.lua`, verified
+   with physical keys. Uses hs.task (hs.execute's login-shell wrapper
+   mangles quoting). Canvas twin pending.
 6. claude-manager slot assignment in the skill.
 7. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
    No manager coupling: the daemon and CLI are standalone; the manager

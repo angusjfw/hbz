@@ -47,4 +47,7 @@ Build: `make firmware` (needs `brew install qmk/qmk/qmk` after trusting
 the qmk/qmk, osx-cross/arm and osx-cross/avr taps, plus
 [ZSA's QMK fork](https://github.com/zsa/qmk_firmware) cloned at
 `~/dev/zsa-qmk` — override with `QMK_FORK=`). Flash the built bin from
-`voyager/firmware/` with Keymapp.
+`voyager/firmware/` with Keymapp — stop the agent-leds daemon first
+(`launchctl bootout gui/$(id -u)/io.hbz.agent-leds`), its API
+connection blocks Keymapp's flash flow; restart with
+`make session-leds-daemon` after.
