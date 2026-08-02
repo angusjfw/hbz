@@ -32,6 +32,11 @@ Custom keycodes: `DRAG_SCROLL` (hold to scroll), `TOGGLE_SCROLL`,
 - Oryx module enabled (`ORYX_ENABLE`) — live training and host RGB control work.
 - Most RGB matrix animations compiled out; static per-layer colours only.
 
+##### 🔮 Future
+- Automouse ↔ manual mouse layer handover works but is messy; revisit.
+- Numpad layer is unused — planned to become the agent sessions layer
+  (see `docs/specs/2026-08-02-agent-session-leds.md`).
+
 ##### 🔄 Updating
 Source of truth is the Oryx layout. After editing there:
 download the source zip and firmware, replace `voyager/src/` and
