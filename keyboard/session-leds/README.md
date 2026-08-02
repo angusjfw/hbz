@@ -13,7 +13,10 @@ client to it (adapter pending). Spec and design decisions:
 | working | blue | UserPromptSubmit |
 | done | green | Stop (sticky until focused) |
 | needs input | yellow | Notification |
-| error | red | tmux session died without SessionEnd |
+| error | red | Claude process gone but its tmux session lives on |
+
+State for a tmux session that no longer exists is dropped silently
+(killing a scratch session isn't an error).
 
 ##### 🧩 Pieces
 - `bin/agent-status` — state store CLI. Claude Code hooks pipe every

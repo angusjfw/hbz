@@ -13,7 +13,7 @@ client to that session. An on-screen twin renders the same state with labels.
 | working | blue | prompt submitted, agent busy (UserPromptSubmit) |
 | done | green | turn finished (Stop) |
 | needs input | yellow | permission request / waiting notification (Notification) |
-| error | red | tmux session died without a clean SessionEnd (renderer detects) |
+| error | red | Claude process vanished from a live tmux session (pane command check) |
 | off | unlit | slot unassigned |
 
 `done` is sticky until the session is focused or a new prompt starts, then
@@ -169,7 +169,13 @@ build and flash per `keyboard/README.md`.
 - **Errors** (item 6): hooks can't report a crashed process. Cheapest
   honest signal: renderer/manager watch marks a slot red when its
   tmux session or Claude process dies without a clean `SessionEnd`.
-  Implemented in the renderer (dead session → red).
+  Implemented in the renderer: a gone tmux session is GC'd silently
+  (killing a scratch session isn't a crash); a live session whose
+  Claude pane vanished goes red. Claude panes are recognised by
+  `pane_current_command` — the CLI reports its version string (e.g.
+  `2.1.220`), with claude/node accepted as fallbacks. Host-side
+  features (toasts, GC, done-demotion) run even with the keyboard
+  disconnected; only LED work needs the connection.
 
 ## Plan
 

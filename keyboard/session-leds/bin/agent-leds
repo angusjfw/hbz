@@ -11,6 +11,7 @@ Requires Keymapp running with its API enabled, and kontroll on PATH.
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -82,31 +83,52 @@ def read_states():
             continue
         slot, state = e.get("slot"), e.get("state")
         session = e.get("tmux_session")
+        health = session_health(session) if session else "ok"
+        if health == "gone":
+            # tmux session no longer exists: not a crash, just cleanup
+            try:
+                os.remove(os.path.join(STATE_DIR, name))
+            except OSError:
+                pass
+            continue
         if state == "done" and session:
             done_sessions[session] = e
         if slot and 1 <= slot <= MAX_SLOTS and state in COLORS:
-            # dead tmux session without clean SessionEnd -> error
-            if session and not tmux_session_alive(session):
+            # tmux alive but no Claude process left -> it died uncleanly
+            if health == "no_claude":
                 state = "error"
             slots[slot] = state
             labels[slot] = e.get("label") or session or f"slot {slot}"
     return slots, labels, done_sessions
 
 
-_alive_cache = {}
+_health_cache = {}
+
+# Claude Code panes report the CLI's version string (e.g. "2.1.220")
+# as pane_current_command; accept claude/node as fallbacks
+_CLAUDE_CMD = re.compile(r"^(\d+\.\d+\.\d+|claude|node)$")
 
 
-def tmux_session_alive(session):
+def session_health(session):
+    """'gone' (no tmux session), 'ok' (has a Claude pane), or
+    'no_claude' (session alive, Claude process vanished)."""
     now = time.time()
-    cached = _alive_cache.get(session)
+    cached = _health_cache.get(session)
     if cached and now - cached[1] < 5:
         return cached[0]
-    alive = subprocess.run(
-        ["tmux", "has-session", "-t", f"={session}"],
-        capture_output=True,
-    ).returncode == 0
-    _alive_cache[session] = (alive, now)
-    return alive
+    out = subprocess.run(
+        ["tmux", "list-panes", "-s", "-t", f"={session}",
+         "-F", "#{pane_current_command}"],
+        capture_output=True, text=True,
+    )
+    if out.returncode != 0:
+        health = "gone"
+    elif any(_CLAUDE_CMD.match(c) for c in out.stdout.split()):
+        health = "ok"
+    else:
+        health = "no_claude"
+    _health_cache[session] = (health, now)
+    return health
 
 
 def demote_done_on_focus(done_sessions):
@@ -174,15 +196,13 @@ def notify_hs(event, **params):
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def flash(changes, labels):
+def flash(changes):
     """Briefly paint changed slots on the otherwise-dark board, then
     hand colours back. One takeover per state change; input mapping is
     unaffected throughout."""
     for slot, state in changes.items():
         kontroll("set-rgb", "-l", str(BASE_LED + slot - 1),
                  "-c", COLORS[state])
-        notify_hs("agent-toast", label=labels.get(slot, f"slot {slot}"),
-                  state=state)
     time.sleep(FLASH_S)
     restore()
 
@@ -206,6 +226,8 @@ def main():
     while True:
         layer = current_layer()
 
+        # keyboard gone: keep host-side features running, try to get
+        # the connection back in the background
         if layer is None:
             if painting:
                 painting, last_painted = False, None
@@ -218,8 +240,6 @@ def main():
                                      stderr=subprocess.DEVNULL)
                 else:
                     kontroll("connect-any")
-            time.sleep(1)
-            continue
 
         slots, labels, done_sessions = read_states()
         if time.time() - last_focus_check > FOCUS_CHECK_S:
@@ -243,10 +263,14 @@ def main():
                 restore()
                 painting, last_painted = False, None
                 notify_hs("agent-hud", show="0")
-            if changes:
-                flash(changes, labels)
+            for slot, state in changes.items():
+                notify_hs("agent-toast",
+                          label=labels.get(slot, f"slot {slot}"),
+                          state=state)
+            if changes and layer is not None:
+                flash(changes)
 
-        time.sleep(POLL_S)
+        time.sleep(POLL_S if layer is not None else 1)
 
 
 if __name__ == "__main__":
