@@ -25,5 +25,8 @@ differences handled with conditional sourcing in shared files.
 `sway/`, `konsole/`, `mako/`, `wallpapers/`.
 `arch/` — install notes. `pacman/` for package lists.
 
+##### ⌨️ Keyboard
+`keyboard/` — ZSA Voyager layout (QMK source + firmware from Oryx).
+
 ##### 🌸 Themes
 Acme-inspired light colour scheme. See `theme/palette`.
