@@ -4,8 +4,9 @@ Split ergonomic keyboard, per-key RGB, with the Navigator trackball attachment.
 Layout "voyup", maintained in [Oryx](https://configure.zsa.io/voyager/layouts/PYnPm/latest/0).
 
 ##### 📁 Contents
-- `voyager/src/` — QMK source exported from Oryx (`keymap.c`, `config.h`, `rules.mk`, `keymap.json`)
+- `voyager/src/` — QMK source (Oryx export + local agent-layer changes)
 - `voyager/firmware/` — compiled firmware, flash with [Keymapp](https://www.zsa.io/flash)
+- `session-leds/` — Claude session status on the agent layer (own README)
 
 ##### 🗺️ Layers
 | # | Access | Purpose |
@@ -13,7 +14,7 @@ Layout "voyup", maintained in [Oryx](https://configure.zsa.io/voyager/layouts/PY
 | 0 | base | QWERTY. Ctrl/Shift on left pinky column, Esc·GUI·Alt inner bottom row, Del·Bspc and arrows bottom right. Green home markers. |
 | 1 | hold either inner thumb key | Number row, shifted symbols, brackets/braces. |
 | 2 | hold bottom-left key | F1–F12, volume, vim-style arrows on right home row, Caps Lock (red indicator while active). |
-| 3 | toggle bottom-right key | Numpad, media transport, RGB controls. |
+| 3 | toggle bottom-right key | Agent sessions: status LEDs + Hyper+A…R switch keys on the right rows (see `session-leds/`); RGB/volume/media on the left. |
 | 4 | automatic on trackball motion | Mouse buttons, drag scroll, CPI up/down, layer lock. |
 | 5 | hold second bottom-left key | Manual copy of the mouse layer. |
 
@@ -34,13 +35,16 @@ Custom keycodes: `DRAG_SCROLL` (hold to scroll), `TOGGLE_SCROLL`,
 
 ##### 🔮 Future
 - Automouse ↔ manual mouse layer handover works but is messy; revisit.
-- Numpad layer is unused — planned to become the agent sessions layer
-  (see `docs/specs/2026-08-02-agent-session-leds.md`).
 
 ##### 🔄 Updating
-Source of truth is the Oryx layout. After editing there:
-download the source zip and firmware, replace `voyager/src/` and
-`voyager/firmware/`, flash with Keymapp, commit.
+Source of truth is `voyager/src/` in this repo — the agent layer (3) was
+added locally and no longer matches the [Oryx layout](https://configure.zsa.io/voyager/layouts/PYnPm/latest/0),
+which Oryx can't import back. For big layout edits: edit in Oryx,
+re-export, re-apply the local delta (or adopt
+[ZSA's Oryx+custom-QMK flow](https://blog.zsa.io/oryx-custom-qmk-features/)).
 
-To build locally instead, use [ZSA's QMK fork](https://github.com/zsa/qmk_firmware):
-copy `voyager/src/` into `keyboards/zsa/voyager/keymaps/<name>/` and `qmk compile`.
+Build: `make firmware` (needs `brew install qmk/qmk/qmk` after trusting
+the qmk/qmk, osx-cross/arm and osx-cross/avr taps, plus
+[ZSA's QMK fork](https://github.com/zsa/qmk_firmware) cloned at
+`~/dev/zsa-qmk` — override with `QMK_FORK=`). Flash the built bin from
+`voyager/firmware/` with Keymapp.

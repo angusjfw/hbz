@@ -5,14 +5,10 @@
 #define ZSA_SAFE_RANGE SAFE_RANGE
 #endif
 
+// DRAG_SCROLL, TOGGLE_SCROLL and the NAVIGATOR_* keycodes come from the
+// zsa/navigator_trackball module (see keymap.json).
 enum custom_keycodes {
   RGB_SLD = ZSA_SAFE_RANGE,
-  DRAG_SCROLL,
-  TOGGLE_SCROLL,
-  NAVIGATOR_INC_CPI,
-  NAVIGATOR_DEC_CPI,
-  NAVIGATOR_TURBO,
-  NAVIGATOR_AIM
 };
 
 
@@ -40,11 +36,14 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
+  // Agent layer: session status LEDs + Hyper+A..R switch keys, painted
+  // by the agent-leds daemon while toggled (see keyboard/session-leds/).
+  // Kept dark in the ledmap so nothing shows before host control engages.
   [3] = LAYOUT_voyager(
-    RGB_TOG,        LED_LEVEL,      RGB_VAD,        RGB_VAI,        KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_KP_7,        KC_KP_8,        KC_KP_9,        KC_KP_PLUS,     KC_KP_MINUS,    
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,KC_AUDIO_VOL_UP,KC_AUDIO_MUTE,  KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_KP_4,        KC_KP_5,        KC_KP_6,        KC_KP_ASTERISK, KC_KP_SLASH,    
-    KC_TRANSPARENT, KC_MEDIA_PREV_TRACK,KC_MEDIA_NEXT_TRACK,KC_MEDIA_STOP,  KC_MEDIA_PLAY_PAUSE,KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_KP_1,        KC_KP_2,        KC_KP_3,        KC_ENTER,       KC_KP_EQUAL,    
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_KP_0,        KC_KP_COMMA,    KC_KP_DOT,      KC_TRANSPARENT, KC_TRANSPARENT, 
+    RGB_TOG,        LED_LEVEL,      RGB_VAD,        RGB_VAI,        KC_TRANSPARENT, KC_TRANSPARENT,                                 HYPR(KC_A),     HYPR(KC_B),     HYPR(KC_C),     HYPR(KC_D),     HYPR(KC_E),     HYPR(KC_F),
+    KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,KC_AUDIO_VOL_UP,KC_AUDIO_MUTE,  KC_TRANSPARENT,                                 HYPR(KC_G),     HYPR(KC_H),     HYPR(KC_I),     HYPR(KC_J),     HYPR(KC_K),     HYPR(KC_L),
+    KC_TRANSPARENT, KC_MEDIA_PREV_TRACK,KC_MEDIA_NEXT_TRACK,KC_MEDIA_STOP,  KC_MEDIA_PLAY_PAUSE,KC_TRANSPARENT,                                 HYPR(KC_M),     HYPR(KC_N),     HYPR(KC_O),     HYPR(KC_P),     HYPR(KC_Q),     HYPR(KC_R),
+    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
   [4] = LAYOUT_voyager(
@@ -92,7 +91,7 @@ const uint8_t PROGMEM ledmap[][RGB_MATRIX_LED_COUNT][3] = {
 
     [2] = { {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {18,219,214}, {0,0,0}, {113,114,225}, {38,255,255}, {6,178,100}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {221,228,214}, {221,228,214}, {221,228,214}, {221,228,214}, {0,0,0}, {139,219,215}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
 
-    [3] = { {0,0,254}, {0,0,169}, {43,76,93}, {42,255,255}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {113,114,225}, {38,255,255}, {6,178,100}, {0,0,0}, {0,0,0}, {139,219,215}, {139,219,215}, {0,218,205}, {79,255,255}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {139,209,248}, {139,209,248}, {139,209,248}, {0,255,255}, {102,255,255}, {0,0,0}, {139,209,248}, {139,209,248}, {139,209,248}, {207,255,255}, {40,255,255}, {0,0,0}, {139,209,248}, {139,209,248}, {139,209,248}, {169,255,255}, {0,0,255}, {0,0,0}, {139,209,248}, {0,0,84}, {0,0,236}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
+    [3] = { {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
 
     [4] = { {125,84,200}, {34,218,247}, {0,0,0}, {0,255,255}, {0,255,255}, {14,255,255}, {0,0,0}, {0,0,0}, {0,0,0}, {0,255,255}, {0,255,255}, {30,255,255}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {221,228,214}, {221,228,214}, {221,228,214}, {221,228,214}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
 
@@ -158,13 +157,6 @@ bool rgb_matrix_indicators_user(void) {
   return true;
 }
 
-extern bool set_scrolling;
-extern bool navigator_turbo;
-extern bool navigator_aim;
-
-
-
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   switch (keycode) {
   case QK_MODS ... QK_MODS_MAX:
@@ -184,43 +176,6 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
     break;
 
-    case DRAG_SCROLL:
-      if (record->event.pressed) {
-        set_scrolling = true;
-      } else {
-        set_scrolling = false;
-      }
-      return false;
-    case TOGGLE_SCROLL:
-      if (record->event.pressed) {
-        set_scrolling = !set_scrolling;
-      }
-      return false;
-    break;
-  case NAVIGATOR_TURBO:
-    if (record->event.pressed) {
-      navigator_turbo = true;
-    } else {
-      navigator_turbo = false;
-    }
-    return false;
-  case NAVIGATOR_AIM:
-    if (record->event.pressed) {
-      navigator_aim = true;
-    } else {
-      navigator_aim = false;
-    }
-    return false;
-  case NAVIGATOR_INC_CPI:
-    if (record->event.pressed) {
-        pointing_device_set_cpi(1);
-    }
-    return false;
-  case NAVIGATOR_DEC_CPI:
-    if (record->event.pressed) {
-        pointing_device_set_cpi(0);
-    }
-    return false;
     case RGB_SLD:
       if (record->event.pressed) {
         rgblight_mode(1);
