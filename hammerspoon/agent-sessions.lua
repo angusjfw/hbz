@@ -30,12 +30,14 @@ local function switchTo(slot)
     hs.alert.show("no session on key " .. LETTERS:sub(slot, slot):upper())
     return
   end
-  -- target the most recently active tmux client
-  local cmd = string.format(
-    [[client=$(tmux list-clients -F '#{client_activity} #{client_tty}' | sort -rn | head -1 | cut -d' ' -f2); ]] ..
-    [[[ -n "$client" ] && tmux switch-client -c "$client" -t %q]],
-    session)
-  hs.execute(cmd, true)
+  -- switch the most recently active tmux client; hs.task avoids the
+  -- quote-mangling of hs.execute's login-shell wrapper
+  local script = string.format([[
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+client=$(tmux list-clients -F '#{client_activity} #{client_tty}' | sort -rn | head -1 | cut -d' ' -f2)
+[ -n "$client" ] && tmux switch-client -c "$client" -t %q
+]], session)
+  hs.task.new("/bin/sh", nil, { "-c", script }):start()
   hs.application.launchOrFocus(TERMINAL_APP)
 end
 
