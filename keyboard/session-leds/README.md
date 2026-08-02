@@ -35,5 +35,11 @@ client to it (adapter pending). Spec and design decisions:
   (`make session-leds`, included in `make common`)
 
 ##### 🚀 Run
-`agent-leds` in the foreground (tmux pane) or background. `agent-status
-list` shows tracked sessions; `set`/`clear` for manual control.
+`make session-leds-daemon` installs and starts the launchd agent
+(macOS; logs to `~/.local/state/agent-status/agent-leds.log`), or run
+`agent-leds` directly in a pane. `agent-status list` shows tracked
+sessions; `set`/`clear` for manual control.
+
+Pressing a session key sends Hyper+letter; the Hammerspoon config
+(`hammerspoon/`, `make hammerspoon`) switches the most recently active
+tmux client to that slot's session and focuses the terminal.

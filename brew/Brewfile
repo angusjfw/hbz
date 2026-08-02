@@ -20,6 +20,8 @@ brew "worktrunk"
 brew "raine/git-surgeon/git-surgeon"
 
 cask "ghostty"
+cask "hammerspoon"
+cask "keymapp"
 cask "ungoogled-chromium"
 cask "1password-cli"
 cask "claude"

@@ -105,12 +105,13 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
 
 ## Repo layout
 
-- `keyboard/session-leds/` — renderer daemon, input adapter config,
-  twin, status CLI
+- `keyboard/session-leds/` — status CLI, renderer daemon, launchd plist
+- `hammerspoon/` — macOS adapter (symlinked as `~/.hammerspoon`)
 - `claude/settings.json.example` — hook wiring (all events →
   `agent-status event`)
 - `claude/skills/claude-manager/SKILL.md` — slot field + assign/clear
-  steps
+  steps (optional: everything works without the manager, slots are
+  just auto-assigned instead of stable)
 
 ## Spike (before building)
 
@@ -180,11 +181,20 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
 3. ~~LED renderer~~ — `keyboard/session-leds/bin/agent-leds`.
    Diff-paints concurrently; done→idle demotion on focus and
    dead-session→error detection live here.
-4. Oryx layout change (agent layer), flash, end-to-end LED test.
-5. Hammerspoon adapter (Hyper+letter switching) + canvas twin.
+4. ~~Agent layer~~ — done in source (`keyboard/voyager/src`), not Oryx:
+   Oryx can't import source, so the repo keymap is now the source of
+   truth and `make firmware` builds it against ZSA's QMK fork. The
+   navigator/scroll keycodes moved to the `zsa/navigator_trackball`
+   module. Flash of both boards pending.
+5. Hammerspoon adapter (Hyper+letter switching) — written
+   (`hammerspoon/agent-sessions.lua`), test after flashing. Canvas
+   twin pending.
 6. claude-manager slot assignment in the skill.
-7. Later: Linux/sway adapter; WSL; aggregate base-layer indicator;
-   daemon under launchd or manager supervision.
+7. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
+   No manager coupling: the daemon and CLI are standalone; the manager
+   only ever contributes `slot` fields via the registry.
+8. Later: Linux/sway adapter; WSL; aggregate base-layer indicator;
+   canvas twin.
 
 ## Non-goals (v1)
 
