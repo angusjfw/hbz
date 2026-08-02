@@ -118,6 +118,37 @@ Edit in Oryx, re-export to `keyboard/voyager/`, flash (per
 6. Error-state detection options (manager watch on pane death vs
    hooks).
 
+### Findings
+
+- **Setup**: Keymapp installs via `brew install --cask keymapp`
+  (1.3.7). The API toggle lives in the `config` table of
+  `~/Library/Application Support/.keymapp/keymapp.sqlite3`
+  (`api_enabled`, `startup_autoconnect`) — flip with sqlite3 while
+  Keymapp is stopped, no GUI needed. Socket appears at
+  `~/Library/Application Support/.keymapp/keymapp.sock`.
+- **kontroll**: no brew package; universal macOS binary from GitHub
+  releases → `~/.local/bin`. Its default socket path assumes a
+  sandboxed Keymapp (`~/Library/Containers/io.zsa.keymapp/…`), which
+  the cask install isn't — every call needs
+  `-p "$HOME/Library/Application Support/.keymapp/keymapp.sock"`.
+  The renderer should wrap this.
+- **API**: handshake works (Keymapp 1.3.7 / Kontroll 1.0.4).
+  LED paint semantics and index map (items 1–2) still open — need the
+  Voyager plugged in.
+- **F13–F24** (item 3): assignable in Oryx. Linux caveat: some map to
+  `XF86*`/`NoSymbol` keysyms by default; fix is the
+  `fkeys:basic_13-24` XKB option
+  (https://schnouki.net/post/2024/tip-f13-f24-keys-with-zsa-keyboards-on-linux/).
+  macOS sees them as plain F-keys, bindable in Hammerspoon.
+- **tmux** (item 5): `switch-client` works from outside tmux but the
+  client must be explicit: `switch-client -c <client_tty> -t <session>`.
+  With several clients the adapter should pick the most recently
+  active (`list-clients -F '#{client_tty} #{client_activity}'`).
+- **Errors** (item 6): hooks can't report a crashed process. Cheapest
+  honest signal: renderer/manager watch marks a slot red when its
+  tmux session or Claude process dies without a clean `SessionEnd`.
+  Deferred to the manager-integration milestone.
+
 ## Plan
 
 1. Spike (above) — outcome recorded back into this spec.
