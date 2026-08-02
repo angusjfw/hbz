@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon hammerspoon help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon keymapp-api hammerspoon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -68,6 +68,14 @@ session-leds: ## Symlink agent session status tools into ~/.local/bin (+ kontrol
 	  install -m 755 /tmp/kontroll ~/.local/bin/kontroll && \
 	  xattr -d com.apple.quarantine ~/.local/bin/kontroll 2>/dev/null; \
 	  rm -f /tmp/kontroll.zip /tmp/kontroll; fi
+
+keymapp-api: ## Enable Keymapp's API + autoconnect in its config (macOS; restarts Keymapp)
+	@pkill -f Keymapp.app 2>/dev/null && sleep 1 || true
+	@if [ ! -f "$$HOME/Library/Application Support/.keymapp/keymapp.sqlite3" ]; then \
+	  open -a Keymapp && sleep 4 && pkill -f Keymapp.app && sleep 1; fi
+	sqlite3 "$$HOME/Library/Application Support/.keymapp/keymapp.sqlite3" \
+	  "update config set value='1' where key in ('api_enabled','startup_autoconnect')"
+	open -ga Keymapp
 
 session-leds-daemon: session-leds ## Install + start launchd agent for agent-leds (macOS)
 	sed "s|__HOME__|$$HOME|g" ${DIR}/keyboard/session-leds/launchd/io.hbz.agent-leds.plist \

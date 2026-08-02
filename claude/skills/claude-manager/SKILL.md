@@ -206,6 +206,11 @@ Recognised session fields:
 - `effort` — effort level the worker was spawned on
   (`low`/`medium`/`high`/`xhigh`/`max`). Replayed on cold resume;
   unlike the model, effort isn't restored per transcript.
+- `slot` — session-LEDs key slot (1–18, see `keyboard/session-leds/`
+  in the dotfiles repo). Assigned at spawn and on cold resume: lowest
+  number free across registry `slot` fields and `agent-status list`.
+  Dropped at shutdown and wrap so the key frees up; pause keeps it.
+  Optional — without it the status CLI auto-assigns.
 - `started`, `last_touched`, `shutdown` — timestamps, format flexible.
   **Always read the clock** (`date` in the same call as the write) — never type
   a timestamp from memory or infer it from context. A model fills the slot with
@@ -508,8 +513,10 @@ net.
    Every marker is TUI-specific — capture the pane first and match what
    the current version renders; don't hardcode a string.
 8. Add the session to the registry with `tmux_session: $session_id`,
-   plus `model:` and `effort:` from step 6. Add to the visible task
-   list (`[active]` prefix).
+   plus `model:` and `effort:` from step 6, and `slot:` — the lowest
+   number 1–18 free across existing registry `slot` fields and
+   `agent-status list` (skip the field if `agent-status` isn't
+   installed). Add to the visible task list (`[active]` prefix).
 9. Tell the user how to switch to it (see Switch UX), stating the chosen
    model and effort with a one-line reason. The user can override; ask
    up front only for a genuinely ambiguous or blank spawn.
@@ -946,8 +953,9 @@ absolute paths and `--` separators.
    tmux send-keys -t "${session_id}:0.0" "claude --resume <id>" Enter
    ```
 
-4. Register the entry with `tmux_session`, `started`, `last_touched`;
-   add the task list entry with `[active]` prefix.
+4. Register the entry with `tmux_session`, `started`, `last_touched`,
+   and a fresh `slot` (same rule as spawning step 8); add the task
+   list entry with `[active]` prefix.
 
 ### Reopen a wrap_requested entry
 
@@ -965,7 +973,8 @@ case: the registry entry already holds `resumed_session_id` and
    ```
 
 2. Rewrite the entry under the lock: clear `wrap_requested`, re-add
-   `tmux_session: $session_id`, update `last_touched`.
+   `tmux_session: $session_id` and a fresh `slot` (spawning step 8
+   rule), update `last_touched`.
 3. Set the task list prefix back to `[active]`.
 
 The manager owes no journal entry until the session next wraps.

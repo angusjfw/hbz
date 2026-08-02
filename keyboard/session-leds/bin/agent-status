@@ -129,6 +129,11 @@ def cmd_event():
         "slot": assign_slot(tmux_session, entries),
         "label": os.path.basename(hook.get("cwd", "") or "") or tmux_session,
     }
+    # the registry is authoritative once the manager assigns a slot,
+    # which may land after the session's first events
+    reg = registry_slot(tmux_session)
+    if reg is not None:
+        entry["slot"] = reg
     entry["state"] = state
     entry["session_id"] = hook.get("session_id", entry.get("session_id"))
     write(entry)
