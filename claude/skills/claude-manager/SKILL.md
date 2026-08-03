@@ -158,6 +158,58 @@ session it means cold resume — the session's state tells them apart.
 
 Map flexible wording to the canonical mode before acting.
 
+## Resolving your own tmux pane
+
+`$TMUX_PANE` is not reliably set for every execution context. A session
+driven through `/remote-control` (phone or web) can end up running
+detached from an interactive shell's environment — `$TMUX_PANE` empty —
+even though the session's tmux container is alive and well. Left
+unguarded, `tmux display-message -p -t "$TMUX_PANE" '...'` doesn't
+error on an empty target — it silently resolves against tmux's default
+pane, which can belong to an unrelated session entirely.
+
+This bites two things that assume `$TMUX_PANE` is trustworthy: the
+manager's own header refresh (`On invocation` step 2 below), and every
+worker-side self-identification in `claude-manager-end/FLOW.md`'s
+Common preamble (`/claude-manager-wrap`, `/claude-manager-shutdown`).
+A worker whose `$TMUX_PANE` is empty can't confidently answer "am I in
+a tmux pane, and if so which one" — it either misidentifies itself
+against the wrong session, or fails closed with "no matching entry" and
+stalls rather than proceeding on a guess. In practice this shows up as
+a session that never self-wraps or self-shuts-down even though the
+work is done and its tmux container is genuinely still there — the
+symptom is confusion about tmux state, not a crash.
+
+**Fallback: walk process ancestry and match against every pane's
+`pane_pid`.** Use this whenever `$TMUX_PANE` is empty, or its
+`display-message` result doesn't check out (session/pane not found, or
+doesn't match what else is known about this worker):
+
+```bash
+p=$$
+for i in $(seq 1 10); do
+  ppid=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
+  [ -z "$ppid" ] && break
+  p=$ppid
+done
+# $p and every ancestor visited along the way are candidates; match
+# against every live pane's pane_pid:
+tmux list-panes -a -F '#{pane_id} #{pane_pid} #{session_name}:#{window_index}.#{pane_index}'
+# the pane whose pane_pid appears anywhere in the walked ancestry chain
+# is the true pane, even when $TMUX_PANE lied or was empty.
+```
+
+A handful of ancestor hops is normally enough — ten is already
+over-provisioned. Verified live: a manager session with an empty
+`$TMUX_PANE` (running under a `bg-spare` background-daemon execution
+mode) had `tmux display-message` resolve to a completely different
+session, while the ancestry walk correctly found the manager's own
+pane a few hops up (through the harness's own wrapper shells).
+
+Prefer the `$TMUX_PANE` fast path first — it's one command, and it's
+correct whenever it's set and resolves to a real pane. Reach for the
+walk only as the fallback.
+
 ## On invocation
 
 1. Read the registry, mirror live sessions to the in-conversation
@@ -167,6 +219,10 @@ Map flexible wording to the canonical mode before acting.
    ```bash
    mgr_pane="$(tmux display-message -p -t "$TMUX_PANE" '#S:#I.#P')"
    ```
+
+   If `$TMUX_PANE` is empty or the result doesn't resolve to a real,
+   live pane, use the ancestry-walk fallback above instead of trusting
+   it blindly.
 
    Edit the registry under the `mkdir` lock: drop any prior `manager:`
    line whose value matches `$mgr_pane`, then insert

@@ -71,6 +71,17 @@ All three modes start the same way.
    src_session=$(tmux display-message -p -t "$pane" '#S')
    ```
 
+   **`$TMUX_PANE` is not reliable under `/remote-control`** — it can be
+   empty even though the tmux container is alive, and an empty target
+   makes `display-message` silently resolve to the wrong session
+   instead of erroring. This is the single most common reason a worker
+   fails to self-wrap or self-shutdown despite the work being done: it
+   can't confidently answer "which pane am I," so step 2 below finds no
+   matching entry and it stalls. If `$src_session` comes back empty, or
+   the registry has no entry whose `tmux_session` matches it, use the
+   ancestry-walk fallback at `claude-manager/SKILL.md` § Resolving your
+   own tmux pane before concluding this session isn't registered.
+
 2. Read the registry (no lock — reads are full-file, last-write-wins
    is fine for this flow). Find the worker's own session entry by
    matching its `tmux_session` against `$src_session`.
