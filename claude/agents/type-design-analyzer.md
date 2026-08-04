@@ -2,6 +2,7 @@
 name: type-design-analyzer
 description: Use this agent when you need expert analysis of type design in your codebase. Specifically use it (1) when introducing a new type to ensure it follows best practices for encapsulation and invariant expression, (2) during pull request creation to review all types being added, and (3) when refactoring existing types to improve their design quality. The agent will provide both qualitative feedback and quantitative ratings on encapsulation, invariant expression, usefulness, and enforcement. See "When to invoke" in the agent body for worked scenarios.
 model: opus
+effort: medium
 color: pink
 ---
 

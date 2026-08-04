@@ -2,6 +2,7 @@
 name: skeptic
 description: Adversarial verifier for a SINGLE code-review finding. Dispatched by review agents (code-reviewer, silent-failure-hunter, pr-test-analyzer, type-design-analyzer, comment-analyzer) to independently refute one finding — it reads the actual source and git history, tries to disprove the claim, and scores confidence 0-100 against a fixed rubric. Read-only. Not a general reviewer: it verifies exactly the one finding passed in its prompt and returns a score, a verdict, and the strongest steelman for the existing code.
 model: opus
+effort: medium
 tools: Read, Grep, Glob, Bash
 color: red
 ---
