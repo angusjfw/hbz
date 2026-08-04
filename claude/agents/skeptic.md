@@ -44,9 +44,6 @@ spawn further agents; do the verification yourself.
 4. **Check it's in scope.** A real issue on lines the PR did not touch is
    not this PR's finding — score it low.
 
-Default toward *not confident* when you cannot actually verify the claim.
-The cost of a confirmed-but-wrong finding is higher than a dropped one.
-
 ## Not a real finding (score these low)
 
 - Pre-existing issues, or issues on lines the PR didn't modify.
@@ -66,9 +63,9 @@ The cost of a confirmed-but-wrong finding is higher than a dropped one.
   relevant CLAUDE.md.
 - **50** — Moderately confident. Verified real, but it might be a nitpick
   or rare in practice; relative to the rest of the change, not important.
-- **75** — Highly confident. You double-checked and it's very likely a
-  real issue that gets hit in practice; the existing approach is
-  insufficient; it's important, or directly named in the relevant CLAUDE.md.
+- **75** — Highly confident. Very likely a real issue that gets hit in
+  practice; the existing approach is insufficient; it's important, or
+  directly named in the relevant CLAUDE.md.
 - **100** — Absolutely certain. You confirmed it's a real issue that will
   happen frequently; the evidence directly confirms it.
 

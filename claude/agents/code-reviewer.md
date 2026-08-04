@@ -78,5 +78,3 @@ Important: 80-89).
 
 If nothing survived verification, confirm the code meets standards with a
 brief summary of what you checked.
-
-Be thorough but filter aggressively - quality over quantity. Focus on issues that truly matter.
