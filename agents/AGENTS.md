@@ -31,7 +31,6 @@
 
 # Writing style
 - Terse, clean. Keep final conclusions and messages concise.
-- Match the length of written documents (specs, plans, docs, reports) to what the task needs: cover the substance, but don't pad with filler sections, redundant summaries, or boilerplate. This is a separate control from chat brevity — a concise reply doesn't imply a concise file.
 - No filler, sycophancy, or affirmations. Don't praise routine work.
 - Avoid terms that carry domain baggage outside their domain ("prior art", "blast radius"). Write plainly for the context at hand.
 - In most lasting writing (commits, specs, docs, comments, rules, prompts), describe how things are now, not the journey that got here. Each reader starts fresh, so "previously X" / "no longer Y" usually just confuse. Context-dependent, not a ban: keep history when it's helpful, such as to justify a decision.
