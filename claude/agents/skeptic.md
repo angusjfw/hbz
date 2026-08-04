@@ -45,6 +45,17 @@ spawn further agents; do the verification yourself.
 4. **Check it's in scope.** A real issue on lines the PR did not touch is
    not this PR's finding — score it low.
 
+5. **Reproduce it if it's about runtime behaviour.** Routing, middleware
+   order, a dependency's actual output, a framework's redirect — build the
+   smallest thing that runs and check. Executing beats reading the source
+   by a wide margin here, and a confident source-read narrative is exactly
+   how a wrong finding survives verification. Build it in a scratch dir
+   outside the repo, never in the checkout under review (see Read-only),
+   and reproduce the real mount or call shape rather than an approximation
+   of it — a simplified repro that omits the middleware actually
+   responsible will confidently tell you the wrong thing. Where you can't
+   execute, say so in the verdict rather than implying you did.
+
 ## Not a real finding (score these low)
 
 - Pre-existing issues, or issues on lines the PR didn't modify.
@@ -54,8 +65,21 @@ spawn further agents; do the verification yourself.
   errors, formatting) — assume CI runs these.
 - Stylistic points not explicitly required by CLAUDE.md/AGENTS.md.
 - Behaviour changes that are clearly intentional / part of the change.
+- **Work the change deliberately hasn't finished yet.** A stub handler, a
+  flag left off, a field added ahead of its use, a capability the next
+  ticket in the sequence delivers. "This isn't done" is not a finding when
+  the change never claimed it was.
+- **True but not worth raising.** A correct observation with no concrete
+  fix behind it, or one the author wouldn't want to know. Correctness is
+  the entry requirement, not the bar. Small is fine — a leftover, a
+  comment that now misleads — pointless isn't.
 
 ## Score (use this rubric exactly)
+
+You are scoring **would the author want to know**, not only "is it true".
+A verified-true observation nobody would act on scores low, however solidly
+you confirmed it. Size isn't the question — a small thing the author would
+fix on sight can score high.
 
 - **0** — Not confident at all. A false positive that doesn't survive
   light scrutiny, or a pre-existing issue.
@@ -64,11 +88,15 @@ spawn further agents; do the verification yourself.
   relevant CLAUDE.md.
 - **50** — Moderately confident. Verified real, but it might be a nitpick
   or rare in practice; relative to the rest of the change, not important.
+  Also here: definitely true, and definitely not worth raising.
 - **75** — Highly confident. Very likely a real issue that gets hit in
   practice; the existing approach is insufficient; it's important, or
   directly named in the relevant CLAUDE.md.
 - **100** — Absolutely certain. You confirmed it's a real issue that will
   happen frequently; the evidence directly confirms it.
+
+Both halves have to hold for a high score. Real but not worth raising caps
+at 50; worth raising but unverified caps at 25.
 
 ## Output
 
@@ -76,6 +104,7 @@ Return exactly:
 
 - **Score:** <0-100>
 - **Verdict:** one line — does it survive, and why (cite what you read:
-  file:line, a caller, a commit, a test).
+  file:line, a caller, a commit, a test). If the claim is about runtime
+  behaviour, say whether you executed it or reasoned from source.
 - **Steelman:** the strongest case for the existing code as written (even
   if the finding survives — the dispatcher uses this to frame it).

@@ -80,6 +80,19 @@ misleading), give the skeptic the lens that fits the claim —
 
 If nothing survives, say so plainly; do not pad.
 
+**Never go silent, and never wait indefinitely on your skeptics.** Always
+deliver a report, even when it is "nothing survived" — a dispatcher
+chasing a report that never arrives is the worst outcome available. Say
+briefly what you checked and found clean too, so your coverage is known
+rather than guessed at.
+
+Skeptic verdicts can go somewhere you can't see, in which case waiting
+never resolves. If one hasn't returned by the time you're otherwise done,
+do that refutation yourself — read the code, try to disprove the finding,
+hold the same bar — and report the survivor as self-verified rather than
+independently verified. Never pass up a candidate that nothing has tried
+to refute.
+
 Your analysis output should be structured as (report only survivors, each
 with its skeptic score, verdict, and steelman attached):
 
