@@ -78,6 +78,43 @@ def current_tmux_session():
         return None
 
 
+# Claude Code panes report the CLI's version string (e.g. "2.1.220")
+# as pane_current_command; accept claude/node as fallbacks
+_CLAUDE_CMD = re.compile(r"^(\d+\.\d+\.\d+|claude|node)$")
+
+
+def claude_panes(tmux_session):
+    """pane_id -> whether it looks like a Claude pane."""
+    try:
+        out = subprocess.run(
+            ["tmux", "list-panes", "-s", "-t", f"={tmux_session}",
+             "-F", "#{pane_id} #{pane_current_command}"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return {}
+    panes = {}
+    if out.returncode == 0:
+        for line in out.stdout.splitlines():
+            pane, _, cmd = line.partition(" ")
+            panes[pane] = bool(_CLAUDE_CMD.match(cmd.strip()))
+    return panes
+
+
+def owner_alive(entry, panes):
+    pane = entry.get("pane_id")
+    return bool(pane and panes.get(pane))
+
+
+def make_label(tmux_session, cwd):
+    """The tmux session name is usually the descriptive one (manager
+    sessions are named by registry id); fall back to the cwd basename
+    for auto-numbered sessions."""
+    if tmux_session and not tmux_session.isdigit():
+        return tmux_session
+    return os.path.basename(cwd or "") or tmux_session
+
+
 def registry_slot(tmux_session):
     """slot field from the claude-manager registry entry, if any."""
     try:
@@ -127,31 +164,47 @@ def cmd_event():
         return 0  # not in tmux: nothing to track against
 
     entries = read_all()
+    entry = entries.get(tmux_session)
+    caller_id = hook.get("session_id")
+    caller_pane = os.environ.get("TMUX_PANE")
+
     if event == "SessionEnd":
-        entry = entries.get(tmux_session)
-        # only the Claude the entry tracks may end it — a one-off
-        # `claude -p` in the same session shouldn't unbind the slot
-        if entry and hook.get("session_id") in (None,
-                                                entry.get("session_id")):
-            entry["state"] = "off"
-            write(entry)
+        if not entry or entry.get("session_id") not in (None, caller_id):
+            return 0  # only the owner may end the entry
+        others = [p for p, is_claude in claude_panes(tmux_session).items()
+                  if is_claude and p != caller_pane]
+        if others:
+            # other Claudes remain: release ownership, keep the state;
+            # the next event from a survivor claims the entry
+            entry["session_id"] = None
+            entry["pane_id"] = None
+        else:
+            entry["state"] = "off"  # slot stays bound to the tmux session
+        write(entry)
         return 0
+
     state = EVENT_STATES.get(event)
     if state is None:
         return 0
 
-    entry = entries.get(tmux_session) or {
-        "tmux_session": tmux_session,
-        "slot": assign_slot(tmux_session, entries),
-        "label": os.path.basename(hook.get("cwd", "") or "") or tmux_session,
-    }
+    if entry is None:
+        entry = {"tmux_session": tmux_session,
+                 "slot": assign_slot(tmux_session, entries)}
+    elif entry.get("session_id") not in (None, caller_id):
+        # another Claude owns this session's entry; ignore unless it's
+        # parked or its pane is no longer a Claude (crashed/replaced)
+        if entry.get("state") != "off" and \
+                owner_alive(entry, claude_panes(tmux_session)):
+            return 0
+    entry["session_id"] = caller_id
+    entry["pane_id"] = caller_pane
+    entry["label"] = make_label(tmux_session, hook.get("cwd"))
     # the registry is authoritative once the manager assigns a slot,
     # which may land after the session's first events
     reg = registry_slot(tmux_session)
     if reg is not None:
         entry["slot"] = reg
     entry["state"] = state
-    entry["session_id"] = hook.get("session_id", entry.get("session_id"))
     write(entry)
     return 0
 

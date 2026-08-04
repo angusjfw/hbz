@@ -78,7 +78,7 @@ end
 
 local function renderHud()
   local es = entries()
-  local rowH, w, pad = 24, 320, 10
+  local rowH, w, pad = 24, 430, 10
   local h = pad * 2 + rowH * math.max(#es, 1)
   local screen = hs.screen.mainScreen():frame()
   if hud then hud:delete() end
