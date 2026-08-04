@@ -13,7 +13,8 @@ never automatically.
 ## Stance
 
 - **Conversation first.** Walk the phases, pause for discussion. Not
-  a final report.
+  a final report. The code findings are the exception: they land as one
+  list, once (see 4b).
 - **Mode-aware.** Self-review and colleague review share one
   skeleton but differ in which phases earn their keep and what the
   action step turns findings into. See "Mode" below.
@@ -28,8 +29,14 @@ never automatically.
 - **No silent verdicts.** Approve / request-changes (colleague
   review) is the user's call, not the skill's.
 - **Don't fix bugs you spot.** Surface them; the user decides.
-- **Don't run tests, builds, linters** without asking. If verification
-  matters, ask first.
+- **Ask before running the project's tests, builds or linters.** They're
+  slow and they touch shared state.
+- **Probe freely.** A throwaway reproduction is the opposite of a project
+  test run: reproduce the mechanism in a scratch dir, run the pinned
+  dependency, and settle the question. Executing beats reading the source,
+  by a wide margin, on anything about runtime behaviour. Any claim about
+  runtime behaviour either executes or says plainly that it was reasoned
+  from source — including in what you accept from a sub-agent.
 
 ## Mode: self-review vs colleague review
 
@@ -60,8 +67,11 @@ Self-review:
 Colleague review:
 - Walk all phases normally. The author's framing in the description
   and ticket is starting context, not a substitute.
-- Bar for surfacing findings is higher (see the adversarial filter
-  step). A noisy review gets dismissed wholesale.
+- The bar is **would the author want to know?** Not "is it true" — true
+  is the entry requirement. A small thing they'd want to know is worth
+  raising; a correct observation nobody would act on isn't, and doesn't
+  go in the list at all. A noisy review gets dismissed wholesale, and a
+  list of correct trivia is noise.
 - The action step turns findings into draft PR comments. Verb is
   "draft a comment for this?".
 
@@ -122,6 +132,15 @@ thread context: things already raised, decisions reached, points the
 author has explained-away, and bot findings (Cursor, Bugbot, CodeRabbit)
 the author has accepted, dismissed, or acknowledged.
 
+**Establish where the PR sits in its arc, and what's deliberately
+unfinished.** A ticket sequence, a stub handler waiting on the next
+ticket, a flag left off, a schema field added ahead of its use, a
+follow-up already filed — all of that is intended, not missing. Get it
+explicitly and write it down, because everything downstream needs it: the
+sub-agents read the diff cold and will otherwise hand back the whole arc's
+remaining work as gaps, and reviewing a mid-arc step as if it were the
+finished thing is the fastest way to waste an author's time.
+
 Tools:
 - `gh pr view <N> --repo <owner>/<repo> --json title,body,author,baseRefName,headRefName,additions,deletions,url`
 - `gh pr view <N> --comments` for the conversation timeline
@@ -170,9 +189,10 @@ Tools:
 
 ### 4. Code
 
-Only after the phases above (or after the mode-driven skip). The user
-names what to dig into; don't go line-by-line through everything.
-Read surrounding code, not just the diff, when context matters.
+The code *walk* comes after the phases above (or after the mode-driven
+skip); the agent sweep in 4a launches earlier, in the background. The user
+names what to dig into; don't go line-by-line through everything. Read
+surrounding code, not just the diff, when context matters.
 
 Four sub-steps: gather, filter, categorize, act.
 
@@ -181,6 +201,12 @@ Four sub-steps: gather, filter, categorize, act.
 **This is an agent dispatch step.** Use the Agent tool to spawn
 sub-agents. They bring specialized perspective a read of the diff
 doesn't, so the dispatch is the step, not a substitute for one.
+
+**Dispatch as soon as you know the shape of the change** — during phase 2
+or 3, not after. They run in the background while you and the user walk
+the early phases, which is the difference between the sweep feeling free
+and feeling slow. Say in one line that it's running; don't report on it
+again until you have the list.
 
 Spawn the sub-agents as a basic full sweep of the whole PR — every
 changed file, not just the area the user named for the deeper dive.
@@ -200,7 +226,11 @@ run covers the full diff. Pick from:
   quality, missing edge cases, flaky-prone patterns.
 - **Comments** (`comment-analyzer`) — accuracy vs the code, rot,
   completeness for non-obvious bits. Not just comments the diff added —
-  existing comments the change should have updated but didn't.
+  existing comments the change should have updated but didn't. On a
+  prose-heavy diff, bound it explicitly: a claim that would mislead
+  someone acting on it, not incompleteness, clarity or tone. Hundreds of
+  new lines of docs will otherwise yield an unbounded supply of findings
+  that are true and worth nothing.
 - **Types** (`type-design-analyzer`) — encapsulation, invariants,
   usefulness of the abstraction.
 - **Simplification** (`code-simplifier`) — duplication, complex
@@ -214,17 +244,53 @@ files by default; only split an agent across file subsets for a PR
 too large for one pass, and then so the splits cover all of it, never
 to review only part.
 
-Each diagnostic agent verifies its own findings internally: it
-dispatches an independent `skeptic` sub-agent per candidate finding and
-returns only those the skeptic scores ≥ 80, with a verdict and steelman
-attached. So what comes back is already adversarially filtered — you do
-not re-run that filter (see 4b). (`code-simplifier` is exempt; it's
-polish, not findings.) Confidence is for internal filtering; how to
-present it is handled in the categorize step.
+**Coverage is a sweep property; the review list isn't.** Sweeping every
+changed file is about not missing things, and a dimension that comes back
+with nothing you'd raise did its job. Never let the size of the sweep
+argue for the size of the list — four agents each handing back their best
+three is not a twelve-item review, and the effort spent is not a reason to
+spend the author's.
+
+**Every dispatch brief carries, in the prompt:**
+- Where the PR sits in its arc and what's deliberately unfinished
+  (phase 1). Otherwise the agent reports the arc's remaining work as gaps.
+- The bar: would the author want to know? Say it explicitly in colleague
+  review — the agents are tuned for finding things, not for deciding
+  what's worth someone's time, and this is the only place you can tell
+  them before they've spent their effort.
+- Findings must be about what **this diff does**. Pre-existing behaviour
+  the diff merely sits next to is out. The exception is where the diff
+  creates a new consumer that makes existing code newly wrong, and then
+  the burden is showing the diff caused it.
+- A finding needs a concrete fix the agent would actually make. "This is
+  imprecise" with no alternative isn't a finding.
+- Any claim about runtime behaviour executes or says it was reasoned from
+  source.
+
+Each diagnostic agent verifies its own findings internally: it dispatches
+an independent `skeptic` sub-agent per candidate finding and returns only
+those the skeptic scores ≥ 80, with a verdict and steelman attached. That
+filtering is meant to be invisible to you — you receive verified findings,
+not the verification (see 4b). (`code-simplifier` is exempt; it's polish,
+not findings.)
+
+**When the plumbing leaks, absorb it.** Skeptic verdicts sometimes arrive
+at this level instead of at their parent agent — full Score / Verdict /
+Steelman prose, one per candidate finding, arriving mid-conversation. That
+is leakage, not review output. Never relay a verdict's prose to the user,
+never present a finding *because* its verdict happened to land, and never
+narrate the bookkeeping — which agent is quiet, whose report is missing,
+which verdict contradicts which. Reconciling that is your job and the user
+should not be able to tell it happened.
 
 Dispatch all chosen agents in one message so they run concurrently, then
-wait for their results. Do not poll, create tracking tasks, or schedule
-wakeups — background sub-agents notify you when they finish.
+wait. Notification is the expected channel, so don't create tracking tasks
+or schedule wakeups. But a notification is not a report: if an agent
+finishes without sending findings, its report was lost somewhere and
+waiting longer won't recover it — ask that agent directly (SendMessage)
+for its findings and what it checked and found clean. Do that promptly and
+silently rather than waiting, and don't wait on a dimension you can close
+yourself by reading the code.
 
 Size the sweep to the diff: a tiny change may need only one or two
 agents, where the skeptic pass adds little; a large PR gets every
@@ -258,38 +324,88 @@ saw only its own dimension over the diff, not the whole picture:
    worktree context (4a) has no skeptic verdict behind it. Carry it
    forward labelled as yours, so the categorize step can pitch its
    confidence honestly rather than borrowing the agents'.
-4. **Weigh for the mode.** In colleague review, drop anything you'd be
-   embarrassed to put in front of the author — a noisy review gets
-   dismissed wholesale. In self-review the bar is lower.
+4. **Cut, don't rank.** This is the step where the list gets short. Drop
+   — not demote, drop — anything that is:
+   - a form of "this isn't finished yet" on work the arc says isn't
+     finished yet;
+   - about behaviour the diff didn't introduce;
+   - a complaint with no concrete alternative you'd actually make;
+   - true and worth nothing. Correct is the entry requirement.
+
+   In colleague review, one more, and it does the most work: **would the
+   author want to know, or are you just showing you read it?** That's the
+   test, not size — a leftover they forgot to delete, a comment someone
+   will lean on while changing that code, an inconsistency with a sibling
+   PR are all small and all worth raising. A correct observation nobody
+   would act on is not, however solid.
+
+   A dropped finding leaves no trace. It doesn't come back as a
+   parenthetical or a "one more minor thing". The four criteria above
+   apply in self-review too — they waste the user's time either way — but
+   dropped items can legitimately resurface there as suggestions.
+
+5. **A refuted finding is dead.** If a skeptic refuted it, it is gone —
+   not present with a caveat, not moved to a lower bucket, not "my
+   skeptic scored this low but". If you genuinely disagree with the
+   refutation, say so as your own finding and carry your own reasoning;
+   don't relay something you've been told is wrong and hedge it.
 
 Carry survivors — the agents' verified findings plus your own confirmed
 ones — into the categorize step, each with its source and the skeptic's
 steelman so confidence can be expressed there.
 
+**Present the list once.** No interim "here's what I have so far" cut, no
+list that a still-running agent might amend. If you're waiting, say what
+you're waiting on in one line and stop. When output arrives after you've
+presented, amend the list in place — re-present the corrected list, or say
+nothing if it doesn't change — never as a delta turn, a correction turn, or
+a refinement to advice already given. A review delivered in five
+instalments is unreadable however good each instalment is, and the user is
+left assembling it.
+
 #### 4c. Categorize and propose handling
 
-Group survivors into:
+The buckets differ by mode, because a bucket that exists will get filled.
+
+**Colleague review — three headings:**
+
+- **Blockers** — you'd hold the approval on these. Bugs, regressions,
+  security, data loss, a contract the change gets wrong.
+- **Nits but worth raising** — small, non-blocking, and the author would
+  still want to know. A leftover, a comment that now misleads, an
+  inconsistency with a sibling PR. Small is fine here; pointless isn't —
+  everything in this bucket already passed the cut in 4b.
+- **Strengths** — short, and only things genuinely worth saying.
+
+Note what's missing: there's no take-it-or-leave-it tier. Anything that
+would only have fitted there was dropped in 4b, and it doesn't come back
+as a "minor" or a "while we're here" — that tier is where a reviewer's
+credibility goes. The split between the first two buckets is about force,
+not size: match the heading to whether you'd actually hold the approval on
+it, so the author can tell a gate from a note.
+
+**Self-review — four headings**, since the only cost is the user's time:
 
 - **Critical** — bugs, regressions, security issues, data loss
   risks. Things that would break or harm users.
 - **Important** — likely to cause problems but not certain.
   Missing test coverage on risky paths, error handling gaps,
   design concerns the author may not have weighed.
-- **Suggestions** — quality, clarity, consistency. Take or
-  leave. In self-review, this category can be larger; in
-  colleague review, only the highest-value ones cross the bar.
-- **Strengths** — anything notably well done. Sanity-checks
-  that the dive wasn't one-sided in self-review; worth saying
-  to a colleague.
+- **Suggestions** — quality, clarity, consistency. Take or leave.
+- **Strengths** — anything notably well done, as a sanity-check that
+  the dive wasn't one-sided.
 
 Present findings as a plain numbered list under each heading. Each
 item should read naturally: the agent that found it in brackets
 (`[code-reviewer]`, `[pr-test-analyzer]`, etc.), then the finding,
-then the file and line. If you merged findings from multiple agents,
-list all sources. Confidence lives in the category placement and
-optionally a brief qualifier ("certain" / "plausible" / "worth
-checking") — not as a raw number. No internal tracking labels (A,
+then the file and line, then the fix you'd make. If you merged findings
+from multiple agents, list all sources. No internal tracking labels (A,
 T4, B/2/3, etc.) in the output.
+
+Confidence lives in the placement and, where it genuinely helps, a brief
+qualifier ("certain" / "plausible" / "worth checking") — never a raw
+number. A qualifier is not a way to keep a finding you should have cut: if
+it needs "this might be nothing, but", it was nothing.
 
 Example format:
 - `[silent-failure-hunter]` compliance.ts:20 — null FS bypasses
@@ -298,13 +414,20 @@ Example format:
   *(considered: ASY-2374 retires this path, but that's not merged
   yet)*
 
-Default proposal: handle Critical and Important items now; offer
-Suggestions and Strengths separately so they don't crowd the action
-step.
+Default proposal: in colleague review, blockers and nits together — the
+list is short enough by now that splitting the action step adds nothing.
+In self-review, Critical and Important now, with Suggestions and Strengths
+offered separately so they don't crowd the action step.
 
 #### 4d. Take action
 
 Default: nothing happens without explicit, per-item approval.
+
+**Ask once.** Put the choice to the user at the end of the findings list
+and then hold. Don't re-offer to draft while you're already waiting on
+them, and don't re-ask because something new arrived — new substance goes
+into the list, not into another prompt. Per-item approval means the user
+picks item by item once they've answered, not that you ask repeatedly.
 
 **Self-review.** For each finding the user wants to act on, choose
 with them per-item:
