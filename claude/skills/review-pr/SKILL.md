@@ -178,11 +178,9 @@ Four sub-steps: gather, filter, categorize, act.
 
 #### 4a. Targeted review by aspect
 
-**This is an actual agent dispatch step.** Use the Agent tool to
-spawn sub-agents. Do not substitute manual code reading for this step,
-even if you have already read the diff. The sub-agents bring
-specialized perspective you haven't applied. If you find yourself
-thinking "I've already done this" — you haven't.
+**This is an agent dispatch step.** Use the Agent tool to spawn
+sub-agents. They bring specialized perspective a read of the diff
+doesn't, so the dispatch is the step, not a substitute for one.
 
 Spawn the sub-agents as a basic full sweep of the whole PR — every
 changed file, not just the area the user named for the deeper dive.
@@ -256,10 +254,10 @@ saw only its own dimension over the diff, not the whole picture:
    surface it again rises sharply — only re-raise if you genuinely
    disagree with how it was resolved, and frame it as engaging with the
    prior discussion, not a fresh finding.
-3. **Verify your own findings.** Anything you added from the worktree
-   context (4a) did not go through a skeptic. Trace it against the
-   callers, callees, and surrounding code and confirm or drop it
-   yourself before carrying it forward.
+3. **Mark what didn't go through a skeptic.** Anything you added from the
+   worktree context (4a) has no skeptic verdict behind it. Carry it
+   forward labelled as yours, so the categorize step can pitch its
+   confidence honestly rather than borrowing the agents'.
 4. **Weigh for the mode.** In colleague review, drop anything you'd be
    embarrassed to put in front of the author — a noisy review gets
    dismissed wholesale. In self-review the bar is lower.
