@@ -13,10 +13,12 @@ client to it (adapter pending). Spec and design decisions:
 | working | blue | UserPromptSubmit |
 | done | green | Stop (sticky until focused) |
 | needs input | yellow | Notification |
-| error | red | Claude process gone but its tmux session lives on |
+| error | red | Claude died uncleanly; its tmux session lives on |
+| off | unlit (grey in HUD) | Claude exited cleanly; slot stays bound to the tmux session |
 
-State for a tmux session that no longer exists is dropped silently
-(killing a scratch session isn't an error).
+Slots belong to tmux sessions, not Claude processes — a Claude restart
+keeps its key. State for a tmux session that no longer exists is
+dropped silently (killing a scratch session isn't an error).
 
 ##### 🧩 Pieces
 - `bin/agent-status` — state store CLI. Claude Code hooks pipe every
@@ -61,8 +63,8 @@ the agent layer (`kontroll set-layer 0`).
 
 ##### 🖥️ Desktop
 While the agent layer is on, Hammerspoon shows a heads-up display of
-sessions with labels and states (driven by the daemon via
-`hammerspoon://agent-hud`). On a state change worth noticing (done,
+sessions with labels and states (the daemon toggles a marker file that
+a pathwatcher picks up, which also live-refreshes the HUD). On a state change worth noticing (done,
 needs input, error), Hammerspoon shows a toast bottom-right; on layers
 with no status display the daemon also flashes the slot's LED for ~1s
 (display only — key mapping is unaffected).

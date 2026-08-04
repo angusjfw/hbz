@@ -54,6 +54,19 @@ FLASH_S = 1.2
 
 PAUSE_FILE = os.path.join(STATE_DIR, "leds-paused")
 BASE_OFF_FILE = os.path.join(STATE_DIR, "leds-base-off")
+# marker watched by Hammerspoon (hs.pathwatcher) to show/hide the HUD;
+# faster than URL events, which go through LaunchServices
+HUD_FILE = os.path.join(STATE_DIR, "hud-visible")
+
+
+def set_hud(visible):
+    try:
+        if visible:
+            open(HUD_FILE, "w").close()
+        else:
+            os.remove(HUD_FILE)
+    except OSError:
+        pass
 
 
 def pause_mode():
@@ -125,10 +138,11 @@ def read_states():
             continue
         if state == "done" and session:
             done_sessions[session] = e
+        # tmux alive but no Claude left: an unclean death, unless the
+        # entry is "off" (clean exit, slot parked on the tmux session)
+        if health == "no_claude" and state != "off":
+            state = "error"
         if slot and 1 <= slot <= MAX_SLOTS and state in COLORS:
-            # tmux alive but no Claude process left -> it died uncleanly
-            if health == "no_claude":
-                state = "error"
             slots[slot] = state
             labels[slot] = e.get("label") or session or f"slot {slot}"
     return slots, labels, done_sessions
@@ -256,7 +270,7 @@ def main():
     def bail(signum, frame):
         if painting:
             restore()
-        notify_hs("agent-hud", show="0")
+        set_hud(False)
         sys.exit(0)
 
     signal.signal(signal.SIGINT, bail)
@@ -312,7 +326,7 @@ def main():
         # HUD only while the agent layer is toggled
         want_hud = paused != "all" and layer == AGENT_LAYER
         if want_hud != hud_shown:
-            notify_hs("agent-hud", show="1" if want_hud else "0")
+            set_hud(want_hud)
             hud_shown = want_hud
 
         if frame:

@@ -22,7 +22,9 @@ local STATE_COLORS = {
   done        = { red = 0, green = 0.8, blue = 0.2 },
   needs_input = { red = 1, green = 0.8, blue = 0 },
   error       = { red = 1, green = 0, blue = 0 },
+  off         = { red = 0.35, green = 0.35, blue = 0.35 },
 }
+local HUD_FILE = STATE_DIR .. "/hud-visible"
 
 local function entries()
   local out = {}
@@ -64,12 +66,13 @@ kontroll -p %q set-layer -i 0
   hs.application.launchOrFocus(TERMINAL_APP)
 end
 
--- Heads-up display: labelled session grid while the agent layer is on
+-- Heads-up display: labelled session grid while the agent layer is on.
+-- The daemon toggles a marker file; a pathwatcher on the state dir
+-- shows/hides and live-refreshes (much faster than URL events).
 
-local hud, hudTimer = nil, nil
+local hud = nil
 
 local function hideHud()
-  if hudTimer then hudTimer:stop(); hudTimer = nil end
   if hud then hud:delete(); hud = nil end
 end
 
@@ -113,10 +116,11 @@ local function renderHud()
   hud:show()
 end
 
-local function showHud()
-  renderHud()
-  if not hudTimer then
-    hudTimer = hs.timer.doEvery(0.5, renderHud) -- live-refresh states
+local function syncHud()
+  if hs.fs.attributes(HUD_FILE) then
+    renderHud()
+  else
+    hideHud()
   end
 end
 
@@ -157,13 +161,14 @@ local function toast(label, state)
   end)
 end
 
+local watcher = nil
+
 function M.start()
   for i = 1, #LETTERS do
     hs.hotkey.bind(HYPER, LETTERS:sub(i, i), function() switchTo(i) end)
   end
-  hs.urlevent.bind("agent-hud", function(_, params)
-    if params.show == "1" then showHud() else hideHud() end
-  end)
+  watcher = hs.pathwatcher.new(STATE_DIR, syncHud):start()
+  syncHud() -- pick up state at load
   hs.urlevent.bind("agent-toast", function(_, params)
     toast(params.label or "session", params.state or "")
   end)

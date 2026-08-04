@@ -30,7 +30,10 @@ EVENT_STATES = {
     "Notification": "needs_input",
 }
 
-STATES = ("idle", "working", "done", "needs_input", "error")
+# "off": Claude exited cleanly but the tmux session lives on — LED dark,
+# slot stays bound to the tmux session (keys switch to tmux sessions,
+# so bindings shouldn't churn when a Claude restarts)
+STATES = ("idle", "working", "done", "needs_input", "error", "off")
 
 
 def state_path(tmux_session):
@@ -92,11 +95,21 @@ def registry_slot(tmux_session):
     return None
 
 
+def registry_slots():
+    """Every slot number reserved in the claude-manager registry."""
+    try:
+        with open(REGISTRY) as f:
+            return {int(m) for m in
+                    re.findall(r"^slot:\s*(\d+)$", f.read(), flags=re.M)}
+    except OSError:
+        return set()
+
+
 def assign_slot(tmux_session, entries):
     slot = registry_slot(tmux_session)
     if slot is not None:
         return slot
-    taken = {e.get("slot") for e in entries.values()}
+    taken = {e.get("slot") for e in entries.values()} | registry_slots()
     for n in range(1, MAX_SLOTS + 1):
         if n not in taken:
             return n
@@ -115,10 +128,13 @@ def cmd_event():
 
     entries = read_all()
     if event == "SessionEnd":
-        try:
-            os.remove(state_path(tmux_session))
-        except OSError:
-            pass
+        entry = entries.get(tmux_session)
+        # only the Claude the entry tracks may end it — a one-off
+        # `claude -p` in the same session shouldn't unbind the slot
+        if entry and hook.get("session_id") in (None,
+                                                entry.get("session_id")):
+            entry["state"] = "off"
+            write(entry)
         return 0
     state = EVENT_STATES.get(event)
     if state is None:

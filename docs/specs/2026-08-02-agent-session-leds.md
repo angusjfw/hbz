@@ -14,7 +14,12 @@ client to that session. An on-screen twin renders the same state with labels.
 | done | green | turn finished (Stop) |
 | needs input | yellow | permission request / waiting notification (Notification) |
 | error | red | Claude process vanished from a live tmux session (pane command check) |
-| off | unlit | slot unassigned |
+| off | unlit | Claude exited cleanly; slot stays bound while the tmux session lives |
+
+Slots bind to tmux sessions (the switch target), not Claude processes:
+SessionEnd parks the entry as `off` rather than freeing the slot, so
+Claude restarts don't shuffle keys. Only tmux-session death (GC) or
+manual `clear` frees a slot.
 
 `done` is sticky until the session is focused or a new prompt starts, then
 falls back to `idle`.
