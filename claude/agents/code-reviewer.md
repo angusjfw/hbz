@@ -52,13 +52,12 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning for flagging it
 
-Keep only findings the skeptic scores **≥ 80**, and attach the skeptic's
-verdict and steelman to each survivor.
+One skeptic per finding. Keep only findings the skeptic scores **≥ 80**,
+and attach the skeptic's verdict and steelman to each survivor.
 
 For a **Critical candidate** (a likely bug, regression, security, or
-data-loss issue), dispatch **three** skeptics with distinct lenses —
-`correctness`, `reproduce`, `security` — and keep it only if **≥ 2**
-score ≥ 80. Diversity of angle, not repetition.
+data-loss issue), give the skeptic the lens that fits the claim —
+`correctness`, `reproduce`, or `security`.
 
 If nothing survives verification, say so plainly; do not pad.
 

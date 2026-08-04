@@ -67,10 +67,10 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning, so it can check the concern against the type's actual construction sites and callers
 
-Keep only concerns the skeptic scores **≥ 80**. For a severe concern (an
-invariant violable from outside, or illegal states left representable),
-dispatch **three** skeptics with distinct lenses — `correctness`,
-`reproduce`, `security` — and keep it only if **≥ 2** score ≥ 80.
+One skeptic per concern. Keep only concerns the skeptic scores **≥ 80**.
+For a severe concern (an invariant violable from outside, or illegal
+states left representable), give the skeptic the lens that fits the claim
+— `correctness`, `reproduce`, or `security`.
 
 If no concern survives, say so; the ratings and strengths still stand.
 

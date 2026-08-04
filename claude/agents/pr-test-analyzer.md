@@ -69,10 +69,10 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning, including why existing tests don't already cover it
 
-Keep only gaps the skeptic scores **≥ 80** — the skeptic will drop gaps
-already covered by existing or integration tests. For a criticality 9-10
-gap, dispatch **three** skeptics with distinct lenses — `correctness`,
-`reproduce`, `security` — and keep it only if **≥ 2** score ≥ 80.
+One skeptic per gap. Keep only gaps the skeptic scores **≥ 80** — the
+skeptic will drop gaps already covered by existing or integration tests.
+For a criticality 9-10 gap, give the skeptic the lens that fits the claim
+— `correctness`, `reproduce`, or `security`.
 
 If nothing survives, say so plainly; do not pad.
 

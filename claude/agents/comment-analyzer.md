@@ -72,10 +72,10 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning for flagging it
 
-Keep only issues the skeptic scores **≥ 80**. For a Critical Issue (a
-comment that is factually incorrect or actively misleading), dispatch
-**three** skeptics with distinct lenses — `correctness`, `reproduce`,
-`security` — and keep it only if **≥ 2** score ≥ 80.
+One skeptic per issue. Keep only issues the skeptic scores **≥ 80**. For
+a Critical Issue (a comment that is factually incorrect or actively
+misleading), give the skeptic the lens that fits the claim —
+`correctness`, `reproduce`, or `security`.
 
 If nothing survives, say so plainly; do not pad.
 
