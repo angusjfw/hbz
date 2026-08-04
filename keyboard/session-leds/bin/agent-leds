@@ -306,7 +306,8 @@ def main():
             if layer == AGENT_LAYER:
                 frame = slot_leds(slots) | {TOGGLE_LED: TOGGLE_COLOR}
             elif layer == BASE_LAYER and base_display_on():
-                frame = slot_leds(slots) | dict(HOME_MARKERS)
+                # markers first: an occupied slot outranks its marker
+                frame = dict(HOME_MARKERS) | slot_leds(slots)
 
         # HUD only while the agent layer is toggled
         want_hud = paused != "all" and layer == AGENT_LAYER
