@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Paint Claude session status onto the ZSA Voyager's agent layer.
+"""Paint Claude session status onto the ZSA Voyager.
 
-Polls Keymapp (via kontroll) for the active layer. While the agent
-layer is toggled on, takes host RGB control and paints one key per
-session slot from the agent-status state dir; restores firmware
-colours the moment the layer is left. Handles keyboard disconnects.
+Polls Keymapp (via kontroll) for the active layer and paints one key
+per session slot from the agent-status state dir. Statuses show on
+the base layer by default (home markers repainted alongside) and on
+the agent layer (toggle key lit white); other layers keep their
+firmware colours. Handles keyboard disconnects.
 
 Requires Keymapp running with its API enabled, and kontroll on PATH.
 
-Control (writes a marker the running daemon honours):
-    agent-leds pause          # stop all LED/HUD/toast output
-    agent-leds pause flash    # only stop transition flashes
+Control (writes markers the running daemon honours):
+    agent-leds pause          # stop all output AND Keymapp API traffic
+                              # (use while flashing firmware)
+    agent-leds pause notify   # only stop transition flashes
     agent-leds resume
+    agent-leds base on|off    # always-on base-layer display (default on)
     agent-leds status
 """
 
@@ -25,8 +28,14 @@ import time
 
 STATE_DIR = os.path.expanduser("~/.local/state/agent-status")
 AGENT_LAYER = 3
+BASE_LAYER = 0
 BASE_LED = 26          # right half, top row: slot 1 = LED 26 (Y position)
 MAX_SLOTS = 18         # three right-hand rows, LEDs 26-43
+TOGGLE_LED = 49        # bottom-right TG(3) key: lit white on the agent layer
+TOGGLE_COLOR = "#FFFFFF"
+# the base ledmap's green home markers (F, J, thumbs), repainted so the
+# always-on display doesn't lose them
+HOME_MARKERS = {led: "#466914" for led in (10, 24, 33, 51)}
 POLL_S = 0.1
 FOCUS_CHECK_S = 1.0
 
@@ -44,15 +53,21 @@ NOTIFY_STATES = {"done", "needs_input", "error"}
 FLASH_S = 1.2
 
 PAUSE_FILE = os.path.join(STATE_DIR, "leds-paused")
+BASE_OFF_FILE = os.path.join(STATE_DIR, "leds-base-off")
 
 
 def pause_mode():
-    """None (running), 'flash' (no transition flashes), or 'all'."""
+    """None (running), 'notify' (no transition flashes), or 'all'."""
     try:
         with open(PAUSE_FILE) as f:
-            return f.read().strip() or "all"
+            mode = f.read().strip() or "all"
+            return "notify" if mode == "flash" else mode
     except OSError:
         return None
+
+
+def base_display_on():
+    return not os.path.exists(BASE_OFF_FILE)
 
 if sys.platform == "darwin":
     DEFAULT_SOCK = os.path.expanduser(
@@ -170,24 +185,30 @@ def demote_done_on_focus(done_sessions):
             pass
 
 
-def paint(slots, previous=None):
-    """Paint changed slot LEDs concurrently.
+def slot_leds(slots):
+    """slot -> state dict as a led -> colour frame."""
+    return {BASE_LED + slot - 1: COLORS[state]
+            for slot, state in slots.items()}
 
-    On first paint (previous None) only lit slots are sent — taking
+
+def paint(frame, previous=None):
+    """Paint changed LEDs concurrently. frame is {led: colour}.
+
+    On first paint (previous None) only lit LEDs are sent — taking
     host control blanks every other LED anyway. Afterwards, diff
-    against the previous frame, sending black for cleared slots.
+    against the previous frame, sending black for cleared LEDs.
     """
     procs = []
-    for slot in range(1, MAX_SLOTS + 1):
-        color = COLORS.get(slots.get(slot), OFF)
+    for led in set(frame) | set(previous or ()):
+        color = frame.get(led, OFF)
         if previous is None:
             if color == OFF:
                 continue
-        elif color == COLORS.get(previous.get(slot), OFF):
+        elif previous.get(led, OFF) == color:
             continue
         procs.append(subprocess.Popen(
             ["kontroll", "-p", SOCK, "set-rgb",
-             "-l", str(BASE_LED + slot - 1), "-c", color],
+             "-l", str(led), "-c", color],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         ))
     for p in procs:
@@ -230,6 +251,7 @@ def main():
     last_connect_try = 0.0
     last_focus_check = 0.0
     prev_slots = None  # None = first read, never flash on startup
+    hud_shown = False
 
     def bail(signum, frame):
         if painting:
@@ -241,14 +263,23 @@ def main():
     signal.signal(signal.SIGTERM, bail)
 
     while True:
-        layer = current_layer()
+        paused = pause_mode()
+
+        # full pause = zero Keymapp API traffic, so flashing firmware
+        # isn't disturbed; one restore call to hand colours back first
+        if paused == "all":
+            layer = None
+            if painting:
+                restore()
+                painting, last_painted = False, None
+        else:
+            layer = current_layer()
 
         # keyboard gone: keep host-side features running, try to get
         # the connection back in the background
-        if layer is None:
+        if layer is None and paused != "all":
             if painting:
                 painting, last_painted = False, None
-                notify_hs("agent-hud", show="0")
             if time.time() - last_connect_try > 5:
                 last_connect_try = time.time()
                 if sys.platform == "darwin" and not os.path.exists(SOCK):
@@ -269,26 +300,38 @@ def main():
                        if st in NOTIFY_STATES and prev_slots.get(s) != st}
         prev_slots = slots
 
-        paused = pause_mode()
-        if paused == "all" or layer != AGENT_LAYER:
-            if painting:
-                restore()
-                painting, last_painted = False, None
-                notify_hs("agent-hud", show="0")
+        # what this layer should show
+        frame = {}
         if paused != "all":
             if layer == AGENT_LAYER:
-                if not painting:
-                    notify_hs("agent-hud", show="1")
-                if not painting or slots != last_painted:
-                    paint(slots, last_painted if painting else None)
-                    painting, last_painted = True, slots
-            else:
-                for slot, state in changes.items():
-                    notify_hs("agent-toast",
-                              label=labels.get(slot, f"slot {slot}"),
-                              state=state)
-                if changes and layer is not None and paused != "flash":
-                    flash(changes)
+                frame = slot_leds(slots) | {TOGGLE_LED: TOGGLE_COLOR}
+            elif layer == BASE_LAYER and base_display_on():
+                frame = slot_leds(slots) | dict(HOME_MARKERS)
+
+        # HUD only while the agent layer is toggled
+        want_hud = paused != "all" and layer == AGENT_LAYER
+        if want_hud != hud_shown:
+            notify_hs("agent-hud", show="1" if want_hud else "0")
+            hud_shown = want_hud
+
+        if frame:
+            if not painting or frame != last_painted:
+                paint(frame, last_painted if painting else None)
+                painting, last_painted = True, frame
+        elif painting:
+            if layer is not None and paused != "all":
+                restore()
+            painting, last_painted = False, None
+
+        if paused != "all" and layer not in (AGENT_LAYER, None):
+            for slot, state in changes.items():
+                notify_hs("agent-toast",
+                          label=labels.get(slot, f"slot {slot}"),
+                          state=state)
+            # a continuous display already shows the change; flash
+            # only when this layer displays nothing
+            if changes and not frame and paused != "notify":
+                flash(changes)
 
         time.sleep(POLL_S if layer is not None else 1)
 
@@ -297,8 +340,10 @@ def ctl(args):
     cmd = args[0]
     if cmd == "pause":
         mode = args[1] if len(args) > 1 else "all"
-        if mode not in ("all", "flash"):
-            print(f"unknown pause mode {mode!r}, want flash or nothing",
+        if mode == "flash":  # old name for the notify mode
+            mode = "notify"
+        if mode not in ("all", "notify"):
+            print(f"unknown pause mode {mode!r}, want notify or nothing",
                   file=sys.stderr)
             return 1
         os.makedirs(STATE_DIR, exist_ok=True)
@@ -311,11 +356,23 @@ def ctl(args):
         except OSError:
             pass
         print("running")
+    elif cmd == "base" and len(args) > 1 and args[1] in ("on", "off"):
+        if args[1] == "off":
+            os.makedirs(STATE_DIR, exist_ok=True)
+            open(BASE_OFF_FILE, "w").close()
+        else:
+            try:
+                os.remove(BASE_OFF_FILE)
+            except OSError:
+                pass
+        print(f"base-layer display {args[1]}")
     elif cmd == "status":
         mode = pause_mode()
-        print(f"paused ({mode})" if mode else "running")
+        print(f"paused ({mode})" if mode else "running",
+              "| base-layer display",
+              "on" if base_display_on() else "off")
     else:
-        print("usage: agent-leds [pause [flash]|resume|status]",
+        print("usage: agent-leds [pause [notify]|resume|base on|off|status]",
               file=sys.stderr)
         return 1
     return 0

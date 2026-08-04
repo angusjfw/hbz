@@ -57,12 +57,15 @@ Windows). `set-rgb <led-index>` per slot, `restore-rgb-leds` on exit.
 
 Host RGB control is all-or-nothing: while active the firmware paints
 nothing (`rawhid_state.rgb_control`) — no layer colours, frozen board.
-The renderer therefore only owns the board while the agent layer is
-active: it polls `GetStatus` (~100ms, 15ms round-trip) for
-`current_layer`, paints status keys when layer 3 engages, and
-`restore-rgb-leds` the moment it leaves. Normal typing is never under
-host control. The daemon must also survive keyboard disconnects
+The renderer owns the board on the base layer (statuses always
+visible; the base ledmap's home markers are repainted alongside —
+`agent-leds base off` reverts to firmware colours) and on the agent
+layer (statuses + toggle key white). Any other layer releases control
+so firmware colours show. It polls `GetStatus` (~100ms, 15ms
+round-trip) for `current_layer` and must survive keyboard disconnects
 (boards re-enumerate; reconnect via `GetKeyboards`/`ConnectAny`).
+`agent-leds pause` stops all API traffic (needed while flashing
+firmware); `pause notify` stops only transition flashes.
 
 ### Input adapter (per-platform, thin)
 

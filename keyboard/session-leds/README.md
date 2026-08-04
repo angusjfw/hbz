@@ -25,10 +25,11 @@ State for a tmux session that no longer exists is dropped silently
   positions 1–18) come from the claude-manager registry `slot` field
   when present, else lowest-free auto-assignment.
 - `bin/agent-leds` — renderer daemon. Polls Keymapp for the active
-  layer; while the agent layer is toggled it takes host RGB control
-  and diff-paints slot LEDs 26–43 (right-hand rows, slot 1 = Y
-  position); restores firmware colours on leaving the layer. Survives
-  keyboard disconnects.
+  layer and diff-paints slot LEDs 26–43 (right-hand rows, slot 1 = Y
+  position). Statuses show on the base layer by default (home markers
+  repainted alongside; `agent-leds base off` to disable) and on the
+  agent layer, where the toggle key lights white. Other layers keep
+  their firmware colours. Survives keyboard disconnects.
 
 ##### 📋 Requirements
 - Keymapp ≥ 1.3.2 (Brewfile) with its API enabled — `make keymapp-api`
@@ -47,11 +48,11 @@ flash the firmware, grant Hammerspoon Accessibility.
 `agent-leds` directly in a pane. `agent-status list` shows tracked
 sessions; `set`/`clear` for manual control.
 
-`agent-leds pause` silences all LED/HUD/toast output;
-`agent-leds pause flash` stops only the transition takeovers (the
-agent layer still paints on toggle); `agent-leds resume` /
-`agent-leds status` round it out. Housekeeping keeps running while
-paused.
+`agent-leds pause` goes fully silent — no output and no Keymapp API
+traffic (required while flashing firmware); `agent-leds pause notify`
+stops only the transition flashes; `agent-leds base off` disables the
+always-on base-layer display; `resume` / `status` round it out.
+Housekeeping keeps running while paused.
 
 Pressing a session key sends Hyper+letter; the Hammerspoon config
 (`hammerspoon/`, `make hammerspoon`) switches the most recently active
@@ -62,6 +63,6 @@ the agent layer (`kontroll set-layer 0`).
 While the agent layer is on, Hammerspoon shows a heads-up display of
 sessions with labels and states (driven by the daemon via
 `hammerspoon://agent-hud`). On a state change worth noticing (done,
-needs input, error) while on other layers, the daemon flashes the
-slot's LED for ~1s (whole-board takeover, display only — key mapping is
-unaffected) and Hammerspoon shows a matching toast bottom-right.
+needs input, error), Hammerspoon shows a toast bottom-right; on layers
+with no status display the daemon also flashes the slot's LED for ~1s
+(display only — key mapping is unaffected).
