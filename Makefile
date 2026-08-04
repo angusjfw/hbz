@@ -74,7 +74,7 @@ keymapp-api: ## Enable Keymapp's API + autoconnect in its config (macOS; restart
 	@if [ ! -f "$$HOME/Library/Application Support/.keymapp/keymapp.sqlite3" ]; then \
 	  open -a Keymapp && sleep 4 && pkill -f Keymapp.app && sleep 1; fi
 	sqlite3 "$$HOME/Library/Application Support/.keymapp/keymapp.sqlite3" \
-	  "update config set value='1' where key in ('api_enabled','startup_autoconnect')"
+	  "update config set value='1' where key in ('api_enabled','startup_autoconnect','startup_minimized')"
 	open -ga Keymapp
 
 session-leds-daemon: session-leds ## Install + start launchd agent for agent-leds (macOS)

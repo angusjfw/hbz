@@ -296,7 +296,12 @@ def main():
                 painting, last_painted = False, None
             if time.time() - last_connect_try > 5:
                 last_connect_try = time.time()
-                if sys.platform == "darwin" and not os.path.exists(SOCK):
+                # check the process, not the socket: a crashed Keymapp
+                # leaves a stale socket file behind
+                keymapp_up = subprocess.run(
+                    ["pgrep", "-x", "keymapp"],
+                    capture_output=True).returncode == 0
+                if sys.platform == "darwin" and not keymapp_up:
                     subprocess.Popen(["open", "-ga", "Keymapp"],
                                      stdout=subprocess.DEVNULL,
                                      stderr=subprocess.DEVNULL)

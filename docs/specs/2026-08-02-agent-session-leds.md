@@ -228,7 +228,13 @@ build and flash per `keyboard/README.md`.
 8. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
    No manager coupling: the daemon and CLI are standalone; the manager
    only ever contributes `slot` fields via the registry.
-9. Later: Linux/sway adapter; WSL; aggregate base-layer indicator.
+9. Later: Linux/sway adapter; WSL; aggregate base-layer indicator;
+   direct-HID renderer — speak the Oryx protocol (open source in the
+   zsa modules: `ORYX_SET_RGB_LED`, `ORYX_RGB_CONTROL`,
+   `ORYX_EVT_LAYER` pushes layer changes) via hidapi, dropping the
+   resident Keymapp dependency (kept only for flashing) and replacing
+   layer polling with push events. Needs the pairing handshake
+   (`ORYX_CMD_PAIRING_INIT/VALIDATE`) implemented.
 
 ## Non-goals (v1)
 
