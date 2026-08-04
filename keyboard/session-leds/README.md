@@ -47,6 +47,12 @@ flash the firmware, grant Hammerspoon Accessibility.
 `agent-leds` directly in a pane. `agent-status list` shows tracked
 sessions; `set`/`clear` for manual control.
 
+`agent-leds pause` silences all LED/HUD/toast output;
+`agent-leds pause flash` stops only the transition takeovers (the
+agent layer still paints on toggle); `agent-leds resume` /
+`agent-leds status` round it out. Housekeeping keeps running while
+paused.
+
 Pressing a session key sends Hyper+letter; the Hammerspoon config
 (`hammerspoon/`, `make hammerspoon`) switches the most recently active
 tmux client to that slot's session, focuses the terminal, and dismisses

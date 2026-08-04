@@ -7,6 +7,12 @@ session slot from the agent-status state dir; restores firmware
 colours the moment the layer is left. Handles keyboard disconnects.
 
 Requires Keymapp running with its API enabled, and kontroll on PATH.
+
+Control (writes a marker the running daemon honours):
+    agent-leds pause          # stop all LED/HUD/toast output
+    agent-leds pause flash    # only stop transition flashes
+    agent-leds resume
+    agent-leds status
 """
 
 import json
@@ -36,6 +42,17 @@ OFF = "#000000"
 # states worth a main-layer LED flash + desktop toast when entered
 NOTIFY_STATES = {"done", "needs_input", "error"}
 FLASH_S = 1.2
+
+PAUSE_FILE = os.path.join(STATE_DIR, "leds-paused")
+
+
+def pause_mode():
+    """None (running), 'flash' (no transition flashes), or 'all'."""
+    try:
+        with open(PAUSE_FILE) as f:
+            return f.read().strip() or "all"
+    except OSError:
+        return None
 
 if sys.platform == "darwin":
     DEFAULT_SOCK = os.path.expanduser(
@@ -252,26 +269,59 @@ def main():
                        if st in NOTIFY_STATES and prev_slots.get(s) != st}
         prev_slots = slots
 
-        if layer == AGENT_LAYER:
-            if not painting:
-                notify_hs("agent-hud", show="1")
-            if not painting or slots != last_painted:
-                paint(slots, last_painted if painting else None)
-                painting, last_painted = True, slots
-        else:
+        paused = pause_mode()
+        if paused == "all" or layer != AGENT_LAYER:
             if painting:
                 restore()
                 painting, last_painted = False, None
                 notify_hs("agent-hud", show="0")
-            for slot, state in changes.items():
-                notify_hs("agent-toast",
-                          label=labels.get(slot, f"slot {slot}"),
-                          state=state)
-            if changes and layer is not None:
-                flash(changes)
+        if paused != "all":
+            if layer == AGENT_LAYER:
+                if not painting:
+                    notify_hs("agent-hud", show="1")
+                if not painting or slots != last_painted:
+                    paint(slots, last_painted if painting else None)
+                    painting, last_painted = True, slots
+            else:
+                for slot, state in changes.items():
+                    notify_hs("agent-toast",
+                              label=labels.get(slot, f"slot {slot}"),
+                              state=state)
+                if changes and layer is not None and paused != "flash":
+                    flash(changes)
 
         time.sleep(POLL_S if layer is not None else 1)
 
 
+def ctl(args):
+    cmd = args[0]
+    if cmd == "pause":
+        mode = args[1] if len(args) > 1 else "all"
+        if mode not in ("all", "flash"):
+            print(f"unknown pause mode {mode!r}, want flash or nothing",
+                  file=sys.stderr)
+            return 1
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(PAUSE_FILE, "w") as f:
+            f.write(mode)
+        print(f"paused ({mode})")
+    elif cmd == "resume":
+        try:
+            os.remove(PAUSE_FILE)
+        except OSError:
+            pass
+        print("running")
+    elif cmd == "status":
+        mode = pause_mode()
+        print(f"paused ({mode})" if mode else "running")
+    else:
+        print("usage: agent-leds [pause [flash]|resume|status]",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        sys.exit(ctl(sys.argv[1:]))
     main()

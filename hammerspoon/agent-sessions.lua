@@ -7,7 +7,10 @@
 local M = {}
 
 local HYPER = { "ctrl", "alt", "shift", "cmd" }
-local LETTERS = "abcdefghijklmnopqr" -- letter i = slot i
+local LETTERS = "abcdefghijklmnopqr" -- what the firmware sends for slot i
+-- what the user sees: the physical key for each slot
+local KEYS = { "Y", "U", "I", "O", "P", "\\", "H", "J", "K", "L", ";",
+               "'", "N", "M", ",", ".", "/", "⇧" }
 local STATE_DIR = os.getenv("HOME") .. "/.local/state/agent-status"
 local KEYMAPP_SOCK = os.getenv("HOME")
     .. "/Library/Application Support/.keymapp/keymapp.sock"
@@ -45,7 +48,7 @@ end
 local function switchTo(slot)
   local session = sessionForSlot(slot)
   if not session then
-    hs.alert.show("no session on key " .. LETTERS:sub(slot, slot):upper())
+    hs.alert.show("no session on key " .. KEYS[slot])
     return
   end
   -- switch the most recently active tmux client, then dismiss the
@@ -101,7 +104,7 @@ local function renderHud()
     hud[#hud + 1] = {
       type = "text",
       text = string.format("%s  %s — %s",
-        LETTERS:sub(e.slot, e.slot):upper(),
+        KEYS[e.slot] or "?",
         e.label or e.tmux_session, e.state),
       textColor = { white = 1 }, textSize = 13,
       frame = { x = pad + 24, y = y + 2, w = w - pad - 24, h = rowH },

@@ -156,11 +156,17 @@ def cmd_set(tmux_session, state):
     return 0
 
 
+# physical key per slot on the agent layer
+SLOT_KEYS = ["Y", "U", "I", "O", "P", "\\", "H", "J", "K", "L", ";",
+             "'", "N", "M", ",", ".", "/", "⇧"]
+
+
 def cmd_list():
     entries = sorted(read_all().values(), key=lambda e: e.get("slot") or 99)
     for e in entries:
         slot = e.get("slot")
-        print(f"{slot if slot else '-':>2}  {e['state']:<11} "
+        key = SLOT_KEYS[slot - 1] if slot and slot <= len(SLOT_KEYS) else "-"
+        print(f"{key:>2}  {e['state']:<11} "
               f"{e['tmux_session']}  ({e.get('label', '')})")
     return 0
 
