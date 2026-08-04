@@ -70,18 +70,26 @@ claude-manager integration — the store remains the contract.
 - Pause: `pause` closes the HID device entirely (flash-safe — Keymapp
   needs exclusive access), `pause notify` as today.
 
-### Presentation (Hammerspoon's remaining role)
+### Presentation: one cross-platform renderer
 
-With hotkeys gone, Hammerspoon is only a renderer. Split the decision:
+The HUD is a first-class part of the feature (labels are what the
+LEDs can't show), so it gets one implementation, not per-platform
+adapters: a small python renderer process (`agent-hud`) that owns
+both the HUD panel and toasts, reading the same state dir and
+marker-file contract as today. Retires Hammerspoon entirely.
 
-- **Toasts** → native notifications (`osascript`, as `notify.sh`
-  already does; `mako`/`notify-send` on Linux). Hammerspoon toast code
-  retired.
-- **HUD** → keep the Hammerspoon canvas for now as an optional,
-  non-load-bearing renderer (marker-file contract unchanged; if
-  Hammerspoon isn't running, everything else still works). A ~150-line
-  native Swift overlay is the eventual replacement if we want
-  Hammerspoon fully gone; not worth it until the HUD design settles.
+- **Windowing: Tkinter** (stdlib, no new deps) — undecorated,
+  always-on-top panels on macOS/Linux/Windows. Drawing code kept
+  separate from the windowing layer so a later upgrade (Qt) is a
+  swap, not a rewrite. Cosmetic limits accepted for now (rounded
+  corners macOS-only).
+- **Wayland/sway**: clients can't self-position; placement comes from
+  a `for_window` rule keyed on the app id in the sway config.
+- Toasts render in the same process (small transient panels,
+  bottom-right), replacing both the Hammerspoon canvases and any
+  notification-center fallback.
+- Supervised like the daemon (launchd/systemd user unit), or spawned
+  by it.
 
 ## Firmware follow-up
 
@@ -113,8 +121,9 @@ passes (below).
    throwaway).
 2. `agent-leds` v2 behind a flag (`AGENT_LEDS_HID=1`), old path kept
    until parity: paint/flash/HUD-marker/pause/GC/demote.
-3. Move switching into the daemon; retire Hammerspoon hotkeys; toasts
-   → native notifications.
+3. Move switching into the daemon; build the `agent-hud` renderer
+   (Tkinter HUD + toasts); retire Hammerspoon (hotkeys, canvases and
+   the config symlink).
 4. Firmware: agent-layer keycodes to no-ops (post spike 4); reflash.
 5. Remove kontroll/Keymapp-API path, keymapp-api make target becomes
    flash-only doc; update specs/READMEs.
