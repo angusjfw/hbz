@@ -14,7 +14,7 @@ Layout "voyup", maintained in [Oryx](https://configure.zsa.io/voyager/layouts/PY
 | 0 | base | QWERTY. Ctrl/Shift on left pinky column, Esc·GUI·Alt inner bottom row, Del·Bspc and arrows bottom right. Green home markers. |
 | 1 | hold either inner thumb key | Number row, shifted symbols, brackets/braces. |
 | 2 | hold bottom-left key | F1–F12, volume, vim-style arrows on right home row, Caps Lock (red indicator while active). |
-| 3 | toggle bottom-right key | Agent sessions: status LEDs + Hyper+A…R switch keys on the right rows (see `session-leds/`); RGB/volume/media on the left. |
+| 3 | toggle bottom-right key | Agent sessions: status LEDs on the right rows, whose keys send nothing — agent-deck reads their positions over raw HID (see `session-leds/`); RGB/volume/media on the left. |
 | 4 | automatic on trackball motion | Mouse buttons, drag scroll, CPI up/down, layer lock. |
 | 5 | hold second bottom-left key | Manual copy of the mouse layer. |
 
@@ -47,7 +47,6 @@ Build: `make firmware` (needs `brew install qmk/qmk/qmk` after trusting
 the qmk/qmk, osx-cross/arm and osx-cross/avr taps, plus
 [ZSA's QMK fork](https://github.com/zsa/qmk_firmware) cloned at
 `~/dev/zsa-qmk` — override with `QMK_FORK=`). Flash the built bin from
-`voyager/firmware/` with Keymapp — stop the agent-leds daemon first
-(`launchctl bootout gui/$(id -u)/io.hbz.agent-leds`), its API
-connection blocks Keymapp's flash flow; restart with
-`make session-leds-daemon` after.
+`voyager/firmware/` with Keymapp — run `agent-deck pause` first, which
+closes its HID connection so Keymapp can claim the board, then
+`agent-deck resume` afterwards.

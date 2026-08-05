@@ -36,13 +36,15 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
-  // Agent layer: session status LEDs + Hyper+A..R switch keys, painted
-  // by the agent-leds daemon while toggled (see keyboard/session-leds/).
-  // Kept dark in the ledmap so nothing shows before host control engages.
+  // Agent layer: session status LEDs, painted by agent-deck while toggled
+  // (see keyboard/session-leds/). The session keys send nothing — the
+  // daemon reads their positions over raw HID, so a press can't leak a
+  // keycode into whatever has focus. Kept dark in the ledmap so nothing
+  // shows before host control engages.
   [3] = LAYOUT_voyager(
-    RGB_TOG,        LED_LEVEL,      RGB_VAD,        RGB_VAI,        KC_TRANSPARENT, KC_TRANSPARENT,                                 HYPR(KC_A),     HYPR(KC_B),     HYPR(KC_C),     HYPR(KC_D),     HYPR(KC_E),     HYPR(KC_F),
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,KC_AUDIO_VOL_UP,KC_AUDIO_MUTE,  KC_TRANSPARENT,                                 HYPR(KC_G),     HYPR(KC_H),     HYPR(KC_I),     HYPR(KC_J),     HYPR(KC_K),     HYPR(KC_L),
-    KC_TRANSPARENT, KC_MEDIA_PREV_TRACK,KC_MEDIA_NEXT_TRACK,KC_MEDIA_STOP,  KC_MEDIA_PLAY_PAUSE,KC_TRANSPARENT,                                 HYPR(KC_M),     HYPR(KC_N),     HYPR(KC_O),     HYPR(KC_P),     HYPR(KC_Q),     HYPR(KC_R),
+    RGB_TOG,        LED_LEVEL,      RGB_VAD,        RGB_VAI,        KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,
+    KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,KC_AUDIO_VOL_UP,KC_AUDIO_MUTE,  KC_TRANSPARENT,                                 KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,
+    KC_TRANSPARENT, KC_MEDIA_PREV_TRACK,KC_MEDIA_NEXT_TRACK,KC_MEDIA_STOP,  KC_MEDIA_PLAY_PAUSE,KC_TRANSPARENT,                                 KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),

@@ -171,9 +171,26 @@ pub fn demote_done_on_focus(done: &[Done]) {
         if fresh.state.as_deref() != Some(State::Done.as_str()) {
             continue;
         }
-        fresh.state = Some(State::Idle.as_str().to_string());
-        fresh.ts = Some(now_ts());
+        demote(&mut fresh);
         write_entry(&entry.path, &fresh);
+    }
+}
+
+/// `done` back to `idle`, per-Claude states included — the top-level state
+/// is only their aggregate, so leaving a sub-state at `done` would have the
+/// next event from a sibling Claude revive it.
+fn demote(entry: &mut Entry) {
+    entry.state = Some(State::Idle.as_str().to_string());
+    entry.ts = Some(now_ts());
+    let Some(claudes) = entry.rest.get_mut("claudes").and_then(Value::as_object_mut) else {
+        return;
+    };
+    for claude in claudes.values_mut() {
+        if let Some(claude) = claude.as_object_mut()
+            && claude.get("state").and_then(Value::as_str) == Some(State::Done.as_str())
+        {
+            claude.insert("state".to_string(), Value::from(State::Idle.as_str()));
+        }
     }
 }
 
@@ -378,6 +395,22 @@ slot: 20
             serde_json::from_str::<Value>(json).unwrap()["claudes"]
         );
         assert_eq!(out["slot"], 2);
+    }
+
+    #[test]
+    fn demotion_reaches_the_per_claude_states() {
+        let mut entry: Entry = serde_json::from_str(
+            r#"{"tmux_session":"s","state":"done","slot":1,
+                "claudes":{"a":{"state":"done","pane_id":"%1"},
+                           "b":{"state":"idle","pane_id":"%2"}}}"#,
+        )
+        .unwrap();
+        demote(&mut entry);
+        assert_eq!(entry.state.as_deref(), Some("idle"));
+        let claudes = entry.rest["claudes"].as_object().unwrap();
+        assert_eq!(claudes["a"]["state"], "idle", "the done one falls back");
+        assert_eq!(claudes["b"]["state"], "idle");
+        assert_eq!(claudes["a"]["pane_id"], "%1", "and keeps its pane");
     }
 
     #[test]
