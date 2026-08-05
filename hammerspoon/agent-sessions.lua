@@ -9,8 +9,11 @@ local M = {}
 local HYPER = { "ctrl", "alt", "shift", "cmd" }
 local LETTERS = "abcdefghijklmnopqr" -- what the firmware sends for slot i
 -- what the user sees: the physical key for each slot
+-- (19+ = left-half spillover, backup when the right half is full)
 local KEYS = { "Y", "U", "I", "O", "P", "\\", "H", "J", "K", "L", ";",
-               "'", "N", "M", ",", ".", "/", "⇧" }
+               "'", "N", "M", ",", ".", "/", "⇧",
+               "⇥", "Q", "W", "E", "R", "T", "⌃", "A", "S", "D", "F",
+               "G", "⇧", "Z", "X", "C", "V", "B" }
 local STATE_DIR = os.getenv("HOME") .. "/.local/state/agent-status"
 local KEYMAPP_SOCK = os.getenv("HOME")
     .. "/Library/Application Support/.keymapp/keymapp.sock"

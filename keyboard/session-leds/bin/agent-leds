@@ -300,7 +300,7 @@ def flash(changes):
     hand colours back. One takeover per state change; input mapping is
     unaffected throughout."""
     for slot, state in changes.items():
-        kontroll("set-rgb", "-l", str(BASE_LED + slot - 1),
+        kontroll("set-rgb", "-l", str(slot_led(slot)),
                  "-c", COLORS[state])
     time.sleep(FLASH_S)
     restore()
