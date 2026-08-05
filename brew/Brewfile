@@ -16,6 +16,7 @@ brew "gh"
 brew "gnupg"
 brew "imagemagick"
 brew "media-info"
+brew "rust"
 brew "worktrunk"
 brew "raine/git-surgeon/git-surgeon"
 

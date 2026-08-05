@@ -14,6 +14,9 @@ docs/notes/
 # Work-specific packages
 brew/Brewfile.work
 
+# Subproject build artifacts
+keyboard/session-leds/agent-deck/target/
+
 # Local Claude settings — live file holds machine/work-local fields;
 # seeded from claude/settings.json.example by `make ai`
 claude/settings.json

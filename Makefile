@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon keymapp-api hammerspoon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon agent-deck keymapp-api hammerspoon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -68,6 +68,12 @@ session-leds: ## Symlink agent session status tools into ~/.local/bin (+ kontrol
 	  install -m 755 /tmp/kontroll ~/.local/bin/kontroll && \
 	  xattr -d com.apple.quarantine ~/.local/bin/kontroll 2>/dev/null; \
 	  rm -f /tmp/kontroll.zip /tmp/kontroll; fi
+
+agent-deck: ## Build + install the direct-HID session LED daemon (needs rust)
+	cd ${DIR}/keyboard/session-leds/agent-deck && cargo build --release
+	mkdir -p ~/.local/bin
+	install -m 755 ${DIR}/keyboard/session-leds/agent-deck/target/release/agent-deck \
+	  ~/.local/bin/agent-deck
 
 keymapp-api: ## Enable Keymapp's API + autoconnect in its config (macOS; restarts Keymapp)
 	@pkill -f Keymapp.app 2>/dev/null && sleep 1 || true

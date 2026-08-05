@@ -1,0 +1,17 @@
+[package]
+name = "agent-deck"
+version = "0.1.0"
+edition = "2024"
+description = "Claude session status on the ZSA Voyager, over raw HID"
+publish = false
+
+[dependencies]
+hidapi = "2.6.6"
+notify = "8.2.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+signal-hook = "0.4.4"
+
+[profile.release]
+lto = true
+strip = true
