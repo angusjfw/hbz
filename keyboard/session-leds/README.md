@@ -19,10 +19,12 @@ client to it (adapter pending). Spec and design decisions:
 Slots belong to tmux sessions, not Claude processes — a Claude restart
 keeps its key. Registry slots are authoritative: they evict
 auto-assigned squatters, and registry sessions that haven't fired a
-hook yet are seeded as `off` entries so reserved keys never look free. Within a session, the first Claude owns the entry:
-events from others are ignored while the owner's pane is a live
-Claude; the entry parks `off` when the last Claude leaves, or passes
-to a survivor. Labels prefer the tmux session name (manager sessions
+hook yet are seeded as `off` entries so reserved keys never look free.
+With several Claudes in one session, the entry shows the
+highest-priority state among them (needs_input > error > working >
+done > idle) and parks `off` when the last one leaves. Idle
+"waiting for your input" notifications don't count as needs_input;
+permission requests do. Labels prefer the tmux session name (manager sessions
 are named descriptively), falling back to the cwd basename for
 auto-numbered sessions. State for a tmux session that no longer
 exists is dropped silently (killing a scratch session isn't an

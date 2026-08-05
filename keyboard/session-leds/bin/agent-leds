@@ -217,6 +217,9 @@ def demote_done_on_focus(done_sessions):
     for session in set(out.split()) & set(done_sessions):
         e = done_sessions[session]
         e["state"] = "idle"
+        for c in e.get("claudes", {}).values():
+            if c.get("state") == "done":
+                c["state"] = "idle"
         e["ts"] = int(time.time())
         path = os.path.join(STATE_DIR, f"{session}.json")
         tmp = path + ".tmp"

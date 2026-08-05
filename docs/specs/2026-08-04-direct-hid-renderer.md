@@ -110,8 +110,9 @@ identical behaviour, byte-for-byte semantics:
   live refresh, show/hide with the layer.
 - Controls and marker files unchanged: `pause [notify]`, `resume`,
   `base on|off`, `status`.
-- Store semantics untouched (ownership, park/off, GC, done-demotion,
-  registry reconcile + eviction).
+- Store semantics untouched (per-Claude state aggregation, park/off,
+  GC, done-demotion, registry reconcile + eviction, notification
+  classification).
 
 Deliberate improvements:
 

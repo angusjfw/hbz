@@ -21,13 +21,17 @@ SessionEnd parks the entry as `off` rather than freeing the slot, so
 Claude restarts don't shuffle keys. Only tmux-session death (GC) or
 manual `clear` frees a slot.
 
-Multi-Claude sessions have a durable owner: the first Claude claims
-the entry (session_id + pane_id recorded); events from other Claudes
-are ignored while the owner's pane is still a live Claude, and
-takeover is allowed once the entry is parked or the owner's pane
-stops being one. The owner's SessionEnd parks the entry only when no
-other Claude pane remains — otherwise ownership is released for a
-survivor to claim on its next event.
+Multi-Claude sessions aggregate: the entry tracks per-Claude states
+(`claudes: {session_id: {state, pane_id}}`) and shows the
+highest-priority one (needs_input > error > working > done > idle).
+A Claude's exit removes its sub-state; the entry parks `off` only
+when the last Claude pane is gone. Claudes whose pane stops being one
+are pruned on later events.
+
+Notification hooks are classified by message: permission requests map
+to needs_input; Claude Code's idle "waiting for your input"
+notifications are ignored (a finished session is `done`/`idle`, not
+demanding attention).
 
 `done` is sticky until the session is focused or a new prompt starts, then
 falls back to `idle`.

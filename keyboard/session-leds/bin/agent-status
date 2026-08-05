@@ -101,9 +101,17 @@ def claude_panes(tmux_session):
     return panes
 
 
-def owner_alive(entry, panes):
-    pane = entry.get("pane_id")
-    return bool(pane and panes.get(pane))
+# when several Claudes share a tmux session, the entry shows the
+# highest-priority state among them
+STATE_PRIORITY = ("needs_input", "error", "working", "done", "idle")
+
+
+def aggregate(claudes):
+    states = {c.get("state") for c in claudes.values()}
+    for s in STATE_PRIORITY:
+        if s in states:
+            return s
+    return "off"
 
 
 def make_label(tmux_session, cwd):
@@ -165,20 +173,26 @@ def cmd_event():
 
     entries = read_all()
     entry = entries.get(tmux_session)
-    caller_id = hook.get("session_id")
+    caller_id = hook.get("session_id") or "unknown"
     caller_pane = os.environ.get("TMUX_PANE")
 
+    if event == "Notification":
+        # Claude Code also sends idle "waiting for your input"
+        # notifications; only real attention requests are needs_input
+        if "waiting for your input" in (hook.get("message") or "").lower():
+            return 0
+
     if event == "SessionEnd":
-        if not entry or entry.get("session_id") not in (None, caller_id):
-            return 0  # only the owner may end the entry
+        if not entry:
+            return 0
+        claudes = entry.get("claudes") or {}
+        claudes.pop(caller_id, None)
+        entry["claudes"] = claudes
         others = [p for p, is_claude in claude_panes(tmux_session).items()
                   if is_claude and p != caller_pane]
-        if others:
-            # other Claudes remain: release ownership, keep the state;
-            # the next event from a survivor claims the entry
-            entry["session_id"] = None
-            entry["pane_id"] = None
-        else:
+        if claudes:
+            entry["state"] = aggregate(claudes)
+        elif not others:
             entry["state"] = "off"  # slot stays bound to the tmux session
         write(entry)
         return 0
@@ -190,14 +204,24 @@ def cmd_event():
     if entry is None:
         entry = {"tmux_session": tmux_session,
                  "slot": assign_slot(tmux_session, entries)}
-    elif entry.get("session_id") not in (None, caller_id):
-        # another Claude owns this session's entry; ignore unless it's
-        # parked or its pane is no longer a Claude (crashed/replaced)
-        if entry.get("state") != "off" and \
-                owner_alive(entry, claude_panes(tmux_session)):
-            return 0
-    entry["session_id"] = caller_id
-    entry["pane_id"] = caller_pane
+    claudes = entry.get("claudes")
+    if claudes is None:
+        claudes = {}
+        # migrate a single-owner entry from before per-Claude states
+        if entry.get("session_id") and entry.get("state") not in (None, "off"):
+            claudes[entry["session_id"]] = {"state": entry["state"],
+                                            "pane_id": entry.get("pane_id")}
+        entry.pop("session_id", None)
+        entry.pop("pane_id", None)
+    claudes[caller_id] = {"state": state, "pane_id": caller_pane}
+    # drop Claudes whose pane no longer runs one (crashed/replaced)
+    panes = claude_panes(tmux_session)
+    for sid in list(claudes):
+        if sid != caller_id:
+            pane = claudes[sid].get("pane_id")
+            if not (pane and panes.get(pane)):
+                del claudes[sid]
+    entry["claudes"] = claudes
     entry["label"] = make_label(tmux_session, hook.get("cwd"))
     # the registry is authoritative once the manager assigns a slot,
     # which may land after the session's first events
@@ -211,7 +235,7 @@ def cmd_event():
                     and registry_slot(other["tmux_session"]) != reg:
                 other["slot"] = assign_slot(other["tmux_session"], entries)
                 write(other)
-    entry["state"] = state
+    entry["state"] = aggregate(claudes)
     write(entry)
     return 0
 

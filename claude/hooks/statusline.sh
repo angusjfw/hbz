@@ -2,9 +2,9 @@
 # Claude Code statusLine.
 # Layout: cwd · branch · ctx% · model · effort · [style]
 #
-# Effort isn't in the statusLine JSON, so it's derived (in priority):
-#   CLAUDE_CODE_EFFORT_LEVEL env → effortLevel in ~/.claude/settings.json
-#   → model default (xhigh on Opus 4.7, high on Opus/Sonnet 4.6).
+# Effort comes from the statusLine JSON (.effort.level); fallbacks for
+# older versions: CLAUDE_CODE_EFFORT_LEVEL env → effortLevel in
+# ~/.claude/settings.json → model default.
 
 set -u
 
@@ -36,7 +36,8 @@ else                       ctx_c=$G
 fi
 ctx="${ctx_c}${pct}%${RST}"
 
-effort="${CLAUDE_CODE_EFFORT_LEVEL:-}"
+effort=$(jqr '.effort.level')
+[ -z "$effort" ] && effort="${CLAUDE_CODE_EFFORT_LEVEL:-}"
 if [ -z "$effort" ] || [ "$effort" = "auto" ]; then
   effort=$(jq -r '.effortLevel // empty' "$HOME/.claude/settings.json" 2>/dev/null)
 fi
