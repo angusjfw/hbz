@@ -165,20 +165,27 @@ passes (below).
 
 ## Spikes
 
-1. hidapi on macOS: open the Voyager's 0xFF60 interface, pair, observe
-   `EVT_LAYER`/`EVT_KEYDOWN` — confirm no TCC/Input-Monitoring prompt
-   and no fight with normal typing.
-2. Frame details: RAW_EPSIZE (32 vs 64), report-id prefix handling on
-   each platform.
-3. `SET_RGB_LED` brightness behaviour vs today's kontroll path (the
-   webhid effect applies raw RGB; check perceived brightness).
-4. Keypress events for `KC_NO`/`KC_TRANSPARENT` keys (enables dropping
-   Hyper keycodes).
-5. Exclusive access: confirm Keymapp and the daemon can't both hold
-   the interface, and that `pause` (device closed) is sufficient for
-   flashing.
-6. Reconnect across keyboard swaps between machines (re-enumerate +
-   re-pair loop).
+1. ~~hidapi on macOS~~ — proven end to end (python + brew hidapi):
+   Voyager at vid 0x3297 / pid 0x1977, usage_page 0xFF60 / usage 0x61;
+   opened with **no TCC prompt**; `GET_FW_VERSION` round-trip;
+   `PAIRING_INIT` → success + initial layer; `EVT_KEYDOWN/KEYUP`
+   (col,row) streamed live during normal typing with zero interference;
+   `SET_RGB_LED` accepted and `RGB_CONTROL 0` acked by event.
+2. ~~Frame details~~ — command frame: byte 0 command, params after,
+   32-byte reports, leading 0x00 report id on write (macOS).
+3. `SET_RGB_LED` brightness vs kontroll path: paint accepted; visual
+   check still pending.
+4. Keypress events for `KC_NO` keys: still pending (needs the firmware
+   change); events fired for every key tested including modifiers, so
+   expected to pass — `pre_process_record` runs regardless of keycode.
+5. Exclusive access / `pause` for flashing: still to verify, though
+   pairing state notably persisted across Keymapp's exit (the board
+   streamed to the next opener before we even paired).
+6. Reconnect across keyboard swaps: still to verify in the crate.
+
+Privacy note from spike 1: a paired listener receives every keypress
+position — effectively keystroke telemetry. agent-deck must never log
+or persist key events beyond agent-layer handling.
 
 ## Plan
 
