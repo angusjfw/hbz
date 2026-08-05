@@ -75,10 +75,12 @@ stops only the transition flashes; `agent-leds base off` disables the
 always-on base-layer display; `resume` / `status` round it out.
 Housekeeping keeps running while paused.
 
-`agent-deck` runs the same way (`make agent-deck`, then a pane or a
-supervisor) with the same controls. It needs the HID interface to
-itself: Keymapp holds the device exclusively, so quit Keymapp before
-starting it, and `agent-deck pause` hands the board back for flashing.
+`make agent-deck-daemon` is the same for `agent-deck` (logs to
+`agent-deck.log`) and stops the `agent-leds` unit on the way, since the
+two can't share the board. Controls are identical. It needs the HID
+interface to itself: Keymapp holds the device exclusively, so quit
+Keymapp before starting it, and `agent-deck pause` hands the board back
+for flashing.
 
 Pressing a session key sends Hyper+letter; the Hammerspoon config
 (`hammerspoon/`, `make hammerspoon`) switches the most recently active

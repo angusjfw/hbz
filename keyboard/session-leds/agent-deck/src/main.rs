@@ -159,17 +159,14 @@ fn run() {
         };
 
         // a layer that displays the change needs no announcement; elsewhere
-        // it's a toast, plus a flash when the board shows nothing
-        if !changes.is_empty()
-            && paused != Some(Pause::All)
-            && layer.is_some()
-            && layer != Some(config::AGENT_LAYER)
-        {
+        // it's a toast, which is host-side and fires with no board at all
+        if !changes.is_empty() && paused != Some(Pause::All) && layer != Some(config::AGENT_LAYER) {
             for (slot, state) in &changes {
                 let fallback = format!("slot {slot}");
                 hud::toast(labels.get(slot).unwrap_or(&fallback), state.as_str());
             }
-            if display.is_empty() && paused != Some(Pause::Notify) {
+            // and a flash, when there's a board and it shows nothing
+            if display.is_empty() && layer.is_some() && paused != Some(Pause::Notify) {
                 flash.start(&changes, now);
             }
         }

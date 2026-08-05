@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon agent-deck keymapp-api hammerspoon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon agent-deck agent-deck-daemon keymapp-api hammerspoon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -74,6 +74,15 @@ agent-deck: ## Build + install the direct-HID session LED daemon (needs rust)
 	mkdir -p ~/.local/bin
 	install -m 755 ${DIR}/keyboard/session-leds/agent-deck/target/release/agent-deck \
 	  ~/.local/bin/agent-deck
+
+agent-deck-daemon: agent-deck ## Install + start launchd agent for agent-deck, stopping agent-leds (macOS)
+	@# the two can't share the board: agent-leds goes, Keymapp stays quit
+	launchctl bootout gui/$$(id -u)/io.hbz.agent-leds 2>/dev/null || true
+	rm -f ~/Library/LaunchAgents/io.hbz.agent-leds.plist
+	sed "s|__HOME__|$$HOME|g" ${DIR}/keyboard/session-leds/launchd/io.hbz.agent-deck.plist \
+	  > ~/Library/LaunchAgents/io.hbz.agent-deck.plist
+	launchctl bootout gui/$$(id -u)/io.hbz.agent-deck 2>/dev/null || true
+	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.hbz.agent-deck.plist
 
 keymapp-api: ## Enable Keymapp's API + autoconnect in its config (macOS; restarts Keymapp)
 	@pkill -f Keymapp.app 2>/dev/null && sleep 1 || true
