@@ -20,7 +20,6 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
 - `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
 - `keyboard/` — ZSA Voyager layout: QMK source and firmware (repo is source of truth; flashed, not symlinked) + session-leds tooling
-- `hammerspoon/` — macOS hotkeys and agent session HUD (symlinked to `~/.hammerspoon`)
 - `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch)
 - `arch/` — Arch/sway install notes, `screenshots/` — repo screenshots
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.

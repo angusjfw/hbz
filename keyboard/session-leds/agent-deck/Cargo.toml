@@ -6,11 +6,18 @@ description = "Claude session status on the ZSA Voyager, over raw HID"
 publish = false
 
 [dependencies]
+eframe = { version = "0.36.0", default-features = false, features = [
+  "default_fonts",
+  "glow",
+  "wayland",
+  "x11",
+] }
 hidapi = "2.6.6"
 notify = "8.2.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 signal-hook = "0.4.4"
+winit = "0.30"
 
 [profile.release]
 lto = true

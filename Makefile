@@ -1,13 +1,13 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon agent-deck agent-deck-daemon keymapp-api hammerspoon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon agent-deck agent-deck-daemon keymapp-api firmware help
 
 install: mac ## Default target: full macOS install
 
 help: ## List the documented targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*## "}{printf "  %-14s %s\n", $$1, $$2}'
 
-mac: brew common ghostty macos-defaults hammerspoon ## Full macOS setup (brew + common + ghostty + defaults)
+mac: brew common ghostty macos-defaults ## Full macOS setup (brew + common + ghostty + defaults)
 
 arch: pkg common z dircolors sway mako konsole wallpapers ## Full Arch/sway setup
 
@@ -97,9 +97,6 @@ session-leds-daemon: session-leds ## Install + start launchd agent for agent-led
 	  > ~/Library/LaunchAgents/io.hbz.agent-leds.plist
 	launchctl bootout gui/$$(id -u)/io.hbz.agent-leds 2>/dev/null || true
 	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.hbz.agent-leds.plist
-
-hammerspoon: ## Symlink Hammerspoon config (agent session switcher)
-	ln -sfn ${DIR}/hammerspoon ~/.hammerspoon
 
 QMK_FORK ?= ~/dev/zsa-qmk
 

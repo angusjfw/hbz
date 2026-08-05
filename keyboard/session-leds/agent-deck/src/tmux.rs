@@ -1,7 +1,7 @@
 //! tmux is both the switch target and the liveness signal for a session.
 //! Short-lived CLI calls, as in the status CLI.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 
 pub enum Panes {
@@ -34,6 +34,24 @@ pub fn pane_commands(session: &str) -> Panes {
         Ok(_) => Panes::Missing,
         Err(_) => Panes::Unavailable,
     }
+}
+
+/// Session name to creation order. tmux session ids increment, so this is
+/// the order the switcher lists them in.
+pub fn creation_order() -> HashMap<String, u32> {
+    let Ok(out) = Command::new("tmux")
+        .args(["list-sessions", "-F", "#{session_id} #{session_name}"])
+        .output()
+    else {
+        return HashMap::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| {
+            let (id, name) = line.split_once(' ')?;
+            Some((name.to_string(), id.trim_start_matches('$').parse().ok()?))
+        })
+        .collect()
 }
 
 /// The most recently active attached client, which is the one a switch

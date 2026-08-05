@@ -62,6 +62,12 @@ impl State {
     pub fn worth_noticing(self) -> bool {
         matches!(self, State::Done | State::NeedsInput | State::Error)
     }
+
+    /// On screen every state gets a dot, `off` included, where the board
+    /// just leaves the key dark.
+    pub fn dot(self) -> Rgb {
+        self.color().unwrap_or(Rgb(0x59, 0x59, 0x59))
+    }
 }
 
 pub const BASE_LAYER: u8 = 0;
@@ -177,6 +183,20 @@ pub const EMPTY_PULSE_COLOR: Rgb = Rgb(0x2A, 0x2A, 0x2A);
 /// so this only has to be the terminal.
 pub const TERMINAL_APP: &str = "Ghostty";
 
+/// The key each slot lives on, as the HUD labels it — base keycaps, so a
+/// shifted symbol is never shown for a key you'd press unshifted.
+const SLOT_KEYS: [&str; MAX_SLOTS as usize] = [
+    "Y", "U", "I", "O", "P", "\\", "H", "J", "K", "L", ";", "'", "N", "M", ",", ".", "/", "⇧", "⇥",
+    "Q", "W", "E", "R", "T", "⌃", "A", "S", "D", "F", "G", "⇧", "Z", "X", "C", "V", "B",
+];
+
+pub fn slot_key(slot: u32) -> &'static str {
+    SLOT_KEYS.get(slot as usize - 1).copied().unwrap_or("?")
+}
+
+/// How long a toast stays up.
+pub const TOAST: Duration = Duration::from_millis(2500);
+
 /// The base ledmap's green home markers (F, J, both thumbs), repainted so
 /// the always-on display doesn't lose them.
 pub const HOME_MARKERS: [u8; 4] = [10, 24, 33, 51];
@@ -217,11 +237,6 @@ pub fn pause_file() -> PathBuf {
 
 pub fn base_off_file() -> PathBuf {
     state_dir().join("deck-base-off")
-}
-
-/// Watched by Hammerspoon (hs.pathwatcher) to show and hide the HUD.
-pub fn hud_file() -> PathBuf {
-    state_dir().join("hud-visible")
 }
 
 #[cfg(test)]

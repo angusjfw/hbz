@@ -11,8 +11,8 @@
 mod board;
 mod config;
 mod control;
-mod hud;
 mod input;
+mod overlay;
 mod render;
 mod store;
 mod tmux;
@@ -30,15 +30,28 @@ use hidapi::HidApi;
 use board::{Board, Event};
 use config::State;
 use control::Pause;
+use overlay::Shared;
 use render::{Flash, Frame, Painter, Pulse};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.is_empty() {
-        run();
-    } else {
+    if args.first().is_some_and(|arg| arg == "preview") {
+        return preview();
+    }
+    if !args.is_empty() {
         std::process::exit(control::run(&args));
     }
+    // the window's event loop wants the main thread (macOS insists), so the
+    // daemon runs beside it; LEDs keep working even if the window can't
+    let shared = overlay::shared();
+    let daemon = {
+        let shared = Arc::clone(&shared);
+        thread::spawn(move || run(shared))
+    };
+    if let Err(e) = overlay::run(Arc::clone(&shared)) {
+        log(&format!("no overlay window ({e}), LEDs only"));
+    }
+    let _ = daemon.join();
 }
 
 /// One line per connection change or real failure — this is a daemon log.
@@ -46,7 +59,29 @@ pub fn log(message: &str) {
     println!("agent-deck: {message}");
 }
 
-fn run() {
+/// Put the overlays on screen from the live store, without a board or a
+/// layer toggle — how the panels get looked at while they're being styled.
+fn preview() {
+    let shared = overlay::shared();
+    let feed = Arc::clone(&shared);
+    thread::spawn(move || {
+        let snapshot = store::read(&mut store::Health::new());
+        let first = snapshot.tracked.first().map(|t| (t.label.clone(), t.state));
+        overlay::set_hud(&feed, true, rows(&snapshot));
+        loop {
+            let (label, state) = first
+                .clone()
+                .unwrap_or_else(|| ("preview".to_string(), State::Done));
+            overlay::toast(&feed, &label, state);
+            thread::sleep(config::TOAST * 2);
+        }
+    });
+    if let Err(e) = overlay::run(shared) {
+        log(&format!("no overlay window ({e})"));
+    }
+}
+
+fn run(shared: Shared) {
     let quit = Arc::new(AtomicBool::new(false));
     for signal in [signal_hook::consts::SIGINT, signal_hook::consts::SIGTERM] {
         if let Err(e) = signal_hook::flag::register(signal, Arc::clone(&quit)) {
@@ -72,9 +107,8 @@ fn run() {
     let mut flash = Flash::default();
     let mut pulse = Pulse::default();
     let mut health = store::Health::new();
-    let mut slots = BTreeMap::new();
-    let mut labels = BTreeMap::new();
-    let mut sessions = BTreeMap::new();
+    let mut snapshot = store::Snapshot::default();
+    let mut lit = BTreeMap::new();
     // None until the first read: starting the daemon is not a state change
     let mut previous: Option<BTreeMap<u32, State>> = None;
     let mut hud_visible = false;
@@ -114,7 +148,7 @@ fn run() {
 
         // layer changes are pushed, so there's no poll gap to paint through
         if let Some(open) = &board
-            && let Err(e) = read_board(open, &mut layer, &sessions, &mut pulse, now)
+            && let Err(e) = read_board(open, &mut layer, &snapshot, &mut pulse, now)
         {
             log(&format!("board gone ({e})"));
             reported_down = true;
@@ -128,13 +162,14 @@ fn run() {
             store_dirty = true;
         }
         let mut changes: Vec<(u32, State)> = Vec::new();
+        let mut rows_changed = false;
         if store_dirty || due(last_read, now, config::STORE_REFRESH) {
             store_dirty = false;
             last_read = Some(now);
-            let snapshot = store::read(&mut health);
+            snapshot = store::read(&mut health);
+            lit = snapshot.lit();
             if let Some(previous) = &previous {
-                changes = snapshot
-                    .slots
+                changes = lit
                     .iter()
                     .filter(|(slot, state)| {
                         state.worth_noticing() && previous.get(slot) != Some(state)
@@ -142,10 +177,8 @@ fn run() {
                     .map(|(&slot, &state)| (slot, state))
                     .collect();
             }
-            previous = Some(snapshot.slots.clone());
-            slots = snapshot.slots;
-            labels = snapshot.labels;
-            sessions = snapshot.sessions;
+            previous = Some(lit.clone());
+            rows_changed = true;
             if due(last_focus, now, config::FOCUS_CHECK) {
                 last_focus = Some(now);
                 store::demote_done_on_focus(&snapshot.done);
@@ -159,7 +192,7 @@ fn run() {
         let mut display = if paused == Some(Pause::All) {
             Frame::new()
         } else {
-            render::frame_for(layer, &slots, control::base_display_on())
+            render::frame_for(layer, &lit, control::base_display_on())
         };
         if layer == Some(config::AGENT_LAYER) {
             pulse.overlay(&mut display, now);
@@ -168,9 +201,10 @@ fn run() {
         // a layer that displays the change needs no announcement; elsewhere
         // it's a toast, which is host-side and fires with no board at all
         if !changes.is_empty() && paused != Some(Pause::All) && layer != Some(config::AGENT_LAYER) {
-            for (slot, state) in &changes {
+            for &(slot, state) in &changes {
                 let fallback = format!("slot {slot}");
-                hud::toast(labels.get(slot).unwrap_or(&fallback), state.as_str());
+                let label = snapshot.label(slot).unwrap_or(&fallback);
+                overlay::toast(&shared, label, state);
             }
             // and a flash, when there's a board and it shows nothing
             if display.is_empty() && layer.is_some() && paused != Some(Pause::Notify) {
@@ -193,10 +227,11 @@ fn run() {
             painter.forget();
         }
 
-        // the HUD is up only while the agent layer is toggled
+        // the HUD is up only while the agent layer is toggled, and refreshes
+        // under it as sessions move
         let want_hud = paused != Some(Pause::All) && layer == Some(config::AGENT_LAYER);
-        if want_hud != hud_visible {
-            hud::set_visible(want_hud);
+        if want_hud != hud_visible || (want_hud && rows_changed) {
+            overlay::set_hud(&shared, want_hud, rows(&snapshot));
             hud_visible = want_hud;
         }
 
@@ -209,7 +244,21 @@ fn run() {
     if let Some(open) = &board {
         let _ = painter.release(open);
     }
-    hud::set_visible(false);
+    overlay::close(&shared);
+}
+
+/// HUD rows: every tracked session, in the order the store snapshot holds
+/// them (tmux creation order, matching the switcher).
+fn rows(snapshot: &store::Snapshot) -> Vec<overlay::Row> {
+    snapshot
+        .tracked
+        .iter()
+        .map(|t| overlay::Row {
+            slot: t.slot,
+            label: t.label.clone(),
+            state: t.state,
+        })
+        .collect()
 }
 
 /// Drain the board's event stream: track the layer, and handle presses
@@ -218,7 +267,7 @@ fn run() {
 fn read_board(
     board: &Board,
     layer: &mut Option<u8>,
-    sessions: &BTreeMap<u32, String>,
+    snapshot: &store::Snapshot,
     pulse: &mut Pulse,
     now: Instant,
 ) -> Result<(), hidapi::HidError> {
@@ -232,7 +281,7 @@ fn read_board(
                 let led = config::key_led(row, col);
                 let session = led
                     .and_then(config::led_slot)
-                    .and_then(|slot| sessions.get(&slot));
+                    .and_then(|slot| snapshot.session(slot));
                 if let Some(session) = session {
                     log(&format!("switching to {session}"));
                     input::switch_to(session);

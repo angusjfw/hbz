@@ -92,9 +92,10 @@ F13+ keysym quirk. Adapter maps Hyper+<letter> → slot → focus terminal +
 `tmux switch-client -t <tmux_session>` (target resolved from the store
 by slot). Per platform:
 
-- macOS: Hammerspoon (also hosts the on-screen twin)
-- Linux/sway: `bindsym` in existing sway config
-- WSL: Windows-side hotkey tool; later
+- macOS and Linux: none — `agent-deck` reads key positions straight
+  from the board over raw HID (see the direct-HID spec), so no hotkey
+  is registered with the OS at all
+- WSL: a Windows-side HID bridge; later
 
 Terminal emulator is irrelevant to switching (tmux does it); the
 adapter only needs to focus the terminal app, and only the global-
@@ -103,9 +104,9 @@ adapter, not in tmux.
 
 ### On-screen twin
 
-Same store, rendered as a labelled grid (session id, ticket, state).
-v1: Hammerspoon canvas on macOS. The store contract keeps the door
-open for a cross-platform mini-app later.
+Same store, rendered as a labelled grid (session id, ticket, state),
+drawn by `agent-deck` itself as a transparent click-through overlay
+(eframe), on every platform it runs on.
 
 ## Keyboard layout change
 
@@ -126,7 +127,6 @@ build and flash per `keyboard/README.md`.
 ## Repo layout
 
 - `keyboard/session-leds/` — status CLI, renderer daemon, launchd plist
-- `hammerspoon/` — macOS adapter (symlinked as `~/.hammerspoon`)
 - `claude/settings.json.example` — hook wiring (all events →
   `agent-status event`)
 - `claude/skills/claude-manager/SKILL.md` — slot field + assign/clear

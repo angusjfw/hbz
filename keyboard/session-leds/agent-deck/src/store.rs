@@ -41,14 +41,43 @@ pub struct Done {
     session: String,
 }
 
+/// One tracked session, as the board and the HUD see it.
+pub struct Tracked {
+    pub slot: u32,
+    pub state: State,
+    pub label: String,
+    pub session: Option<String>,
+}
+
 #[derive(Default)]
 pub struct Snapshot {
-    pub slots: BTreeMap<u32, State>,
-    pub labels: BTreeMap<u32, String>,
-    /// Switch targets, including the slots that are dark: a parked session
-    /// keeps its key, and pressing it should still switch there.
-    pub sessions: BTreeMap<u32, String>,
+    /// Every entry holding a slot, dark ones included: `off` shows greyed
+    /// in the HUD, and pressing a parked key still switches to its session.
+    pub tracked: Vec<Tracked>,
     pub done: Vec<Done>,
+}
+
+impl Snapshot {
+    /// Slots the board should light.
+    pub fn lit(&self) -> BTreeMap<u32, State> {
+        self.tracked
+            .iter()
+            .filter(|t| t.state.color().is_some())
+            .map(|t| (t.slot, t.state))
+            .collect()
+    }
+
+    pub fn label(&self, slot: u32) -> Option<&str> {
+        self.find(slot).map(|t| t.label.as_str())
+    }
+
+    pub fn session(&self, slot: u32) -> Option<&str> {
+        self.find(slot)?.session.as_deref()
+    }
+
+    fn find(&self, slot: u32) -> Option<&Tracked> {
+        self.tracked.iter().find(|t| t.slot == slot)
+    }
 }
 
 /// Read the store: slot states for the board, plus the housekeeping that
@@ -100,22 +129,29 @@ pub fn read(health: &mut Health) -> Snapshot {
         let Some(slot) = entry.slot.filter(|s| (1..=config::MAX_SLOTS).contains(s)) else {
             continue;
         };
-        if let Some(session) = &session {
-            snap.sessions.insert(slot, session.clone());
-        }
-        let Some(state) = state.filter(|s| s.color().is_some()) else {
-            continue;
-        };
-        snap.slots.insert(slot, state);
-        snap.labels.insert(
+        let label = entry
+            .label
+            .filter(|l| !l.is_empty())
+            .or_else(|| session.clone())
+            .unwrap_or_else(|| format!("slot {slot}"));
+        snap.tracked.push(Tracked {
             slot,
-            entry
-                .label
-                .filter(|l| !l.is_empty())
-                .or(session)
-                .unwrap_or_else(|| format!("slot {slot}")),
-        );
+            // an unreadable or missing state is as good as parked
+            state: state.unwrap_or(State::Off),
+            label,
+            session,
+        });
     }
+    // tmux creation order, so the HUD reads in the switcher's order
+    let order = tmux::creation_order();
+    snap.tracked.sort_by_key(|t| {
+        let by_session = t
+            .session
+            .as_ref()
+            .and_then(|s| order.get(s).copied())
+            .unwrap_or(u32::MAX);
+        (by_session, t.slot)
+    });
     health.prune();
     snap
 }

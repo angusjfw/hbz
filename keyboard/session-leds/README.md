@@ -42,26 +42,29 @@ error).
   repainted alongside; `agent-leds base off` to disable) and on the
   agent layer, where the toggle key lights white. Other layers keep
   their firmware colours. Survives keyboard disconnects.
-- `agent-deck/` — the same renderer as a Rust daemon talking raw HID to
-  the board directly, no Keymapp or kontroll in the path: it pairs
-  once, follows the layer events the board pushes and re-reads the
-  store when it changes, so nothing polls. `make agent-deck` builds and
-  installs it. Same controls (`pause [notify]`, `resume`,
-  `base on|off`, `status`) on its own marker files, so it can run
-  alongside `agent-leds` until it takes over; the two can't hold the
-  board at once. Slots 19–36 spill over onto the left half's letter
-  rows. Spec: `docs/specs/2026-08-04-direct-hid-renderer.md`.
+- `agent-deck/` — the whole feature as one Rust daemon talking raw HID
+  to the board, no Keymapp, kontroll or Hammerspoon in the path. It
+  pairs once, follows the layer events the board pushes, re-reads the
+  store when it changes (so nothing polls), paints the LEDs, handles
+  agent-layer key presses by position, and draws the HUD and toasts
+  itself. Same controls as `agent-leds` (`pause [notify]`, `resume`,
+  `base on|off`, `status`) on its own marker files. Slots 19–36 spill
+  over onto the left half's letter rows.
+  Spec: `docs/specs/2026-08-04-direct-hid-renderer.md`.
 
 ##### 📋 Requirements
-- Keymapp ≥ 1.3.2 (Brewfile) with its API enabled — `make keymapp-api`
-  flips the config; the daemon launches Keymapp itself when needed
-- [kontroll](https://github.com/zsa/kontroll) on PATH (`make
-  session-leds` downloads it on macOS)
 - Hooks wired in Claude settings (`make ai`) and tools symlinked
   (`make session-leds`, included in `make common`)
+- A rust toolchain (Brewfile) for `agent-deck`
+- Keymapp (Brewfile) for flashing firmware — with agent-deck paused
+- The `agent-leds` path additionally wants Keymapp ≥ 1.3.2 resident with
+  its API enabled (`make keymapp-api`) and
+  [kontroll](https://github.com/zsa/kontroll) on PATH (`make
+  session-leds` fetches it on macOS)
 
-New machine: `make common keymapp-api session-leds-daemon hammerspoon`,
-flash the firmware, grant Hammerspoon Accessibility.
+New machine: `make common agent-deck-daemon`, flash the firmware. No
+accessibility or automation permissions needed — the board is the input
+device, so nothing taps the OS keyboard.
 
 ##### 🚀 Run
 `make session-leds-daemon` installs and starts the launchd agent
@@ -79,18 +82,21 @@ Housekeeping keeps running while paused.
 `agent-deck.log`) and stops the `agent-leds` unit on the way, since the
 two can't share the board. Controls are identical. It needs the HID
 interface to itself: Keymapp holds the device exclusively, so quit
-Keymapp before starting it, and `agent-deck pause` hands the board back
-for flashing.
+Keymapp before starting agent-deck, and `agent-deck pause` hands the
+board back for flashing.
 
-Pressing a session key sends Hyper+letter; the Hammerspoon config
-(`hammerspoon/`, `make hammerspoon`) switches the most recently active
-tmux client to that slot's session, focuses the terminal, and dismisses
-the agent layer (`kontroll set-layer 0`).
+Pressing a session key switches the most recently active tmux client to
+that slot's session, brings the terminal forward and dismisses the agent
+layer. The press arrives as a key position over HID, so no keycode
+reaches the OS and no global hotkey is involved. The pressed key blinks
+back, dimly when no session sits behind it.
 
 ##### 🖥️ Desktop
-While the agent layer is on, Hammerspoon shows a heads-up display of
-sessions with labels and states (the daemon toggles a marker file that
-a pathwatcher picks up, which also live-refreshes the HUD). On a state change worth noticing (done,
-needs input, error), Hammerspoon shows a toast bottom-right; on layers
-with no status display the daemon also flashes the slot's LED for ~1s
-(display only — key mapping is unaffected).
+While the agent layer is on, agent-deck shows a heads-up display of
+sessions with labels and states, in tmux creation order, refreshed live.
+On a state change worth noticing (done, needs input, error) a toast
+appears bottom-right; on layers with no status display the slot's LED
+also flashes for ~1s (display only — key mapping is unaffected). Both
+panels are transparent, click-through and never take focus.
+`agent-deck preview` puts them on screen without the keyboard, for when
+the styling is being worked on.

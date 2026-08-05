@@ -109,9 +109,8 @@ identical behaviour, byte-for-byte semantics:
   rows, **tmux creation order** (session id — matches the switcher),
   live refresh, show/hide with the layer.
 - Controls unchanged: `pause [notify]`, `resume`, `base on|off`,
-  `status`. Their marker files are `deck-*` rather than `leds-*` so
-  both daemons can sit on one machine during the swap; `hud-visible`
-  stays shared, since Hammerspoon watches it.
+  `status`. Their marker files are `deck-*` rather than `leds-*`, so
+  both daemons can sit on one machine during the swap.
 - Store semantics untouched (per-Claude state aggregation, park/off,
   GC, done-demotion, registry reconcile + eviction, notification
   classification).
@@ -154,8 +153,10 @@ Regressions to guard against:
   pathwatcher. Show/hide must stay <50ms.
 - **Focus stealing**: the overlay must never take key focus (macOS
   accessory activation policy; no activation on show).
-- **Visual fidelity**: egui defaults look like a game UI; restyle to
-  match the current panels before switching over.
+- **Visual fidelity**: egui defaults look like a game UI, so the panels
+  are styled to the canvases they replace (dark translucent slabs,
+  dot/key/label/state rows). Its bundled font has no keycap glyphs
+  (⇧ ⇥ ⌃) — a platform symbol font is loaded as a fallback.
 - Toolchain cost per machine (rust via brew/pacman) — accepted with
   the monorepo convention.
 
@@ -211,8 +212,15 @@ or persist key events beyond agent-layer handling.
    and demotion; LED colour fidelity and the layer toggle are eyeball
    checks. Nothing polls — the loop wakes on board events, store
    changes and a 1s housekeeping tick.
-3. Input handling + HUD/toasts in the same binary; retire Hammerspoon
-   (hotkeys, canvases, config symlink) and the marker-file HUD hop.
+3. ~~Input handling + HUD/toasts in the same binary~~ — presses arrive
+   as key positions and resolve through a matrix-to-LED table generated
+   from ZSA's `keyboard.json`; agent-deck switches the tmux client,
+   fronts the terminal and dismisses the layer over `SET_LAYER`. The
+   HUD and toasts are eframe panels on one transparent, click-through,
+   accessory-policy window, created hidden at startup and shown with
+   the layer. Hammerspoon is gone — hotkeys, canvases, config symlink,
+   cask and the marker-file HUD hop with it. `agent-deck preview` draws
+   the panels without a board for styling work.
 4. Firmware: agent-layer keycodes to no-ops (post spike 4); reflash.
 5. Remove kontroll/Keymapp-API path and the agent-leds python daemon;
    keymapp-api make target becomes flash-only doc; update
