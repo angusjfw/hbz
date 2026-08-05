@@ -27,6 +27,7 @@ import sys
 import time
 
 STATE_DIR = os.path.expanduser("~/.local/state/agent-status")
+REGISTRY = os.path.expanduser("~/.local/state/claude-manager/sessions.md")
 AGENT_LAYER = 3
 BASE_LAYER = 0
 BASE_LED = 26          # right half, top row: slot 1 = LED 26 (Y position)
@@ -177,6 +178,34 @@ def session_health(session):
     return health
 
 
+def reconcile_registry():
+    """Seed off-state entries for registry sessions that hold a slot
+    but have no state file yet (e.g. spawned or resumed and quiet
+    since) — otherwise their reserved keys look free on the board."""
+    try:
+        text = open(REGISTRY).read()
+    except OSError:
+        return
+    for section in re.split(r"^## ", text, flags=re.M)[1:]:
+        fields = dict(re.findall(r"^(\w+):\s*(.+)$", section, flags=re.M))
+        session, slot = fields.get("tmux_session"), fields.get("slot")
+        if not session or not slot:
+            continue
+        path = os.path.join(STATE_DIR, f"{session}.json")
+        if os.path.exists(path) or session_health(session) == "gone":
+            continue
+        os.makedirs(STATE_DIR, exist_ok=True)
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump({"tmux_session": session, "slot": int(slot),
+                           "label": session, "state": "off",
+                           "ts": int(time.time())}, f)
+            os.replace(tmp, path)
+        except (OSError, ValueError):
+            pass
+
+
 def demote_done_on_focus(done_sessions):
     """done -> idle once the user is looking at the session."""
     if not done_sessions:
@@ -264,6 +293,7 @@ def main():
     last_painted = None
     last_connect_try = 0.0
     last_focus_check = 0.0
+    last_reconcile = 0.0
     prev_slots = None  # None = first read, never flash on startup
     hud_shown = False
 
@@ -307,6 +337,10 @@ def main():
                                      stderr=subprocess.DEVNULL)
                 else:
                     kontroll("connect-any")
+
+        if time.time() - last_reconcile > 15:
+            last_reconcile = time.time()
+            reconcile_registry()
 
         slots, labels, done_sessions = read_states()
         if time.time() - last_focus_check > FOCUS_CHECK_S:

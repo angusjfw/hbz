@@ -17,7 +17,9 @@ client to it (adapter pending). Spec and design decisions:
 | off | unlit (grey in HUD) | Claude exited cleanly; slot stays bound to the tmux session |
 
 Slots belong to tmux sessions, not Claude processes — a Claude restart
-keeps its key. Within a session, the first Claude owns the entry:
+keeps its key. Registry slots are authoritative: they evict
+auto-assigned squatters, and registry sessions that haven't fired a
+hook yet are seeded as `off` entries so reserved keys never look free. Within a session, the first Claude owns the entry:
 events from others are ignored while the owner's pane is a live
 Claude; the entry parks `off` when the last Claude leaves, or passes
 to a survivor. Labels prefer the tmux session name (manager sessions

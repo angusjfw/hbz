@@ -204,6 +204,13 @@ def cmd_event():
     reg = registry_slot(tmux_session)
     if reg is not None:
         entry["slot"] = reg
+        entries[tmux_session] = entry
+        # evict any squatter without its own registry claim
+        for other in entries.values():
+            if other is not entry and other.get("slot") == reg \
+                    and registry_slot(other["tmux_session"]) != reg:
+                other["slot"] = assign_slot(other["tmux_session"], entries)
+                write(other)
     entry["state"] = state
     write(entry)
     return 0
