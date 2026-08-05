@@ -5,9 +5,12 @@ Fed by Claude Code hooks (`agent-status event` with hook JSON on stdin),
 read by renderers (keyboard LEDs, on-screen twin). State lives in
 ~/.local/state/agent-status/<tmux-session>.json:
 
-    {"tmux_session", "state", "slot", "label", "session_id", "ts"}
+    {"tmux_session", "state", "slot", "label", "ts",
+     "claudes": {session_id: {"state", "pane_id"}}}
 
-States: idle, working, done, needs_input, error.
+States: idle, working, done, needs_input, error, off. The top-level
+state aggregates the per-Claude sub-states by priority
+(needs_input > error > working > done > idle; off when none remain).
 Slots come from the claude-manager registry when present, otherwise
 the lowest free slot is auto-assigned on first event.
 """

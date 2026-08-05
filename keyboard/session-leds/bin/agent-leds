@@ -395,14 +395,16 @@ def main():
                 restore()
             painting, last_painted = False, None
 
-        if paused != "all" and layer not in (AGENT_LAYER, None):
+        if paused != "all" and layer != AGENT_LAYER:
+            # toasts are host-side: they fire even with no board
             for slot, state in changes.items():
                 notify_hs("agent-toast",
                           label=labels.get(slot, f"slot {slot}"),
                           state=state)
             # a continuous display already shows the change; flash
-            # only when this layer displays nothing
-            if changes and not frame and paused != "notify":
+            # only when this layer displays nothing (and a board exists)
+            if changes and not frame and layer is not None \
+                    and paused != "notify":
                 flash(changes)
 
         time.sleep(POLL_S if layer is not None else 1)
