@@ -72,6 +72,11 @@ wired into the Makefile, `target/` gitignored, binary installed to
 - **Input**: `EVT_KEYDOWN` on the agent layer → resolve slot → tmux
   switch (most-recent client, as now) → focus terminal
   (`open -a` on macOS, `swaymsg` on Linux) → `SET_LAYER 0` dismiss.
+- **36 slots**: since input is positional (no keycodes needed), the
+  left-half letter rows (LEDs 0–17, same row-major order) become
+  spillover slots 19–36. Assignment always prefers 1–18; the left
+  half only lights when the right is full. Home markers yield to
+  occupied spillover slots as on the right.
 - **HUD + toasts in-process** (`egui`/eframe): GPU-rendered
   transparent, undecorated, always-on-top panels on all three
   platforms — the HUD is first-class (labels are what LEDs can't
