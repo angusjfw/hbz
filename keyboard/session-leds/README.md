@@ -42,6 +42,15 @@ error).
   repainted alongside; `agent-leds base off` to disable) and on the
   agent layer, where the toggle key lights white. Other layers keep
   their firmware colours. Survives keyboard disconnects.
+- `agent-deck/` — the same renderer as a Rust daemon talking raw HID to
+  the board directly, no Keymapp or kontroll in the path: it pairs
+  once, follows the layer events the board pushes and re-reads the
+  store when it changes, so nothing polls. `make agent-deck` builds and
+  installs it. Same controls (`pause [notify]`, `resume`,
+  `base on|off`, `status`) on its own marker files, so it can run
+  alongside `agent-leds` until it takes over; the two can't hold the
+  board at once. Slots 19–36 spill over onto the left half's letter
+  rows. Spec: `docs/specs/2026-08-04-direct-hid-renderer.md`.
 
 ##### 📋 Requirements
 - Keymapp ≥ 1.3.2 (Brewfile) with its API enabled — `make keymapp-api`
@@ -65,6 +74,11 @@ traffic (required while flashing firmware); `agent-leds pause notify`
 stops only the transition flashes; `agent-leds base off` disables the
 always-on base-layer display; `resume` / `status` round it out.
 Housekeeping keeps running while paused.
+
+`agent-deck` runs the same way (`make agent-deck`, then a pane or a
+supervisor) with the same controls. It needs the HID interface to
+itself: Keymapp holds the device exclusively, so quit Keymapp before
+starting it, and `agent-deck pause` hands the board back for flashing.
 
 Pressing a session key sends Hyper+letter; the Hammerspoon config
 (`hammerspoon/`, `make hammerspoon`) switches the most recently active

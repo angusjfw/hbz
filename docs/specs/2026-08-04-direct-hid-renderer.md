@@ -108,8 +108,10 @@ identical behaviour, byte-for-byte semantics:
 - HUD: top-centre, dark translucent rounded panel, dot/key/label/state
   rows, **tmux creation order** (session id — matches the switcher),
   live refresh, show/hide with the layer.
-- Controls and marker files unchanged: `pause [notify]`, `resume`,
-  `base on|off`, `status`.
+- Controls unchanged: `pause [notify]`, `resume`, `base on|off`,
+  `status`. Their marker files are `deck-*` rather than `leds-*` so
+  both daemons can sit on one machine during the swap; `hud-visible`
+  stays shared, since Hammerspoon watches it.
 - Store semantics untouched (per-Claude state aggregation, park/off,
   GC, done-demotion, registry reconcile + eviction, notification
   classification).
@@ -174,15 +176,22 @@ passes (below).
    `SET_RGB_LED` accepted and `RGB_CONTROL 0` acked by event.
 2. ~~Frame details~~ — command frame: byte 0 command, params after,
    32-byte reports, leading 0x00 report id on write (macOS).
-3. `SET_RGB_LED` brightness vs kontroll path: paint accepted; visual
-   check still pending.
+3. `SET_RGB_LED` brightness vs kontroll path: paint accepted, and the
+   webhid effect scales writes by the same global brightness the layer
+   ledmaps use (`rgb_matrix_config.hsv.v`, `rgb_matrix_kb.inc`), so
+   colours should match; visual check still pending.
 4. Keypress events for `KC_NO` keys: still pending (needs the firmware
    change); events fired for every key tested including modifiers, so
    expected to pass — `pre_process_record` runs regardless of keycode.
-5. Exclusive access / `pause` for flashing: still to verify, though
-   pairing state notably persisted across Keymapp's exit (the board
-   streamed to the next opener before we even paired).
-6. Reconnect across keyboard swaps: still to verify in the crate.
+5. ~~Exclusive access / `pause` for flashing~~ — exclusivity is real
+   and mutual: with Keymapp connected, opening fails with
+   `exclusive access and device already open`, so Keymapp must be quit
+   before starting agent-deck. The reverse works as designed —
+   `agent-deck pause` closes the device and Keymapp was connected
+   again within a second, so flashing stays available.
+6. Reconnect: verified across `pause`/`resume` (device closed and
+   reacquired within the retry interval); a physical unplug/replug
+   still to try.
 
 Privacy note from spike 1: a paired listener receives every keypress
 position — effectively keystroke telemetry. agent-deck must never log
@@ -193,9 +202,15 @@ or persist key events beyond agent-layer handling.
 1. Spike script proving pair + events + LED write (python + hidapi,
    single file, throwaway — fastest way to de-risk the protocol
    before the Rust build).
-2. `agent-deck` crate: HID + LED painting + state watching to parity
-   with today's daemon (paint/flash/pause/GC/demote), running
-   alongside the old stack until swapped.
+2. ~~`agent-deck` crate~~ — `keyboard/session-leds/agent-deck/`, built
+   and installed by `make agent-deck`. HID pairing, layer-event
+   following, notify-driven store reads, diff paints, flashes, toasts,
+   the pause/base controls and all the housekeeping (GC, persisted
+   error conversion, done-demotion, registry reconcile). Verified
+   live: connect, pause/resume around Keymapp, GC, error write-back
+   and demotion; LED colour fidelity and the layer toggle are eyeball
+   checks. Nothing polls — the loop wakes on board events, store
+   changes and a 1s housekeeping tick.
 3. Input handling + HUD/toasts in the same binary; retire Hammerspoon
    (hotkeys, canvases, config symlink) and the marker-file HUD hop.
 4. Firmware: agent-layer keycodes to no-ops (post spike 4); reflash.
