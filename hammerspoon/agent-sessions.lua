@@ -26,6 +26,22 @@ local STATE_COLORS = {
 }
 local HUD_FILE = STATE_DIR .. "/hud-visible"
 
+local function sessionOrder()
+  -- tmux session ids increment on creation, matching the switcher's
+  -- default index sort
+  local order = {}
+  local f = io.popen(
+    "/opt/homebrew/bin/tmux list-sessions -F '#{session_id} #{session_name}' 2>/dev/null")
+  if f then
+    for line in f:lines() do
+      local id, name = line:match("^%$(%d+)%s+(.+)$")
+      if id then order[name] = tonumber(id) end
+    end
+    f:close()
+  end
+  return order
+end
+
 local function entries()
   local out = {}
   local ok, iter, dirObj = pcall(hs.fs.dir, STATE_DIR)
@@ -36,7 +52,13 @@ local function entries()
       if e and e.slot then table.insert(out, e) end
     end
   end
-  table.sort(out, function(a, b) return a.slot < b.slot end)
+  local order = sessionOrder()
+  table.sort(out, function(a, b)
+    local oa = order[a.tmux_session or ""] or math.huge
+    local ob = order[b.tmux_session or ""] or math.huge
+    if oa ~= ob then return oa < ob end
+    return a.slot < b.slot
+  end)
   return out
 end
 

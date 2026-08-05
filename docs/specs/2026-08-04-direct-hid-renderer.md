@@ -95,6 +95,53 @@ an easy later swap if hook latency ever matters.
 Cost acknowledged: a Rust toolchain on each machine (brew/pacman
 `rust`) and a compile step in `make`.
 
+## UI/UX: parity first, then deltas
+
+The rebuild must not regress the lived-in UX. Parity checklist —
+identical behaviour, byte-for-byte semantics:
+
+- Base layer: always-on statuses + home markers (statuses outrank
+  markers on shared LEDs); `base off` reverts to firmware colours.
+- Agent layer: statuses, toggle key white, self-dismiss after switch.
+- Other layers: firmware colours untouched; ~1.2s single flash +
+  toast on done/needs-input/error; toast bottom-right, ~2.5s.
+- HUD: top-centre, dark translucent rounded panel, dot/key/label/state
+  rows, **tmux creation order** (session id — matches the switcher),
+  live refresh, show/hide with the layer.
+- Controls and marker files unchanged: `pause [notify]`, `resume`,
+  `base on|off`, `status`.
+- Store semantics untouched (ownership, park/off, GC, done-demotion,
+  registry reconcile + eviction).
+
+Deliberate improvements:
+
+- Push events end the poll gap: LEDs and HUD respond to a layer
+  toggle in ~ms, no dark flash while the poll catches up.
+- No OS-visible keycodes: agent-layer presses can't leak Hyper chords
+  into apps (today they do if Hammerspoon is dead).
+- Pressed-key feedback on the board itself (brief blink on the key,
+  "no session" shown as a red blink instead of an on-screen alert).
+- HUD rows clickable as a mouse switching path (optional, free with
+  egui).
+- 36 slots via left-half spillover (above).
+- One process, one supervisor; the Keymapp relaunch dance is gone.
+
+Regressions to guard against:
+
+- **Exclusive HID**: Keymapp can't connect while agent-deck holds the
+  interface — today they coexist because Keymapp *is* the broker.
+  Using Keymapp (flashing, live training) requires `agent-deck pause`
+  (which closes the device). Acceptable; document it.
+- **HUD latency**: create the egui window once and keep it hidden —
+  cold window + GPU context init would be slower than today's
+  pathwatcher. Show/hide must stay <50ms.
+- **Focus stealing**: the overlay must never take key focus (macOS
+  accessory activation policy; no activation on show).
+- **Visual fidelity**: egui defaults look like a game UI; restyle to
+  match the current panels before switching over.
+- Toolchain cost per machine (rust via brew/pacman) — accepted with
+  the monorepo convention.
+
 ## Firmware follow-up
 
 Once daemon input handling is proven, the agent layer's Hyper+A…R
