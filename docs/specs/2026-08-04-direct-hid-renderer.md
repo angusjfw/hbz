@@ -57,39 +57,38 @@ Events while paired:
 Unchanged: hooks, `agent-status`, the state store, slot semantics,
 claude-manager integration — the store remains the contract.
 
-`agent-leds` v2 (still python; + `hidapi` via brew/pip):
+**`agent-deck`: one Rust binary** replacing `agent-leds`, kontroll,
+resident Keymapp and Hammerspoon. Cargo crate at
+`keyboard/session-leds/agent-deck/` (monorepo subproject — own build,
+wired into the Makefile, `target/` gitignored, binary installed to
+`~/.local/bin`).
 
-- Owns the HID connection: enumerate by VID/PID + usage page, open,
-  pair, read events on a thread; reconnect on unplug (hidapi
-  enumeration poll, keyboard-swap friendly).
-- LED painting as today (frames, diff), but via `SET_RGB_LED` writes —
-  event-driven repaint on layer events and state-store changes.
+- **HID** (`hidapi` crate — same as kontroll uses): enumerate by
+  VID/PID + usage page 0xFF60, open, pair, read the event stream;
+  reconnect on unplug (keyboard-swap friendly).
+- **LEDs**: frames + diffing as today, via `SET_RGB_LED` writes —
+  repaint driven by layer events and state-store changes (`notify`
+  crate on the state dir), no polling anywhere.
 - **Input**: `EVT_KEYDOWN` on the agent layer → resolve slot → tmux
   switch (most-recent client, as now) → focus terminal
   (`open -a` on macOS, `swaymsg` on Linux) → `SET_LAYER 0` dismiss.
+- **HUD + toasts in-process** (`egui`/eframe): GPU-rendered
+  transparent, undecorated, always-on-top panels on all three
+  platforms — the HUD is first-class (labels are what LEDs can't
+  show). Wayland/sway can't self-position windows; placement comes
+  from a `for_window` rule in the sway config.
 - Pause: `pause` closes the HID device entirely (flash-safe — Keymapp
-  needs exclusive access), `pause notify` as today.
+  needs exclusive access), `pause notify` as today. Control marker
+  files unchanged.
+- Supervised by launchd/systemd user unit, as today.
 
-### Presentation: one cross-platform renderer
+`agent-status` (hooks CLI) stays python for now: stdlib-only,
+working, and its ~50ms interpreter startup sits at turn boundaries
+where it's invisible. A Rust port behind the same store contract is
+an easy later swap if hook latency ever matters.
 
-The HUD is a first-class part of the feature (labels are what the
-LEDs can't show), so it gets one implementation, not per-platform
-adapters: a small python renderer process (`agent-hud`) that owns
-both the HUD panel and toasts, reading the same state dir and
-marker-file contract as today. Retires Hammerspoon entirely.
-
-- **Windowing: Tkinter** (stdlib, no new deps) — undecorated,
-  always-on-top panels on macOS/Linux/Windows. Drawing code kept
-  separate from the windowing layer so a later upgrade (Qt) is a
-  swap, not a rewrite. Cosmetic limits accepted for now (rounded
-  corners macOS-only).
-- **Wayland/sway**: clients can't self-position; placement comes from
-  a `for_window` rule keyed on the app id in the sway config.
-- Toasts render in the same process (small transient panels,
-  bottom-right), replacing both the Hammerspoon canvases and any
-  notification-center fallback.
-- Supervised like the daemon (launchd/systemd user unit), or spawned
-  by it.
+Cost acknowledged: a Rust toolchain on each machine (brew/pacman
+`rust`) and a compile step in `make`.
 
 ## Firmware follow-up
 
@@ -117,19 +116,21 @@ passes (below).
 
 ## Plan
 
-1. Spike script proving pair + events + LED write (single file,
-   throwaway).
-2. `agent-leds` v2 behind a flag (`AGENT_LEDS_HID=1`), old path kept
-   until parity: paint/flash/HUD-marker/pause/GC/demote.
-3. Move switching into the daemon; build the `agent-hud` renderer
-   (Tkinter HUD + toasts); retire Hammerspoon (hotkeys, canvases and
-   the config symlink).
+1. Spike script proving pair + events + LED write (python + hidapi,
+   single file, throwaway — fastest way to de-risk the protocol
+   before the Rust build).
+2. `agent-deck` crate: HID + LED painting + state watching to parity
+   with today's daemon (paint/flash/pause/GC/demote), running
+   alongside the old stack until swapped.
+3. Input handling + HUD/toasts in the same binary; retire Hammerspoon
+   (hotkeys, canvases, config symlink) and the marker-file HUD hop.
 4. Firmware: agent-layer keycodes to no-ops (post spike 4); reflash.
-5. Remove kontroll/Keymapp-API path, keymapp-api make target becomes
-   flash-only doc; update specs/READMEs.
-6. Linux/sway and WSL follow the same daemon (WSL: a thin Windows-side
-   HID bridge is still required — the device can't be split between
-   Windows and WSL; design there when tackled).
+5. Remove kontroll/Keymapp-API path and the agent-leds python daemon;
+   keymapp-api make target becomes flash-only doc; update
+   specs/READMEs/Makefile (`make agent-deck` builds + installs).
+6. Linux/sway and WSL follow the same binary (WSL: a thin
+   Windows-side HID bridge is still required — the device can't be
+   split between Windows and WSL; design there when tackled).
 
 ## Non-goals
 
