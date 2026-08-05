@@ -12,6 +12,7 @@ mod board;
 mod config;
 mod control;
 mod hud;
+mod input;
 mod render;
 mod store;
 mod tmux;
@@ -29,7 +30,7 @@ use hidapi::HidApi;
 use board::{Board, Event};
 use config::State;
 use control::Pause;
-use render::{Flash, Frame, Painter};
+use render::{Flash, Frame, Painter, Pulse};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -69,9 +70,11 @@ fn run() {
     let mut reported_down = false;
     let mut painter = Painter::default();
     let mut flash = Flash::default();
+    let mut pulse = Pulse::default();
     let mut health = store::Health::new();
     let mut slots = BTreeMap::new();
     let mut labels = BTreeMap::new();
+    let mut sessions = BTreeMap::new();
     // None until the first read: starting the daemon is not a state change
     let mut previous: Option<BTreeMap<u32, State>> = None;
     let mut hud_visible = false;
@@ -111,7 +114,7 @@ fn run() {
 
         // layer changes are pushed, so there's no poll gap to paint through
         if let Some(open) = &board
-            && let Err(e) = follow_layer(open, &mut layer)
+            && let Err(e) = read_board(open, &mut layer, &sessions, &mut pulse, now)
         {
             log(&format!("board gone ({e})"));
             reported_down = true;
@@ -142,6 +145,7 @@ fn run() {
             previous = Some(snapshot.slots.clone());
             slots = snapshot.slots;
             labels = snapshot.labels;
+            sessions = snapshot.sessions;
             if due(last_focus, now, config::FOCUS_CHECK) {
                 last_focus = Some(now);
                 store::demote_done_on_focus(&snapshot.done);
@@ -152,11 +156,14 @@ fn run() {
             store::reconcile_registry(&mut health);
         }
 
-        let display = if paused == Some(Pause::All) {
+        let mut display = if paused == Some(Pause::All) {
             Frame::new()
         } else {
             render::frame_for(layer, &slots, control::base_display_on())
         };
+        if layer == Some(config::AGENT_LAYER) {
+            pulse.overlay(&mut display, now);
+        }
 
         // a layer that displays the change needs no announcement; elsewhere
         // it's a toast, which is host-side and fires with no board at all
@@ -205,17 +212,39 @@ fn run() {
     hud::set_visible(false);
 }
 
-/// Drain the board's event stream, tracking the current layer. Keypress
-/// positions arrive here too and are dropped undecoded: a paired listener
-/// sees every keystroke, so nothing is logged or kept.
-fn follow_layer(board: &Board, layer: &mut Option<u8>) -> Result<(), hidapi::HidError> {
+/// Drain the board's event stream: track the layer, and handle presses
+/// while the agent layer is up. Presses on any other layer are the user's
+/// ordinary typing — dropped without a look, never logged or kept.
+fn read_board(
+    board: &Board,
+    layer: &mut Option<u8>,
+    sessions: &BTreeMap<u32, String>,
+    pulse: &mut Pulse,
+    now: Instant,
+) -> Result<(), hidapi::HidError> {
     // the first read paces the loop, the rest drain what's queued
     let mut timeout = config::READ_TIMEOUT_MS;
     while let Some(event) = board.read_event(timeout)? {
-        if let Event::Layer(active) = event {
-            *layer = Some(active);
-        }
         timeout = 0;
+        match event {
+            Event::Layer(active) => *layer = Some(active),
+            Event::KeyDown { row, col } if *layer == Some(config::AGENT_LAYER) => {
+                let led = config::key_led(row, col);
+                let session = led
+                    .and_then(config::led_slot)
+                    .and_then(|slot| sessions.get(&slot));
+                if let Some(session) = session {
+                    log(&format!("switching to {session}"));
+                    input::switch_to(session);
+                    // dismiss the layer ourselves, over HID
+                    board.set_layer(config::BASE_LAYER)?;
+                }
+                if let Some(led) = led {
+                    pulse.start(led, session.is_some(), now);
+                }
+            }
+            Event::KeyDown { .. } | Event::Other => {}
+        }
     }
     Ok(())
 }

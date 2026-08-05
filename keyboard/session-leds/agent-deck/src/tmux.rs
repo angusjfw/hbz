@@ -36,6 +36,20 @@ pub fn pane_commands(session: &str) -> Panes {
     }
 }
 
+/// The most recently active attached client, which is the one a switch
+/// should move. `switch-client` needs it named explicitly.
+pub fn latest_client() -> Option<String> {
+    let out = Command::new("tmux")
+        .args(["list-clients", "-F", "#{client_activity} #{client_tty}"])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.split_once(' '))
+        .max_by_key(|(activity, _)| activity.parse::<u64>().unwrap_or(0))
+        .map(|(_, tty)| tty.to_string())
+}
+
 /// Sessions an attached client is currently looking at.
 pub fn focused_sessions() -> HashSet<String> {
     let Ok(out) = Command::new("tmux")

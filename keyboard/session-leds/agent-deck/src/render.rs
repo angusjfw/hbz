@@ -119,6 +119,39 @@ impl Flash {
     }
 }
 
+/// Press feedback: the pressed key blinks for a moment, dimly when no
+/// session sits behind it. Only ever overlaid on the agent layer — the
+/// base display is pure status and never blinks.
+#[derive(Default)]
+pub struct Pulse {
+    key: Option<(u8, Rgb)>,
+    until: Option<Instant>,
+}
+
+impl Pulse {
+    pub fn start(&mut self, led: u8, occupied: bool, now: Instant) {
+        let color = if occupied {
+            config::PULSE_COLOR
+        } else {
+            config::EMPTY_PULSE_COLOR
+        };
+        self.key = Some((led, color));
+        self.until = Some(now + config::PULSE);
+    }
+
+    pub fn overlay(&mut self, frame: &mut Frame, now: Instant) {
+        match (self.until, self.key) {
+            (Some(until), Some((led, color))) if now < until => {
+                frame.insert(led, color);
+            }
+            _ => {
+                self.key = None;
+                self.until = None;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +217,38 @@ mod tests {
             vec![(33, config::OFF)],
             "a cleared LED goes black"
         );
+    }
+
+    #[test]
+    fn pulse_marks_the_pressed_key_then_clears() {
+        let now = Instant::now();
+        let mut pulse = Pulse::default();
+        let mut frame = frame_for(
+            Some(config::AGENT_LAYER),
+            &slots(&[(1, State::Working)]),
+            true,
+        );
+
+        pulse.start(26, true, now);
+        pulse.overlay(&mut frame, now);
+        assert_eq!(
+            frame.get(&26),
+            Some(&config::PULSE_COLOR),
+            "over its status"
+        );
+
+        pulse.start(30, false, now);
+        pulse.overlay(&mut frame, now);
+        assert_eq!(frame.get(&30), Some(&config::EMPTY_PULSE_COLOR), "dim");
+
+        let mut later = frame_for(
+            Some(config::AGENT_LAYER),
+            &slots(&[(1, State::Working)]),
+            true,
+        );
+        pulse.overlay(&mut later, now + config::PULSE + Duration::from_millis(1));
+        assert_eq!(later.get(&30), None);
+        assert_eq!(later.get(&26), Some(&State::Working.color().unwrap()));
     }
 
     #[test]

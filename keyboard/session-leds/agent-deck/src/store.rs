@@ -45,6 +45,9 @@ pub struct Done {
 pub struct Snapshot {
     pub slots: BTreeMap<u32, State>,
     pub labels: BTreeMap<u32, String>,
+    /// Switch targets, including the slots that are dark: a parked session
+    /// keeps its key, and pressing it should still switch there.
+    pub sessions: BTreeMap<u32, String>,
     pub done: Vec<Done>,
 }
 
@@ -94,12 +97,15 @@ pub fn read(health: &mut Health) -> Snapshot {
             }
         }
 
-        let (Some(slot), Some(state)) = (entry.slot, state) else {
+        let Some(slot) = entry.slot.filter(|s| (1..=config::MAX_SLOTS).contains(s)) else {
             continue;
         };
-        if !(1..=config::MAX_SLOTS).contains(&slot) || state.color().is_none() {
-            continue;
+        if let Some(session) = &session {
+            snap.sessions.insert(slot, session.clone());
         }
+        let Some(state) = state.filter(|s| s.color().is_some()) else {
+            continue;
+        };
         snap.slots.insert(slot, state);
         snap.labels.insert(
             slot,

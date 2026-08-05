@@ -85,9 +85,97 @@ pub fn slot_led(slot: u32) -> Option<u8> {
     }
 }
 
+/// The slot a key stands for, if it is one — the inverse of `slot_led`.
+pub fn led_slot(led: u8) -> Option<u32> {
+    const RIGHT_LAST_LED: u8 = RIGHT_FIRST_LED + RIGHT_SLOTS as u8 - 1;
+    const LEFT_LAST_LED: u8 = LEFT_FIRST_LED + (MAX_SLOTS - LEFT_FIRST_SLOT) as u8;
+    match led {
+        RIGHT_FIRST_LED..=RIGHT_LAST_LED => Some((led - RIGHT_FIRST_LED) as u32 + 1),
+        LEFT_FIRST_LED..=LEFT_LAST_LED => Some(LEFT_FIRST_SLOT + (led - LEFT_FIRST_LED) as u32),
+        _ => None,
+    }
+}
+
+/// Physical key positions (matrix row, col) to LED index, generated from
+/// `keyboards/zsa/voyager/keyboard.json` in ZSA's QMK fork. The two orders
+/// differ — LEDs run the left half's rows then its thumbs and then the
+/// right half, while the matrix interleaves halves row by row, and two
+/// keys sit on matrix rows of their own.
+const KEY_LEDS: [(u8, u8, u8); 52] = [
+    (0, 1, 0),
+    (0, 2, 1),
+    (0, 3, 2),
+    (0, 4, 3),
+    (0, 5, 4),
+    (0, 6, 5),
+    (1, 1, 6),
+    (1, 2, 7),
+    (1, 3, 8),
+    (1, 4, 9),
+    (1, 5, 10),
+    (1, 6, 11),
+    (2, 1, 12),
+    (2, 2, 13),
+    (2, 3, 14),
+    (2, 4, 15),
+    (2, 5, 16),
+    (2, 6, 17),
+    (3, 1, 18),
+    (3, 2, 19),
+    (3, 3, 20),
+    (3, 4, 21),
+    (3, 5, 22),
+    (4, 4, 23),
+    (5, 0, 24),
+    (5, 1, 25),
+    (6, 0, 26),
+    (6, 1, 27),
+    (6, 2, 28),
+    (6, 3, 29),
+    (6, 4, 30),
+    (6, 5, 31),
+    (7, 0, 32),
+    (7, 1, 33),
+    (7, 2, 34),
+    (7, 3, 35),
+    (7, 4, 36),
+    (7, 5, 37),
+    (8, 0, 38),
+    (8, 1, 39),
+    (8, 2, 40),
+    (8, 3, 41),
+    (8, 4, 42),
+    (8, 5, 43),
+    (9, 1, 45),
+    (9, 2, 46),
+    (9, 3, 47),
+    (9, 4, 48),
+    (9, 5, 49),
+    (10, 2, 44),
+    (11, 5, 50),
+    (11, 6, 51),
+];
+
+pub fn key_led(row: u8, col: u8) -> Option<u8> {
+    KEY_LEDS
+        .iter()
+        .find(|&&(r, c, _)| (r, c) == (row, col))
+        .map(|&(_, _, led)| led)
+}
+
 /// The bottom-right TG(3) key, lit while the agent layer is on.
 pub const TOGGLE_LED: u8 = 49;
 pub const TOGGLE_COLOR: Rgb = Rgb(0xFF, 0xFF, 0xFF);
+
+/// Press feedback, agent layer only: the key that was pressed blinks,
+/// dimly when there's no session behind it. The base display never blinks.
+pub const PULSE: Duration = Duration::from_millis(140);
+pub const PULSE_COLOR: Rgb = Rgb(0xFF, 0xFF, 0xFF);
+pub const EMPTY_PULSE_COLOR: Rgb = Rgb(0x2A, 0x2A, 0x2A);
+
+/// What to bring forward after a switch. tmux does the session switching,
+/// so this only has to be the terminal.
+pub const TERMINAL_APP: &str = "Ghostty";
 
 /// The base ledmap's green home markers (F, J, both thumbs), repainted so
 /// the always-on display doesn't lose them.
@@ -149,6 +237,27 @@ mod tests {
         assert_eq!(slot_led(36), Some(17));
         assert_eq!(slot_led(0), None);
         assert_eq!(slot_led(37), None);
+    }
+
+    #[test]
+    fn key_positions_map_to_their_leds() {
+        assert_eq!(key_led(6, 0), Some(26), "Y, slot 1");
+        assert_eq!(key_led(1, 5), Some(10), "F, a home marker");
+        assert_eq!(key_led(9, 5), Some(49), "the TG(3) toggle key");
+        assert_eq!(key_led(4, 4), Some(23), "left row 3 sits on its own row");
+        assert_eq!(key_led(10, 2), Some(44), "as does right row 3's first key");
+        assert_eq!(key_led(9, 0), None, "no key there");
+        assert_eq!(key_led(12, 0), None);
+    }
+
+    #[test]
+    fn slots_and_leds_round_trip() {
+        for slot in 1..=MAX_SLOTS {
+            assert_eq!(led_slot(slot_led(slot).unwrap()), Some(slot));
+        }
+        assert_eq!(led_slot(TOGGLE_LED), None, "the toggle key is not a slot");
+        assert_eq!(led_slot(24), None, "nor are the thumbs");
+        assert_eq!(led_slot(18), None, "nor left row 3");
     }
 
     #[test]
