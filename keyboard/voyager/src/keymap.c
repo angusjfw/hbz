@@ -32,21 +32,23 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [2] = LAYOUT_voyager(
     KC_TRANSPARENT, KC_F1,          KC_F2,          KC_F3,          KC_F4,          KC_F5,                                          KC_F6,          KC_F7,          KC_F8,          KC_F9,          KC_F10,         KC_F11,         
     KC_CAPS,        KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,KC_AUDIO_VOL_UP,KC_AUDIO_MUTE,  KC_TRANSPARENT,                                 KC_LEFT,        KC_DOWN,        KC_UP,          KC_RIGHT,       KC_TRANSPARENT, KC_F12,         
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
+    KC_TRANSPARENT, RGB_TOG,        LED_LEVEL,      RGB_VAD,        RGB_VAI,        KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
-  // Agent layer: session status LEDs, painted by agent-deck while toggled
-  // (see keyboard/session-leds/). The session keys send nothing — the
-  // daemon reads their positions over raw HID, so a press can't leak a
-  // keycode into whatever has focus. Kept dark in the ledmap so nothing
-  // shows before host control engages.
+  // Agent layer: nothing but session status LEDs, painted by agent-deck
+  // while toggled (see keyboard/session-leds/). Every session key sends
+  // KC_NO — the daemon reads positions over raw HID, so a press can't
+  // leak a keycode into whatever has focus — and slots 19-36 spill onto
+  // the left half, which is why that side is blank too. Only the toggle
+  // key and the right-hand edge stay live. Kept dark in the ledmap so
+  // nothing shows before host control engages.
   [3] = LAYOUT_voyager(
-    RGB_TOG,        LED_LEVEL,      RGB_VAD,        RGB_VAI,        KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,KC_AUDIO_VOL_UP,KC_AUDIO_MUTE,  KC_TRANSPARENT,                                 KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,
-    KC_TRANSPARENT, KC_MEDIA_PREV_TRACK,KC_MEDIA_NEXT_TRACK,KC_MEDIA_STOP,  KC_MEDIA_PLAY_PAUSE,KC_TRANSPARENT,                                 KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,     KC_NO     ,
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,
-                                                    KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
+    KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,                                 KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,
+    KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,                                 KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,
+    KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,                                 KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,
+    KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,          KC_NO,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,
+                                                    KC_NO,          KC_NO,                           KC_TRANSPARENT, KC_TRANSPARENT
   ),
   [4] = LAYOUT_voyager(
     NAVIGATOR_DEC_CPI,NAVIGATOR_INC_CPI,KC_TRANSPARENT, QK_LLCK,        KC_MS_BTN3,     TOGGLE_SCROLL,                                  KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
@@ -91,10 +93,10 @@ const uint8_t PROGMEM ledmap[][RGB_MATRIX_LED_COUNT][3] = {
 
     [1] = { {94,213,199}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {42,219,214}, {42,219,214}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {94,213,199}, {42,219,214}, {42,219,214}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {221,228,214}, {221,228,214}, {221,228,214}, {221,228,214}, {0,0,0}, {0,0,0}, {0,0,0} },
 
-    [2] = { {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {18,219,214}, {0,0,0}, {113,114,225}, {38,255,255}, {6,178,100}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {221,228,214}, {221,228,214}, {221,228,214}, {221,228,214}, {0,0,0}, {139,219,215}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
+    [2] = { {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {18,219,214}, {0,0,0}, {113,114,225}, {38,255,255}, {6,178,100}, {0,0,0}, {0,0,0}, {170,180,180}, {170,180,180}, {170,180,180}, {170,180,180}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {139,219,215}, {221,228,214}, {221,228,214}, {221,228,214}, {221,228,214}, {0,0,0}, {139,219,215}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
 
     // Agent layer: dark except the toggle key (white while active);
-    // the agent-leds daemon paints session statuses on top.
+    // agent-deck paints session statuses on top.
     [3] = { {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,255}, {0,0,0}, {0,0,0} },
 
     [4] = { {125,84,200}, {34,218,247}, {0,0,0}, {0,255,255}, {0,255,255}, {14,255,255}, {0,0,0}, {0,0,0}, {0,0,0}, {0,255,255}, {0,255,255}, {30,255,255}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {221,228,214}, {221,228,214}, {221,228,214}, {221,228,214}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} },
