@@ -62,7 +62,7 @@ pub fn read(health: &mut Health) -> Snapshot {
         if path.extension().is_none_or(|e| e != "json") {
             continue;
         }
-        let Some(entry) = read_entry(&path) else {
+        let Some(mut entry) = read_entry(&path) else {
             continue;
         };
         let session = entry.tmux_session.clone();
@@ -83,9 +83,15 @@ pub fn read(health: &mut Health) -> Snapshot {
             });
         }
         // tmux alive but no Claude left: an unclean death, unless the entry
-        // is parked `off` (a clean exit keeps the slot bound to the session)
+        // is parked `off` (a clean exit keeps the slot bound to the session).
+        // Persisted, so the HUD and `agent-status list` agree with the LEDs.
         if health == Alive::NoClaude && state != Some(State::Off) {
             state = Some(State::Error);
+            if entry.state.as_deref() != Some(State::Error.as_str()) {
+                entry.state = Some(State::Error.as_str().to_string());
+                entry.ts = Some(now_ts());
+                write_entry(&path, &entry);
+            }
         }
 
         let (Some(slot), Some(state)) = (entry.slot, state) else {

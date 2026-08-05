@@ -31,7 +31,11 @@ REGISTRY = os.path.expanduser("~/.local/state/claude-manager/sessions.md")
 AGENT_LAYER = 3
 BASE_LAYER = 0
 BASE_LED = 26          # right half, top row: slot 1 = LED 26 (Y position)
-MAX_SLOTS = 18         # three right-hand rows, LEDs 26-43
+MAX_SLOTS = 36         # 1-18 right rows (LEDs 26-43); 19-36 left rows (LEDs 0-17)
+
+
+def slot_led(slot):
+    return BASE_LED + slot - 1 if slot <= 18 else slot - 19
 TOGGLE_LED = 49        # bottom-right TG(3) key: lit white on the agent layer
 TOGGLE_COLOR = "#FFFFFF"
 # the base ledmap's green home markers (F, J, thumbs), repainted so the
@@ -244,7 +248,7 @@ def demote_done_on_focus(done_sessions):
 
 def slot_leds(slots):
     """slot -> state dict as a led -> colour frame."""
-    return {BASE_LED + slot - 1: COLORS[state]
+    return {slot_led(slot): COLORS[state]
             for slot, state in slots.items()}
 
 
