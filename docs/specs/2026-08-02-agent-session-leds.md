@@ -10,7 +10,7 @@ client to that session. An on-screen twin renders the same state with labels.
 | State | Colour | Trigger |
 |-------|--------|---------|
 | idle | white | session registered, nothing running (SessionStart, post-attach) |
-| working | blue | prompt submitted, agent busy (UserPromptSubmit) |
+| working | blue | prompt submitted or tool completed (UserPromptSubmit, PostToolUse — the latter clears stale needs_input after a permission is answered, since no hook fires for resume) |
 | done | green | turn finished (Stop) |
 | needs input | yellow | permission request / waiting notification (Notification) |
 | error | red | Claude process vanished from a live tmux session (pane command check) |

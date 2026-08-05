@@ -26,6 +26,9 @@ MAX_SLOTS = 18
 EVENT_STATES = {
     "SessionStart": "idle",
     "UserPromptSubmit": "working",
+    # heartbeat: clears a stale needs_input once the permission is
+    # answered and the turn resumes (no hook fires for that directly)
+    "PostToolUse": "working",
     "Stop": "done",
     "Notification": "needs_input",
 }

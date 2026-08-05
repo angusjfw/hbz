@@ -57,6 +57,16 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/agent-status event"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
