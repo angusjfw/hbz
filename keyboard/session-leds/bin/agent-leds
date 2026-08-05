@@ -140,9 +140,20 @@ def read_states():
         if state == "done" and session:
             done_sessions[session] = e
         # tmux alive but no Claude left: an unclean death, unless the
-        # entry is "off" (clean exit, slot parked on the tmux session)
+        # entry is "off" (clean exit, slot parked on the tmux session).
+        # Persist the conversion so every renderer (HUD, list) agrees.
         if health == "no_claude" and state != "off":
             state = "error"
+            if e.get("state") != "error":
+                e["state"] = "error"
+                e["ts"] = int(time.time())
+                tmp = os.path.join(STATE_DIR, name) + ".tmp"
+                try:
+                    with open(tmp, "w") as f:
+                        json.dump(e, f)
+                    os.replace(tmp, os.path.join(STATE_DIR, name))
+                except OSError:
+                    pass
         if slot and 1 <= slot <= MAX_SLOTS and state in COLORS:
             slots[slot] = state
             labels[slot] = e.get("label") or session or f"slot {slot}"
