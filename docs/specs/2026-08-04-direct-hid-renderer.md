@@ -119,12 +119,26 @@ Deliberate improvements:
   toggle in ~ms, no dark flash while the poll catches up.
 - No OS-visible keycodes: agent-layer presses can't leak Hyper chords
   into apps (today they do if Hammerspoon is dead).
-- Pressed-key feedback on the board itself (brief blink on the key,
-  "no session" shown as a red blink instead of an on-screen alert).
-- HUD rows clickable as a mouse switching path (optional, free with
-  egui).
+- Press feedback on the board, agent layer only (never on the base
+  display): every press gets a brief pulse on that key; an empty key
+  pulses subtly instead of raising an on-screen alert.
 - 36 slots via left-half spillover (above).
 - One process, one supervisor; the Keymapp relaunch dance is gone.
+
+Design decisions (settled up front):
+
+- **Visuals**: refresh allowed — same layout, information and feel
+  (dark rounded panels), egui may improve typography/spacing where
+  clearly better; no redesign.
+- **Overlays are click-through**, HUD and toasts both — no mouse
+  interactions, keyboard-first.
+- **Toasts are first-class**: bottom-right, ~2.5s, on
+  done/needs-input/error transitions while the agent layer isn't
+  toggled; display-only.
+- **Config = constants in code**, as today's scripts; a config file
+  only if it ever hurts.
+- **All press feedback confined to the toggled agent layer**; the
+  base-layer display is pure status, never blinks.
 
 Regressions to guard against:
 
