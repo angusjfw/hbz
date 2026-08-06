@@ -51,3 +51,8 @@ the qmk/qmk, osx-cross/arm and osx-cross/avr taps, plus
 `voyager/firmware/` with Keymapp — run `agent-deck pause` first, which
 closes its HID connection so Keymapp can claim the board, then
 `agent-deck resume` afterwards.
+
+Keymapp's layout view is not a picture of what's on the board: it
+fetches the Oryx cloud revision for the layout id the firmware reports,
+so local `voyager/src/` edits never show up there however many times
+you flash them. Read the source, or the board itself.

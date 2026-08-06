@@ -178,10 +178,11 @@ status display. The RGB controls moved to layer 2.
    `SET_RGB_LED` accepted and `RGB_CONTROL 0` acked by event.
 2. ~~Frame details~~ — command frame: byte 0 command, params after,
    32-byte reports, leading 0x00 report id on write (macOS).
-3. `SET_RGB_LED` brightness vs kontroll path: paint accepted, and the
-   webhid effect scales writes by the same global brightness the layer
-   ledmaps use (`rgb_matrix_config.hsv.v`, `rgb_matrix_kb.inc`), so
-   colours should match; visual check still pending.
+3. ~~`SET_RGB_LED` brightness vs kontroll path~~ — matches by eye: the
+   webhid effect scales host writes by the same global brightness the
+   layer ledmaps use (`rgb_matrix_config.hsv.v`, `rgb_matrix_kb.inc`),
+   and firmware-rendered keys sit alongside host-painted ones at the
+   same level.
 4. ~~Keypress events for `KC_NO` keys~~ — passed on hardware: with the
    agent layer's letters flashed as `KC_NO`, presses still switch
    sessions and nothing reaches the focused app.
@@ -191,9 +192,8 @@ status display. The RGB controls moved to layer 2.
    before starting agent-deck. The reverse works as designed —
    `agent-deck pause` closes the device and Keymapp was connected
    again within a second, so flashing stays available.
-6. Reconnect: verified across `pause`/`resume` (device closed and
-   reacquired within the retry interval); a physical unplug/replug
-   still to try.
+6. ~~Reconnect~~ — a physical unplug and replug recovers on its own,
+   as does the close/reopen that `pause`/`resume` drives.
 
 Privacy note from spike 1: a paired listener receives every keypress
 position — effectively keystroke telemetry. agent-deck must never log
@@ -223,10 +223,10 @@ or persist key events beyond agent-layer handling.
    the layer. Hammerspoon is gone — hotkeys, canvases, config symlink,
    cask and the marker-file HUD hop with it. `agent-deck preview` draws
    the panels without a board for styling work.
-4. ~~Firmware: agent-layer keycodes to no-ops~~ — the right-hand
-   session keys are flashed and verified; the build that blanks the
-   left half too (and moves RGB to layer 2) is committed, awaiting a
-   flash.
+4. ~~Firmware: agent-layer keycodes to no-ops~~ — flashed and verified.
+   Layer 3 sends `KC_NO` throughout, bar the toggle key and the
+   right-hand edge; the RGB controls now live on layer 2, lit by its
+   ledmap.
 5. ~~Remove the kontroll/Keymapp-API path and the agent-leds python
    daemon~~ — script, launchd plist, `session-leds-daemon` and
    `keymapp-api` targets and the kontroll fetch are all deleted;
