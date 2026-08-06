@@ -121,19 +121,29 @@ covers the worker-side specifics.
    `claude-manager/SKILL.md` § Detect pane processes.
 
 2. **Capture pane snapshots** for every pane in every window into one
-   snapshot file, with `--- window <w> pane <p> ---` markers:
+   snapshot file, with `--- window <w> pane <p> ---` markers, each
+   pane's input box classified on its own line:
 
    ```bash
    snapshot="$HOME/.local/state/claude-manager/snapshots/<session-id>.txt"
+   box="$HOME/.claude/skills/tmux-interaction/scripts/read-input-box.py"
    mkdir -p "$(dirname "$snapshot")"
    tmux list-windows -t "$src_session" -F '#{window_index}' | while read w; do
      tmux list-panes -t "$src_session":$w -F '#{pane_index}' | while read p; do
+       t="${src_session}:${w}.${p}"
        echo "--- window $w pane $p ---"
-       tmux capture-pane -p -J -t "${src_session}:${w}.${p}" -S -500
+       tmux capture-pane -p -J -t "$t" -S -500
+       echo "--- input box: $("$box" "$t") ---"
        echo
      done
    done > "$snapshot"
    ```
+
+   `-p` strips colour, which flattens Claude's dim placeholder guess at
+   the user's next message into something indistinguishable from a real
+   unsent draft. The classification keeps them apart for whoever reads
+   the snapshot on a cold resume: `ghost` is Claude's own text, `draft`
+   is the user's.
 
 3. **Resolve Claude session ids for every Claude pane** identified in
    step 1. The calling worker is itself a Claude session; the
@@ -219,11 +229,14 @@ fulfils the journal write.
 
    ```bash
    snapshot="$HOME/.local/state/claude-manager/snapshots/<session-id>.txt"
+   box="$HOME/.claude/skills/tmux-interaction/scripts/read-input-box.py"
    mkdir -p "$(dirname "$snapshot")"
    tmux list-windows -t "$src_session" -F '#{window_index}' | while read w; do
      tmux list-panes -t "$src_session":$w -F '#{pane_index}' | while read p; do
+       t="${src_session}:${w}.${p}"
        echo "--- window $w pane $p ---"
-       tmux capture-pane -p -J -t "${src_session}:${w}.${p}" -S -500
+       tmux capture-pane -p -J -t "$t" -S -500
+       echo "--- input box: $("$box" "$t") ---"
        echo
      done
    done > "$snapshot"
