@@ -35,8 +35,8 @@ error).
 - `bin/agent-status` — state store CLI. Claude Code hooks pipe every
   event to `agent-status event`; state lands in
   `~/.local/state/agent-status/<tmux-session>.json`. Slots (key
-  positions 1–18) come from the claude-manager registry `slot` field
-  when present, else lowest-free auto-assignment.
+  positions 1–36) are assigned here alone, under a store lock, with
+  `slots.json` remembering name→slot across session lifetimes.
 - `bin/agent-leds` — renderer daemon. Polls Keymapp for the active
   layer and diff-paints slot LEDs 26–43 (right-hand rows, slot 1 = Y
   position). Statuses show on the base layer by default (home markers
