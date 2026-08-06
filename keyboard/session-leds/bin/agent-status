@@ -11,10 +11,14 @@ read by renderers (keyboard LEDs, on-screen twin). State lives in
 States: idle, working, done, needs_input, error, off. The top-level
 state aggregates the per-Claude sub-states by priority
 (needs_input > error > working > done > idle; off when none remain).
-Slots come from the claude-manager registry when present, otherwise
-the lowest free slot is auto-assigned on first event.
+Slot assignment is single-mechanism and remembered: slots.json maps
+session names to slots so a recreated session reclaims its key; a
+live incumbent always wins; new sessions prefer never-remembered
+slots. Assignment runs under a store lock. `slot <session> <n>`
+pins manually.
 """
 
+import contextlib
 import json
 import os
 import re
@@ -23,7 +27,6 @@ import sys
 import time
 
 STATE_DIR = os.path.expanduser("~/.local/state/agent-status")
-REGISTRY = os.path.expanduser("~/.local/state/claude-manager/sessions.md")
 MAX_SLOTS = 36  # 1-18 right half; 19-36 left-half spillover, used only when full
 
 EVENT_STATES = {
@@ -129,41 +132,89 @@ def make_label(tmux_session, cwd):
     return os.path.basename(cwd or "") or tmux_session
 
 
-def registry_slot(tmux_session):
-    """slot field from the claude-manager registry entry, if any."""
-    try:
-        with open(REGISTRY) as f:
-            text = f.read()
-    except OSError:
-        return None
-    for section in re.split(r"^## ", text, flags=re.M)[1:]:
-        fields = dict(re.findall(r"^(\w+):\s*(.+)$", section, flags=re.M))
-        if fields.get("tmux_session") == tmux_session and "slot" in fields:
+SLOTS_FILE = os.path.join(STATE_DIR, "slots.json")
+LOCK_DIR = os.path.join(STATE_DIR, ".lock")
+SLOT_MEMORY_DAYS = 60
+
+
+@contextlib.contextmanager
+def store_lock(timeout=2.0):
+    """Serialise read-assign-write across concurrent hook processes.
+    Best-effort: proceeds unlocked after the timeout rather than ever
+    stalling a hook; a lock dir older than 10s is treated as stale."""
+    deadline = time.time() + timeout
+    got = False
+    while time.time() < deadline:
+        try:
+            os.makedirs(LOCK_DIR)
+            got = True
+            break
+        except FileExistsError:
             try:
-                return int(fields["slot"])
-            except ValueError:
-                return None
-    return None
-
-
-def registry_slots():
-    """Every slot number reserved in the claude-manager registry."""
+                if time.time() - os.path.getmtime(LOCK_DIR) > 10:
+                    os.rmdir(LOCK_DIR)
+                    continue
+            except OSError:
+                pass
+            time.sleep(0.05)
     try:
-        with open(REGISTRY) as f:
-            return {int(m) for m in
-                    re.findall(r"^slot:\s*(\d+)$", f.read(), flags=re.M)}
-    except OSError:
-        return set()
+        yield
+    finally:
+        if got:
+            with contextlib.suppress(OSError):
+                os.rmdir(LOCK_DIR)
+
+
+def read_slot_memory():
+    try:
+        with open(SLOTS_FILE) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def remember_slot(name, slot):
+    """Persist name -> slot so a recreated session reclaims its key."""
+    if not slot:
+        return
+    mem = read_slot_memory()
+    mem[name] = {"slot": slot, "ts": int(time.time())}
+    cutoff = time.time() - SLOT_MEMORY_DAYS * 86400
+    mem = {k: v for k, v in mem.items() if v.get("ts", 0) > cutoff}
+    tmp = SLOTS_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(mem, f)
+    os.replace(tmp, SLOTS_FILE)
+
+
+def forget_slot(name):
+    mem = read_slot_memory()
+    if mem.pop(name, None) is not None:
+        tmp = SLOTS_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(mem, f)
+        os.replace(tmp, SLOTS_FILE)
 
 
 def assign_slot(tmux_session, entries):
-    slot = registry_slot(tmux_session)
-    if slot is not None:
-        return slot
-    taken = {e.get("slot") for e in entries.values()} | registry_slots()
+    """A live incumbent always keeps its slot; a returning session
+    reclaims its remembered one if free; new sessions prefer
+    never-remembered slots, then the stalest memory."""
+    live_taken = {e.get("slot") for e in entries.values()
+                  if e.get("tmux_session") != tmux_session}
+    mem = read_slot_memory()
+    remembered = (mem.get(tmux_session) or {}).get("slot")
+    if remembered and remembered not in live_taken:
+        return remembered
+    reserved = {v["slot"]: v.get("ts", 0)
+                for k, v in mem.items() if k != tmux_session and "slot" in v}
     for n in range(1, MAX_SLOTS + 1):
-        if n not in taken:
+        if n not in live_taken and n not in reserved:
             return n
+    stale_free = [(ts, n) for n, ts in reserved.items()
+                  if n not in live_taken]
+    if stale_free:
+        return min(stale_free)[1]
     return None  # more sessions than slots: tracked, unlit
 
 
@@ -177,8 +228,6 @@ def cmd_event():
     if tmux_session is None:
         return 0  # not in tmux: nothing to track against
 
-    entries = read_all()
-    entry = entries.get(tmux_session)
     caller_id = hook.get("session_id") or "unknown"
     caller_pane = os.environ.get("TMUX_PANE")
 
@@ -187,6 +236,15 @@ def cmd_event():
         # notifications; only real attention requests are needs_input
         if "waiting for your input" in (hook.get("message") or "").lower():
             return 0
+
+    with store_lock():
+        return apply_event(event, hook, tmux_session, caller_id,
+                           caller_pane)
+
+
+def apply_event(event, hook, tmux_session, caller_id, caller_pane):
+    entries = read_all()
+    entry = entries.get(tmux_session)
 
     if event == "SessionEnd":
         if not entry:
@@ -229,19 +287,8 @@ def cmd_event():
                 del claudes[sid]
     entry["claudes"] = claudes
     entry["label"] = make_label(tmux_session, hook.get("cwd"))
-    # the registry is authoritative once the manager assigns a slot,
-    # which may land after the session's first events
-    reg = registry_slot(tmux_session)
-    if reg is not None:
-        entry["slot"] = reg
-        entries[tmux_session] = entry
-        # evict any squatter without its own registry claim
-        for other in entries.values():
-            if other is not entry and other.get("slot") == reg \
-                    and registry_slot(other["tmux_session"]) != reg:
-                other["slot"] = assign_slot(other["tmux_session"], entries)
-                write(other)
     entry["state"] = aggregate(claudes)
+    remember_slot(tmux_session, entry.get("slot"))
     write(entry)
     return 0
 
@@ -280,15 +327,42 @@ def cmd_list():
 
 
 def cmd_clear(tmux_session=None):
-    if tmux_session:
-        try:
-            os.remove(state_path(tmux_session))
-        except OSError:
-            pass
-    elif os.path.isdir(STATE_DIR):
-        for name in os.listdir(STATE_DIR):
-            if name.endswith(".json"):
-                os.remove(os.path.join(STATE_DIR, name))
+    with store_lock():
+        if tmux_session:
+            try:
+                os.remove(state_path(tmux_session))
+            except OSError:
+                pass
+            forget_slot(tmux_session)
+        elif os.path.isdir(STATE_DIR):
+            for name in os.listdir(STATE_DIR):
+                if name.endswith(".json") or name == "slots.json":
+                    os.remove(os.path.join(STATE_DIR, name))
+    return 0
+
+
+def cmd_slot(tmux_session, slot):
+    """Manually place a session on a key (persisted)."""
+    try:
+        slot = int(slot)
+        assert 1 <= slot <= MAX_SLOTS
+    except (ValueError, AssertionError):
+        print(f"slot must be 1-{MAX_SLOTS}", file=sys.stderr)
+        return 1
+    with store_lock():
+        entries = read_all()
+        for e in entries.values():
+            if e.get("slot") == slot and e["tmux_session"] != tmux_session:
+                print(f"slot {slot} is held by live session "
+                      f"{e['tmux_session']!r} — clear it first",
+                      file=sys.stderr)
+                return 1
+        remember_slot(tmux_session, slot)
+        entry = entries.get(tmux_session)
+        if entry:
+            entry["slot"] = slot
+            write(entry)
+    print(f"{tmux_session} -> slot {slot}")
     return 0
 
 
@@ -306,7 +380,10 @@ def main():
         return cmd_list()
     if cmd == "clear":
         return cmd_clear(rest[0] if rest else None)
-    print(f"usage: agent-status event|set <session> <state>|list|clear [session]",
+    if cmd == "slot" and len(rest) == 2:
+        return cmd_slot(*rest)
+    print("usage: agent-status event|set <session> <state>|list"
+          "|clear [session]|slot <session> <n>",
           file=sys.stderr)
     return 1
 

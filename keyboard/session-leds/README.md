@@ -17,9 +17,10 @@ client to it (adapter pending). Spec and design decisions:
 | off | unlit (grey in HUD) | Claude exited cleanly; slot stays bound to the tmux session |
 
 Slots belong to tmux sessions, not Claude processes — a Claude restart
-keeps its key. Registry slots are authoritative: they evict
-auto-assigned squatters, and registry sessions that haven't fired a
-hook yet are seeded as `off` entries so reserved keys never look free.
+keeps its key, and `slots.json` remembers name→slot so a recreated
+session reclaims its key when free — a live incumbent always wins.
+The claude-manager plays no part in slots; assignment is the CLI's
+alone, under a store lock. `agent-status slot <session> <n>` pins.
 With several Claudes in one session, the entry shows the
 highest-priority state among them (needs_input > error > working >
 done > idle) and parks `off` when the last one leaves. Idle

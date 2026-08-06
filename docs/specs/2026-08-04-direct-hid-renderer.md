@@ -112,7 +112,8 @@ identical behaviour, byte-for-byte semantics:
   `status`. Their marker files are `deck-*` rather than `leds-*`, so
   both daemons can sit on one machine during the swap.
 - Store semantics untouched (per-Claude state aggregation, park/off,
-  GC, done-demotion, registry reconcile + eviction, notification
+  GC, done-demotion, slot memory in the CLI (no registry involvement
+  — reconcile and eviction are gone), notification
   classification).
 
 Deliberate improvements:

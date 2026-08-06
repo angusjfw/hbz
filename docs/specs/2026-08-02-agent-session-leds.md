@@ -56,14 +56,21 @@ Store: `~/.local/state/agent-status/<session>.json` with
 re-read it on their poll cycle. Python stdlib only — must run on
 macOS, Linux, WSL.
 
-### Slot mapping (claude-manager integration)
+### Slot mapping (single mechanism, remembered)
 
-18 slots — the three right-hand letter rows, slot 1 = Y position
-(LED 26) through slot 18 (LED 43). New optional registry field
-`slot: <1..N>` on session entries: manager assigns the lowest free
-slot on spawn, clears it on wrap/shutdown (pause keeps it). The
-status CLI prefers the registry slot; sessions without one (including
-unmanaged) get the lowest free slot auto-assigned on first event.
+36 slots — right-hand letter rows 1–18 (slot 1 = Y, LED 26), left
+rows 19–36 as spillover. Assignment lives in the status CLI alone,
+serialised by a store lock; the claude-manager knows nothing about
+slots (an earlier registry-slot design created two competing
+assigners and evicted long-running sessions — removed).
+
+Persistence is a `slots.json` name→slot memory beside the state
+files: a recreated session (same tmux name) reclaims its key when
+free; a live incumbent always wins; new sessions prefer
+never-remembered slots, then take over the stalest memory when
+saturated. Dead sessions drop from the live store immediately (their
+memory survives ~60 days). `agent-status slot <session> <n>` pins
+manually; `clear` forgets.
 
 ### LED renderer (portable core)
 
