@@ -235,6 +235,18 @@ pub fn state_dir() -> PathBuf {
     home().join(".local/state/agent-status")
 }
 
+/// The status CLI serialises its read-assign-write on this directory; our
+/// writes take the same one. Best-effort on both sides — a lock nobody
+/// released within `LOCK_STALE` is taken, and after `LOCK_TIMEOUT` the
+/// writer proceeds anyway rather than stalling a hook or a paint.
+pub fn lock_dir() -> PathBuf {
+    state_dir().join(".lock")
+}
+
+pub const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
+pub const LOCK_STALE: Duration = Duration::from_secs(10);
+pub const LOCK_POLL: Duration = Duration::from_millis(50);
+
 // Control markers, named for the binary that honours them.
 pub fn pause_file() -> PathBuf {
     state_dir().join("deck-paused")

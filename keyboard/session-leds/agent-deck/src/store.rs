@@ -5,9 +5,11 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
@@ -126,6 +128,7 @@ pub fn read(health: &mut Health) -> Snapshot {
             if entry.state.as_deref() != Some(State::Error.as_str()) {
                 entry.state = Some(State::Error.as_str().to_string());
                 entry.ts = Some(now_ts());
+                let _lock = StoreLock::acquire();
                 write_entry(&path, &entry);
             }
         }
@@ -166,7 +169,9 @@ pub fn demote_done_on_focus(done: &[Done]) {
         return;
     }
     let focused = tmux::focused_sessions();
-    for entry in done.iter().filter(|d| focused.contains(&d.session)) {
+    let demoting = done.iter().filter(|d| focused.contains(&d.session));
+    let _lock = StoreLock::acquire();
+    for entry in demoting {
         // re-read rather than rewrite the snapshot: a hook may have moved
         // the session on since, and only a still-done entry demotes
         let Some(mut fresh) = read_entry(&entry.path) else {
@@ -196,6 +201,55 @@ fn demote(entry: &mut Entry) {
             claude.insert("state".to_string(), Value::from(State::Idle.as_str()));
         }
     }
+}
+
+/// The status CLI's store lock, mirrored: a hook's read-assign-write and
+/// ours can't interleave. Held only around the write itself — never
+/// across a tmux call — and best-effort, so a paint is never blocked by
+/// a lock that isn't coming.
+struct StoreLock {
+    path: PathBuf,
+    held: bool,
+}
+
+impl StoreLock {
+    fn acquire() -> StoreLock {
+        StoreLock::at(config::lock_dir(), config::LOCK_TIMEOUT, config::LOCK_STALE)
+    }
+
+    fn at(path: PathBuf, timeout: Duration, stale_after: Duration) -> StoreLock {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match fs::create_dir(&path) {
+                Ok(()) => return StoreLock { path, held: true },
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    if held_since(&path).is_some_and(|held| held > stale_after) {
+                        let _ = fs::remove_dir(&path); // nobody is coming back for it
+                        continue;
+                    }
+                    if Instant::now() >= deadline {
+                        return StoreLock { path, held: false };
+                    }
+                    thread::sleep(config::LOCK_POLL);
+                }
+                // the state dir isn't there, or isn't writable: nothing to
+                // serialise against, so get on with it
+                Err(_) => return StoreLock { path, held: false },
+            }
+        }
+    }
+}
+
+impl Drop for StoreLock {
+    fn drop(&mut self) {
+        if self.held {
+            let _ = fs::remove_dir(&self.path);
+        }
+    }
+}
+
+fn held_since(path: &Path) -> Option<Duration> {
+    fs::metadata(path).ok()?.modified().ok()?.elapsed().ok()
 }
 
 fn read_entry(path: &Path) -> Option<Entry> {
@@ -302,6 +356,39 @@ pub fn watch() -> (Receiver<()>, Option<RecommendedWatcher>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_lock_is_exclusive_but_never_blocking() {
+        let dir = std::env::temp_dir().join(format!("agent-deck-lock-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let lock_dir = dir.join(".lock");
+        let brief = Duration::from_millis(60);
+        let never_stale = Duration::from_secs(3600);
+
+        let held = StoreLock::at(lock_dir.clone(), brief, never_stale);
+        assert!(held.held, "an uncontended lock is taken");
+        assert!(lock_dir.exists());
+
+        let contended = StoreLock::at(lock_dir.clone(), brief, never_stale);
+        assert!(
+            !contended.held,
+            "a held lock times out rather than blocking"
+        );
+        drop(contended);
+        assert!(
+            lock_dir.exists(),
+            "and giving up doesn't release someone else's"
+        );
+
+        let stolen = StoreLock::at(lock_dir.clone(), brief, Duration::ZERO);
+        assert!(stolen.held, "a lock nobody released is taken");
+        drop(stolen);
+        assert!(!lock_dir.exists(), "releasing removes it");
+
+        drop(held);
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn demotion_reaches_the_per_claude_states() {

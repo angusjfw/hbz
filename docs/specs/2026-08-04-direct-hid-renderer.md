@@ -112,8 +112,9 @@ identical behaviour, byte-for-byte semantics:
   `status`, on `deck-*` marker files.
 - Store semantics untouched (per-Claude state aggregation, park/off,
   GC, done-demotion, slot memory in the CLI (no registry involvement
-  — reconcile and eviction are gone), notification
-  classification).
+  — reconcile and eviction are gone), notification classification).
+  The deck's own writes take the CLI's lock directory, on the same
+  best-effort terms.
 
 Deliberate improvements:
 
