@@ -224,8 +224,7 @@ pub fn state_dir() -> PathBuf {
     home().join(".local/state/agent-status")
 }
 
-// Control markers. `agent-leds` uses leds-* for the same purpose, so the
-// two daemons can run on one machine while this one is being swapped in.
+// Control markers, named for the binary that honours them.
 pub fn pause_file() -> PathBuf {
     state_dir().join("deck-paused")
 }

@@ -109,8 +109,7 @@ identical behaviour, byte-for-byte semantics:
   rows, **tmux creation order** (session id — matches the switcher),
   live refresh, show/hide with the layer.
 - Controls unchanged: `pause [notify]`, `resume`, `base on|off`,
-  `status`. Their marker files are `deck-*` rather than `leds-*`, so
-  both daemons can sit on one machine during the swap.
+  `status`, on `deck-*` marker files.
 - Store semantics untouched (per-Claude state aggregation, park/off,
   GC, done-demotion, slot memory in the CLI (no registry involvement
   — reconcile and eviction are gone), notification
@@ -228,9 +227,12 @@ or persist key events beyond agent-layer handling.
    session keys are flashed and verified; the build that blanks the
    left half too (and moves RGB to layer 2) is committed, awaiting a
    flash.
-5. Remove kontroll/Keymapp-API path and the agent-leds python daemon;
-   keymapp-api make target becomes flash-only doc; update
-   specs/READMEs/Makefile (`make agent-deck` builds + installs).
+5. ~~Remove the kontroll/Keymapp-API path and the agent-leds python
+   daemon~~ — script, launchd plist, `session-leds-daemon` and
+   `keymapp-api` targets and the kontroll fetch are all deleted;
+   `make session-leds` now just symlinks the status CLI, `make mac`
+   builds the deck, and Keymapp is documented as a flashing tool that
+   wants the daemon paused.
 6. Linux/sway and WSL follow the same binary (WSL: a thin
    Windows-side HID bridge is still required — the device can't be
    split between Windows and WSL; design there when tackled).

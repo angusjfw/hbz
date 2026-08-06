@@ -1,13 +1,13 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds session-leds-daemon agent-deck agent-deck-daemon keymapp-api firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
 
 install: mac ## Default target: full macOS install
 
 help: ## List the documented targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*## "}{printf "  %-14s %s\n", $$1, $$2}'
 
-mac: brew common ghostty macos-defaults ## Full macOS setup (brew + common + ghostty + defaults)
+mac: brew common ghostty macos-defaults agent-deck ## Full macOS setup (brew + common + ghostty + defaults)
 
 arch: pkg common z dircolors sway mako konsole wallpapers ## Full Arch/sway setup
 
@@ -58,16 +58,9 @@ z: ## Fetch the z.sh directory jumper
 git: ## Wire git/.gitconfig into the global include path
 	git config --global include.path ${DIR}/git/.gitconfig
 
-session-leds: ## Symlink agent session status tools into ~/.local/bin (+ kontroll on macOS)
+session-leds: ## Symlink the agent session status CLI into ~/.local/bin
 	mkdir -p ~/.local/bin
 	ln -sf ${DIR}/keyboard/session-leds/bin/agent-status ~/.local/bin/agent-status
-	ln -sf ${DIR}/keyboard/session-leds/bin/agent-leds ~/.local/bin/agent-leds
-	@if [ "$$(uname)" = Darwin ] && ! command -v kontroll >/dev/null; then \
-	  gh release download -R zsa/kontroll -p 'kontroll-*macos*' -O /tmp/kontroll.zip --clobber && \
-	  unzip -o -q /tmp/kontroll.zip -d /tmp kontroll && \
-	  install -m 755 /tmp/kontroll ~/.local/bin/kontroll && \
-	  xattr -d com.apple.quarantine ~/.local/bin/kontroll 2>/dev/null; \
-	  rm -f /tmp/kontroll.zip /tmp/kontroll; fi
 
 agent-deck: ## Build + install the direct-HID session LED daemon (needs rust)
 	cd ${DIR}/keyboard/session-leds/agent-deck && cargo build --release
@@ -75,28 +68,19 @@ agent-deck: ## Build + install the direct-HID session LED daemon (needs rust)
 	install -m 755 ${DIR}/keyboard/session-leds/agent-deck/target/release/agent-deck \
 	  ~/.local/bin/agent-deck
 
-agent-deck-daemon: agent-deck ## Install + start launchd agent for agent-deck, stopping agent-leds (macOS)
-	@# the two can't share the board: agent-leds goes, Keymapp stays quit
+agent-deck-daemon: agent-deck ## Install + start launchd agent for agent-deck (macOS)
+	@# clear the retired agent-leds unit, on a machine that still carries it
 	launchctl bootout gui/$$(id -u)/io.hbz.agent-leds 2>/dev/null || true
-	rm -f ~/Library/LaunchAgents/io.hbz.agent-leds.plist
+	rm -f ~/Library/LaunchAgents/io.hbz.agent-leds.plist ~/.local/bin/agent-leds
 	sed "s|__HOME__|$$HOME|g" ${DIR}/keyboard/session-leds/launchd/io.hbz.agent-deck.plist \
 	  > ~/Library/LaunchAgents/io.hbz.agent-deck.plist
 	launchctl bootout gui/$$(id -u)/io.hbz.agent-deck 2>/dev/null || true
-	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.hbz.agent-deck.plist
-
-keymapp-api: ## Enable Keymapp's API + autoconnect in its config (macOS; restarts Keymapp)
-	@pkill -f Keymapp.app 2>/dev/null && sleep 1 || true
-	@if [ ! -f "$$HOME/Library/Application Support/.keymapp/keymapp.sqlite3" ]; then \
-	  open -a Keymapp && sleep 4 && pkill -f Keymapp.app && sleep 1; fi
-	sqlite3 "$$HOME/Library/Application Support/.keymapp/keymapp.sqlite3" \
-	  "update config set value='1' where key in ('api_enabled','startup_autoconnect','startup_minimized')"
-	open -ga Keymapp
-
-session-leds-daemon: session-leds ## Install + start launchd agent for agent-leds (macOS)
-	sed "s|__HOME__|$$HOME|g" ${DIR}/keyboard/session-leds/launchd/io.hbz.agent-leds.plist \
-	  > ~/Library/LaunchAgents/io.hbz.agent-leds.plist
-	launchctl bootout gui/$$(id -u)/io.hbz.agent-leds 2>/dev/null || true
-	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.hbz.agent-leds.plist
+	@# bootout returns before the job is gone, so bootstrap has to wait it out
+	@for i in 1 2 3 4 5 6 7 8 9 10; do \
+	  launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.hbz.agent-deck.plist \
+	    2>/dev/null && exit 0; \
+	  sleep 0.5; \
+	done; echo "could not bootstrap io.hbz.agent-deck" >&2; exit 1
 
 QMK_FORK ?= ~/dev/zsa-qmk
 

@@ -74,30 +74,27 @@ manually; `clear` forgets.
 
 ### LED renderer (portable core)
 
-Daemon that watches the store and paints keys via
-[kontroll](https://github.com/zsa/kontroll) → Keymapp API
-(v1.3.2+, API enabled; Unix socket on macOS/Linux, TCP port on
-Windows). `set-rgb <led-index>` per slot, `restore-rgb-leds` on exit.
+`agent-deck` watches the store and writes LEDs over the board's raw
+HID interface directly — no broker process (see the direct-HID spec).
 
 Host RGB control is all-or-nothing: while active the firmware paints
 nothing (`rawhid_state.rgb_control`) — no layer colours, frozen board.
 The renderer owns the board on the base layer (statuses always
 visible; the base ledmap's home markers are repainted alongside —
-`agent-leds base off` reverts to firmware colours) and on the agent
-layer (statuses + toggle key white). Any other layer releases control
-so firmware colours show. It polls `GetStatus` (~100ms, 15ms
-round-trip) for `current_layer` and must survive keyboard disconnects
-(boards re-enumerate; reconnect via `GetKeyboards`/`ConnectAny`).
-`agent-leds pause` stops all API traffic (needed while flashing
-firmware); `pause notify` stops only transition flashes.
+`agent-deck base off` reverts to firmware colours) and on the agent
+layer (statuses + toggle key white). Any other layer hands control
+back so firmware colours show. Layer changes and keypresses are
+pushed by the board, so nothing polls, and it survives disconnects
+(boards re-enumerate; it reopens on a retry). `agent-deck pause`
+closes the device (needed while flashing firmware); `pause notify`
+stops only transition flashes.
 
 ### Input adapter (per-platform, thin)
 
-Agent-layer keys send Hyper+A…Hyper+R (Ctrl+Alt+Shift+GUI): F13–F24
-only covers 12 keys, Hyper combos scale to all 18 and dodge the Linux
-F13+ keysym quirk. Adapter maps Hyper+<letter> → slot → focus terminal +
-`tmux switch-client -t <tmux_session>` (target resolved from the store
-by slot). Per platform:
+Agent-layer keys send nothing at all: the daemon resolves the physical
+key position → slot → focus terminal + `tmux switch-client -t
+<tmux_session>` (target resolved from the store by slot). Per
+platform:
 
 - macOS and Linux: none — `agent-deck` reads key positions straight
   from the board over raw HID (see the direct-HID spec), so no hotkey
@@ -105,9 +102,9 @@ by slot). Per platform:
 - WSL: a Windows-side HID bridge; later
 
 Terminal emulator is irrelevant to switching (tmux does it); the
-adapter only needs to focus the terminal app, and only the global-
-hotkey route is terminal-agnostic — which is why keys are bound in the
-adapter, not in tmux.
+daemon only needs to focus the terminal app. Binding in the daemon
+rather than in tmux is what makes it work from anywhere, not just from
+inside a terminal.
 
 ### On-screen twin
 
@@ -120,10 +117,10 @@ drawn by `agent-deck` itself as a transparent click-through overlay
 Repurpose layer 3 (numpad — unused) as the **agent layer**:
 
 - Keep `TG(3)` on the bottom-right key as the toggle.
-- Right-hand letter rows: session keys 1–18 sending Hyper+A…R
-  (row-major: Y position = slot 1 = Hyper+A).
+- Right-hand letter rows: session keys 1–18 (row-major: Y position =
+  slot 1), sending `KC_NO` — the daemon reads their positions.
 - Clear the layer's per-key LED colours — a dark layer means nothing
-  flashes in the poll gap before the renderer takes host control.
+  shows before the renderer takes host control.
 - Always-visible base-layer indicators are out for v1: host control
   freezes the whole board (see spike findings). Revisit via firmware
   raw HID if wanted.
@@ -133,12 +130,10 @@ build and flash per `keyboard/README.md`.
 
 ## Repo layout
 
-- `keyboard/session-leds/` — status CLI, renderer daemon, launchd plist
+- `keyboard/session-leds/` — status CLI, the `agent-deck` daemon (Rust
+  crate), launchd plist
 - `claude/settings.json.example` — hook wiring (all events →
   `agent-status event`)
-- `claude/skills/claude-manager/SKILL.md` — slot field + assign/clear
-  steps (optional: everything works without the manager, slots are
-  just auto-assigned instead of stable)
 
 ## Spike (before building)
 
@@ -239,8 +234,9 @@ build and flash per `keyboard/README.md`.
 8. ~~Daemon supervision~~ — launchd agent, `make session-leds-daemon`.
    No manager coupling: the daemon and CLI are standalone; the manager
    only ever contributes `slot` fields via the registry.
-9. Next: direct-HID renderer — drops resident Keymapp, kontroll and
-   the Hammerspoon input path; spec at
+9. ~~Direct-HID renderer~~ — `agent-deck` took over painting, input,
+   the HUD and toasts, and the python daemon, kontroll, resident
+   Keymapp and Hammerspoon are all gone with it. Spec:
    `docs/specs/2026-08-04-direct-hid-renderer.md`.
 10. Later: Linux/sway; WSL; aggregate base-layer indicator.
 

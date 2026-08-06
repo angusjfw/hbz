@@ -3,8 +3,9 @@
 Claude Code session status on the Voyager's agent layer — one key per
 session, Codex-Micro style. Toggle the agent layer (bottom-right key)
 to see every session's state; press a session's key to switch the tmux
-client to it (adapter pending). Spec and design decisions:
-`docs/specs/2026-08-02-agent-session-leds.md`.
+client to it. Spec and design decisions:
+`docs/specs/2026-08-02-agent-session-leds.md`, and
+`docs/specs/2026-08-04-direct-hid-renderer.md` for the daemon.
 
 ##### 🎨 States
 | State | Colour | Source |
@@ -37,54 +38,43 @@ error).
   `~/.local/state/agent-status/<tmux-session>.json`. Slots (key
   positions 1–36) are assigned here alone, under a store lock, with
   `slots.json` remembering name→slot across session lifetimes.
-- `bin/agent-leds` — renderer daemon. Polls Keymapp for the active
-  layer and diff-paints slot LEDs 26–43 (right-hand rows, slot 1 = Y
-  position). Statuses show on the base layer by default (home markers
-  repainted alongside; `agent-leds base off` to disable) and on the
-  agent layer, where the toggle key lights white. Other layers keep
-  their firmware colours. Survives keyboard disconnects.
-- `agent-deck/` — the whole feature as one Rust daemon talking raw HID
-  to the board, no Keymapp, kontroll or Hammerspoon in the path. It
-  pairs once, follows the layer events the board pushes, re-reads the
-  store when it changes (so nothing polls), paints the LEDs, handles
-  agent-layer key presses by position, and draws the HUD and toasts
-  itself. Same controls as `agent-leds` (`pause [notify]`, `resume`,
-  `base on|off`, `status`) on its own marker files. Slots 19–36 spill
-  over onto the left half's letter rows.
-  Spec: `docs/specs/2026-08-04-direct-hid-renderer.md`.
+- `agent-deck/` — the renderer, and the whole feature besides: one Rust
+  daemon talking raw HID to the board, with nothing GUI-resident in the
+  path. It pairs once, follows the layer events the board pushes,
+  re-reads the store when it changes (so nothing polls), diff-paints
+  the slot LEDs, handles agent-layer key presses by position, and draws
+  the HUD and toasts itself. Statuses show on the base layer (home
+  markers repainted alongside) and on the agent layer, where the toggle
+  key lights white; other layers keep their firmware colours. Slots 1–18
+  are the right-hand letter rows (slot 1 = Y, LED 26), 19–36 spill onto
+  the left half. Survives keyboard disconnects.
 
 ##### 📋 Requirements
-- Hooks wired in Claude settings (`make ai`) and tools symlinked
-  (`make session-leds`, included in `make common`)
-- A rust toolchain (Brewfile) for `agent-deck`
-- Keymapp (Brewfile) for flashing firmware — with agent-deck paused
-- The `agent-leds` path additionally wants Keymapp ≥ 1.3.2 resident with
-  its API enabled (`make keymapp-api`) and
-  [kontroll](https://github.com/zsa/kontroll) on PATH (`make
-  session-leds` fetches it on macOS)
+- Hooks wired in Claude settings (`make ai`) and the status CLI
+  symlinked (`make session-leds`, included in `make common`)
+- A rust toolchain (Brewfile) to build `agent-deck`
+- Keymapp (Brewfile) only to flash firmware, and only while the daemon
+  is paused — nothing needs it running otherwise
 
 New machine: `make common agent-deck-daemon`, flash the firmware. No
 accessibility or automation permissions needed — the board is the input
 device, so nothing taps the OS keyboard.
 
 ##### 🚀 Run
-`make session-leds-daemon` installs and starts the launchd agent
-(macOS; logs to `~/.local/state/agent-status/agent-leds.log`), or run
-`agent-leds` directly in a pane. `agent-status list` shows tracked
-sessions; `set`/`clear` for manual control.
+`make agent-deck-daemon` builds it, installs the launchd agent and
+starts it (macOS; logs to `~/.local/state/agent-status/agent-deck.log`),
+or run `agent-deck` directly in a pane. `agent-status list` shows
+tracked sessions; `set`/`slot`/`clear` for manual control.
 
-`agent-leds pause` goes fully silent — no output and no Keymapp API
-traffic (required while flashing firmware); `agent-leds pause notify`
-stops only the transition flashes; `agent-leds base off` disables the
-always-on base-layer display; `resume` / `status` round it out.
-Housekeeping keeps running while paused.
+`agent-deck pause` goes fully silent and closes the HID device, which
+is what frees the board for flashing firmware; `pause notify` stops
+only the transition flashes; `base off` disables the always-on
+base-layer display; `resume` / `status` round it out. Housekeeping
+keeps running while paused.
 
-`make agent-deck-daemon` is the same for `agent-deck` (logs to
-`agent-deck.log`) and stops the `agent-leds` unit on the way, since the
-two can't share the board. Controls are identical. It needs the HID
-interface to itself: Keymapp holds the device exclusively, so quit
-Keymapp before starting agent-deck, and `agent-deck pause` hands the
-board back for flashing.
+The daemon needs the HID interface to itself, and Keymapp claims it
+exclusively — so quit Keymapp before starting agent-deck, and pause
+agent-deck before reaching for Keymapp.
 
 Pressing a session key switches the most recently active tmux client to
 that slot's session, brings the terminal forward and dismisses the agent

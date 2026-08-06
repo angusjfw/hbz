@@ -19,7 +19,7 @@ Layout "voyup", maintained in [Oryx](https://configure.zsa.io/voyager/layouts/PY
 | 5 | hold second bottom-left key | Manual copy of the mouse layer. |
 
 Each layer has its own per-key LED colour map (`ledmap` in `keymap.c`); layer
-colours yield whenever the host takes RGB control via Keymapp's API.
+colours yield whenever the host takes RGB control over raw HID.
 
 ##### 🖱️ Trackball
 Navigator pointing-device driver with high-res scroll.
@@ -30,7 +30,8 @@ Custom keycodes: `DRAG_SCROLL` (hold to scroll), `TOGGLE_SCROLL`,
 ##### ⚙️ Notable config
 - `TAPPING_TERM 0` — no tap-hold behaviour anywhere; all layer keys are plain holds/toggles.
 - Automouse: layer 4 activates after ~20 units of trackball movement, deactivates on timeout.
-- Oryx module enabled (`ORYX_ENABLE`) — live training and host RGB control work.
+- Oryx module enabled (`ORYX_ENABLE`) — the raw HID protocol agent-deck
+  speaks (pairing, layer events, key positions, LED writes) lives there.
 - Most RGB matrix animations compiled out; static per-layer colours only.
 
 ##### 🔮 Future
