@@ -233,9 +233,18 @@ or persist key events beyond agent-layer handling.
    `make session-leds` now just symlinks the status CLI, `make mac`
    builds the deck, and Keymapp is documented as a flashing tool that
    wants the daemon paused.
-6. Linux/sway and WSL follow the same binary (WSL: a thin
-   Windows-side HID bridge is still required — the device can't be
-   split between Windows and WSL; design there when tackled).
+6. Linux/sway — parked, and an afternoon on the Arch box when picked
+   up: a udev rule for the hidraw node (the daemon opens nothing as a
+   normal user without one), a systemd user unit and its make target,
+   `for_window` positioning lines in the sway config since Wayland
+   windows can't place themselves, and a check that egui's transparency
+   and click-through behave on wlroots.
+7. WSL — deferred indefinitely. It would need a native-Windows
+   agent-deck (the device can't be split between Windows and WSL),
+   `wsl.exe` shims for every tmux call, a polling fallback for the
+   store because 9P gives no usable file events, and Windows-side
+   supervision. Worth revisiting only if that machine becomes a real
+   work pattern.
 
 ## Non-goals
 
