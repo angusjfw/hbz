@@ -53,8 +53,10 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning for flagging it
 
-One skeptic per finding. Keep only findings the skeptic scores **≥ 80**,
-and attach the skeptic's verdict and steelman to each survivor.
+One skeptic per finding. Keep only findings the skeptic scores **75 or
+100** — its two worth-raising tiers — and attach the skeptic's verdict and
+steelman to each survivor. 50 means real but not worth raising; it dies
+like anything else.
 
 For a **Critical candidate** (a likely bug, regression, security, or
 data-loss issue), give the skeptic the lens that fits the claim —
@@ -86,8 +88,8 @@ survivors. For each provide:
 - Concrete fix suggestion
 - The skeptic's score, one-line verdict, and steelman
 
-Group issues by severity using the skeptic's score (Critical: 90-100,
-Important: 80-89).
+Group issues by severity using the skeptic's tier (Critical: 100,
+Important: 75).
 
 If nothing survived verification, confirm the code meets standards with a
 brief summary of what you checked.

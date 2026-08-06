@@ -70,8 +70,9 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning, including why existing tests don't already cover it
 
-One skeptic per gap. Keep only gaps the skeptic scores **≥ 80** — the
-skeptic will drop gaps already covered by existing or integration tests.
+One skeptic per gap. Keep only gaps the skeptic scores **75 or 100** — its
+two worth-raising tiers. It will drop gaps already covered by existing or
+integration tests, and score a real-but-not-worth-raising gap 50.
 For a criticality 9-10 gap, give the skeptic the lens that fits the claim
 — `correctness`, `reproduce`, or `security`.
 

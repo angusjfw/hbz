@@ -269,10 +269,12 @@ spend the author's.
 
 Each diagnostic agent verifies its own findings internally: it dispatches
 an independent `skeptic` sub-agent per candidate finding and returns only
-those the skeptic scores ≥ 80, with a verdict and steelman attached. That
-filtering is meant to be invisible to you — you receive verified findings,
-not the verification (see 4b). (`code-simplifier` is exempt; it's polish,
-not findings.)
+those the skeptic puts in its two worth-raising tiers (75 or 100), with a
+verdict and steelman attached. The skeptic scores real *and* worth the
+author knowing, so a correct-but-not-worth-raising finding dies at 50 with
+everything else that didn't survive. That filtering is meant to be
+invisible to you — you receive verified findings, not the verification
+(see 4b). (`code-simplifier` is exempt; it's polish, not findings.)
 
 **When the plumbing leaks, absorb it.** Skeptic verdicts sometimes arrive
 at this level instead of at their parent agent — full Score / Verdict /

@@ -68,7 +68,8 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning, so it can check the concern against the type's actual construction sites and callers
 
-One skeptic per concern. Keep only concerns the skeptic scores **≥ 80**.
+One skeptic per concern. Keep only concerns the skeptic scores **75 or
+100** — its two worth-raising tiers; 50 means real but not worth raising.
 For a severe concern (an invariant violable from outside, or illegal
 states left representable), give the skeptic the lens that fits the claim
 — `correctness`, `reproduce`, or `security`.

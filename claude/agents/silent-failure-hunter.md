@@ -110,7 +110,8 @@ Pass each skeptic:
 - the diff range under review (base..head, or the changed files)
 - your reasoning for flagging it
 
-One skeptic per issue. Keep only issues the skeptic scores **≥ 80**. For
+One skeptic per issue. Keep only issues the skeptic scores **75 or 100**
+— its two worth-raising tiers; 50 means real but not worth raising. For
 a CRITICAL issue (silent failure, broad catch, swallowed error), give the
 skeptic the lens that fits the claim — `correctness`, `reproduce`, or
 `security`.

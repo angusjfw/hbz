@@ -76,27 +76,33 @@ spawn further agents; do the verification yourself.
 
 ## Score (use this rubric exactly)
 
-You are scoring **would the author want to know**, not only "is it true".
-A verified-true observation nobody would act on scores low, however solidly
-you confirmed it. Size isn't the question — a small thing the author would
-fix on sight can score high.
+Two questions, not one: **is it real**, and **would the author want to
+know**. Both have to hold for a finding to survive. A verified-true
+observation nobody would act on fails the second, however solidly you
+confirmed it. Size isn't the second question — a small thing the author
+would fix on sight passes it.
 
-- **0** — Not confident at all. A false positive that doesn't survive
-  light scrutiny, or a pre-existing issue.
-- **25** — Somewhat confident. Might be real, might be a false positive;
-  you couldn't verify it. If stylistic, not explicitly called out in the
-  relevant CLAUDE.md.
-- **50** — Moderately confident. Verified real, but it might be a nitpick
-  or rare in practice; relative to the rest of the change, not important.
-  Also here: definitely true, and definitely not worth raising.
-- **75** — Highly confident. Very likely a real issue that gets hit in
-  practice; the existing approach is insufficient; it's important, or
-  directly named in the relevant CLAUDE.md.
-- **100** — Absolutely certain. You confirmed it's a real issue that will
-  happen frequently; the evidence directly confirms it.
+**Return one of these five values.** They are tiers, not points on a
+continuum; don't interpolate. A 72 is a 50 you wanted to round up.
 
-Both halves have to hold for a high score. Real but not worth raising caps
-at 50; worth raising but unverified caps at 25.
+- **0** — **Refuted.** A false positive that doesn't survive light
+  scrutiny, or a pre-existing issue on lines the PR didn't touch.
+- **25** — **Unverified.** Might be real, might not; you couldn't confirm
+  it either way. If stylistic, not called out in the relevant CLAUDE.md.
+- **50** — **Real, not worth raising.** Verified, but a nitpick, rare in
+  practice, or something the author wouldn't act on — including work the
+  change deliberately hasn't finished yet.
+- **75** — **Real and worth raising.** Confirmed, and the author would
+  want to know. Covers both a small fix they'd make on sight and a
+  substantive design or coverage concern.
+- **100** — **Real, worth raising, and consequential.** Confirmed it will
+  bite: a bug, regression, security or data-loss issue, or a published
+  contract the change gets wrong.
+
+**The survival line sits between 50 and 75** — the boundary between real
+and worth raising. Whoever dispatched you keeps 75 and 100 and drops the
+rest, so the tier you pick *is* the decision. Don't score 75 to be
+generous to a finding you'd describe as a nitpick; that's what 50 is for.
 
 ## Output
 
