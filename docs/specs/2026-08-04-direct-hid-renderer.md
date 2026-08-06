@@ -208,11 +208,12 @@ or persist key events beyond agent-layer handling.
 2. ~~`agent-deck` crate~~ — `keyboard/session-leds/agent-deck/`, built
    and installed by `make agent-deck`. HID pairing, layer-event
    following, notify-driven store reads, diff paints, flashes, toasts,
-   the pause/base controls and all the housekeeping (GC, persisted
-   error conversion, done-demotion, registry reconcile). Verified
-   live: connect, pause/resume around Keymapp, GC, error write-back
-   and demotion; LED colour fidelity and the layer toggle are eyeball
-   checks. Nothing polls — the loop wakes on board events, store
+   the pause/base controls and the housekeeping it owns (GC, persisted
+   error conversion, done-demotion). Slots are the CLI's alone — the
+   deck reads the `slot` on each entry and never assigns, reserves or
+   remembers one. Verified live: connect, pause/resume around Keymapp,
+   GC, error write-back, demotion, colour fidelity and the layer
+   toggle. Nothing polls — the loop wakes on board events, store
    changes and a 1s housekeeping tick.
 3. ~~Input handling + HUD/toasts in the same binary~~ — presses arrive
    as key positions and resolve through a matrix-to-LED table generated

@@ -1,7 +1,7 @@
 //! The state store is the contract: `agent-status` writes one JSON file
 //! per tmux session, this reads them. Housekeeping lives here too — GC of
-//! dead sessions, the error state, done-demotion on focus, and seeding
-//! registry-reserved slots.
+//! dead sessions, the error state and done-demotion on focus. Slots are
+//! the CLI's alone; nothing here assigns or reserves one.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -92,6 +92,10 @@ pub fn read(health: &mut Health) -> Snapshot {
     for file in dir.flatten() {
         let path = file.path();
         if path.extension().is_none_or(|e| e != "json") {
+            continue;
+        }
+        // the CLI keeps its slot memory in here too; that's its business
+        if path.file_name().is_some_and(|name| name == "slots.json") {
             continue;
         }
         let Some(mut entry) = read_entry(&path) else {
@@ -192,60 +196,6 @@ fn demote(entry: &mut Entry) {
             claude.insert("state".to_string(), Value::from(State::Idle.as_str()));
         }
     }
-}
-
-/// Seed `off` entries for registry sessions that hold a slot but haven't
-/// fired a hook yet (spawned or resumed and quiet since) — otherwise their
-/// reserved keys look free on the board.
-pub fn reconcile_registry(health: &mut Health) {
-    let Ok(text) = fs::read_to_string(config::registry()) else {
-        return;
-    };
-    for (session, slot) in registry_slots(&text) {
-        let path = config::state_dir().join(format!("{session}.json"));
-        if path.exists() || health.of(&session) == Alive::No {
-            continue;
-        }
-        write_entry(
-            &path,
-            &Entry {
-                tmux_session: Some(session.clone()),
-                state: Some(State::Off.as_str().to_string()),
-                slot: Some(slot),
-                label: Some(session),
-                ts: Some(now_ts()),
-                rest: Map::new(),
-            },
-        );
-    }
-}
-
-/// `tmux_session`/`slot` pairs from the claude-manager registry, whose
-/// entries are `## <id>` sections of `key: value` lines.
-fn registry_slots(text: &str) -> Vec<(String, u32)> {
-    let mut found = Vec::new();
-    let mut session: Option<String> = None;
-    let mut slot: Option<u32> = None;
-    let mut in_section = false;
-    // the trailing marker closes the last section
-    for line in text.lines().chain(["## "]) {
-        if line.starts_with("## ") {
-            if let (Some(session), Some(slot)) = (session.take(), slot.take()) {
-                found.push((session, slot));
-            }
-            in_section = true;
-            continue;
-        }
-        if !in_section {
-            continue; // fields above the first section belong to no entry
-        }
-        match line.split_once(':') {
-            Some(("tmux_session", value)) => session = Some(value.trim().to_string()),
-            Some(("slot", value)) => slot = value.trim().parse().ok(),
-            _ => {}
-        }
-    }
-    found
 }
 
 fn read_entry(path: &Path) -> Option<Entry> {
@@ -352,50 +302,6 @@ pub fn watch() -> (Receiver<()>, Option<RecommendedWatcher>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn registry_yields_sessions_holding_a_slot() {
-        let text = "\
-# Sessions
-
-manager: 0:1.0
-
-## asy-1121
-tmux_session: asy-1121
-slot: 3
-notes: has colons: and versions 1.2.3
-
-## no-slot
-tmux_session: quiet-one
-
-## bad-slot
-tmux_session: other
-slot: seven
-
-## spillover
-tmux_session: later
-slot: 20
-";
-        assert_eq!(
-            registry_slots(text),
-            vec![("asy-1121".to_string(), 3), ("later".to_string(), 20)]
-        );
-    }
-
-    #[test]
-    fn rewrites_keep_the_fields_the_status_cli_owns() {
-        let json = r#"{"tmux_session":"s","state":"done","slot":2,"label":"s","ts":1,
-                       "claudes":{"abc":{"state":"done","pane_id":"%1"}}}"#;
-        let mut entry: Entry = serde_json::from_str(json).unwrap();
-        entry.state = Some("idle".to_string());
-        let out: Value = serde_json::from_str(&serde_json::to_string(&entry).unwrap()).unwrap();
-        assert_eq!(out["state"], "idle");
-        assert_eq!(
-            out["claudes"],
-            serde_json::from_str::<Value>(json).unwrap()["claudes"]
-        );
-        assert_eq!(out["slot"], 2);
-    }
 
     #[test]
     fn demotion_reaches_the_per_claude_states() {

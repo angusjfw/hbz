@@ -114,7 +114,7 @@ fn run(shared: Shared) {
     let mut hud_visible = false;
     let mut store_dirty = true;
     let (mut last_open, mut last_read) = (None, None);
-    let (mut last_focus, mut last_reconcile) = (None, None);
+    let mut last_focus = None;
 
     while !quit.load(Ordering::Relaxed) {
         let now = Instant::now();
@@ -184,11 +184,6 @@ fn run(shared: Shared) {
                 store::demote_done_on_focus(&snapshot.done);
             }
         }
-        if due(last_reconcile, now, config::RECONCILE) {
-            last_reconcile = Some(now);
-            store::reconcile_registry(&mut health);
-        }
-
         let mut display = if paused == Some(Pause::All) {
             Frame::new()
         } else {

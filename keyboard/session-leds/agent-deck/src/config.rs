@@ -208,7 +208,6 @@ pub const FLASH: Duration = Duration::from_millis(1200);
 /// stale the tmux-derived bits (error, GC) can get.
 pub const STORE_REFRESH: Duration = Duration::from_secs(1);
 pub const FOCUS_CHECK: Duration = Duration::from_secs(1);
-pub const RECONCILE: Duration = Duration::from_secs(15);
 pub const HEALTH_TTL: Duration = Duration::from_secs(5);
 pub const RECONNECT: Duration = Duration::from_secs(2);
 /// How long to wait on the board for an event. Layer changes are pushed,
@@ -223,10 +222,6 @@ fn home() -> PathBuf {
 
 pub fn state_dir() -> PathBuf {
     home().join(".local/state/agent-status")
-}
-
-pub fn registry() -> PathBuf {
-    home().join(".local/state/claude-manager/sessions.md")
 }
 
 // Control markers. `agent-leds` uses leds-* for the same purpose, so the
