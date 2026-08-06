@@ -246,6 +246,12 @@ or persist key events beyond agent-layer handling.
    supervision. Worth revisiting only if that machine becomes a real
    work pattern.
 
+8. Consider: `make mac` builds the crate, so a first install on a new
+   machine spends minutes compiling where the tolerance is about twenty
+   seconds. Either drop it from `mac` and leave the build to the
+   explicit `agent-deck-daemon` target, or ship prebuilt release
+   binaries and have the target fetch one.
+
 ## Non-goals
 
 - Replacing Keymapp for flashing.
