@@ -12,6 +12,12 @@ pub struct Rgb(pub u8, pub u8, pub u8);
 
 pub const OFF: Rgb = Rgb(0, 0, 0);
 
+/// White as this board renders it. The red switch housings pass enough of
+/// the red channel that a plain #FFFFFF reads pink, so it comes down by a
+/// third; picked by eye against candidates lit side by side. On-screen
+/// whites are untouched — this is the keyboard's tint, not the state's.
+pub const BOARD_WHITE: Rgb = Rgb(0xA0, 0xFF, 0xFF);
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum State {
     Idle,
@@ -49,7 +55,7 @@ impl State {
     /// Slot colour, or None for a state that leaves the key dark.
     pub fn color(self) -> Option<Rgb> {
         Some(match self {
-            State::Idle => Rgb(0xFF, 0xFF, 0xFF),
+            State::Idle => BOARD_WHITE,
             State::Working => Rgb(0x00, 0x66, 0xFF),
             State::Done => Rgb(0x00, 0xCC, 0x33),
             State::NeedsInput => Rgb(0xFF, 0xCC, 0x00),
@@ -64,9 +70,13 @@ impl State {
     }
 
     /// On screen every state gets a dot, `off` included, where the board
-    /// just leaves the key dark.
+    /// just leaves the key dark — and idle is plain white, since a screen
+    /// has no switch housing to compensate for.
     pub fn dot(self) -> Rgb {
-        self.color().unwrap_or(Rgb(0x59, 0x59, 0x59))
+        match self {
+            State::Idle => Rgb(0xFF, 0xFF, 0xFF),
+            _ => self.color().unwrap_or(Rgb(0x59, 0x59, 0x59)),
+        }
     }
 }
 
@@ -171,13 +181,14 @@ pub fn key_led(row: u8, col: u8) -> Option<u8> {
 
 /// The bottom-right TG(3) key, lit while the agent layer is on.
 pub const TOGGLE_LED: u8 = 49;
-pub const TOGGLE_COLOR: Rgb = Rgb(0xFF, 0xFF, 0xFF);
+pub const TOGGLE_COLOR: Rgb = BOARD_WHITE;
 
 /// Press feedback, agent layer only: the key that was pressed blinks,
 /// dimly when there's no session behind it. The base display never blinks.
 pub const PULSE: Duration = Duration::from_millis(140);
-pub const PULSE_COLOR: Rgb = Rgb(0xFF, 0xFF, 0xFF);
-pub const EMPTY_PULSE_COLOR: Rgb = Rgb(0x2A, 0x2A, 0x2A);
+pub const PULSE_COLOR: Rgb = BOARD_WHITE;
+/// The same white, right down — the housings tint a dim white too.
+pub const EMPTY_PULSE_COLOR: Rgb = Rgb(0x1A, 0x2A, 0x2A);
 
 /// What to bring forward after a switch. tmux does the session switching,
 /// so this only has to be the terminal.
@@ -267,6 +278,13 @@ mod tests {
         assert_eq!(led_slot(TOGGLE_LED), None, "the toggle key is not a slot");
         assert_eq!(led_slot(24), None, "nor are the thumbs");
         assert_eq!(led_slot(18), None, "nor left row 3");
+    }
+
+    #[test]
+    fn the_board_is_compensated_but_the_screen_is_not() {
+        assert_eq!(State::Idle.color(), Some(BOARD_WHITE));
+        assert_eq!(State::Idle.dot(), Rgb(0xFF, 0xFF, 0xFF));
+        assert_eq!(State::Off.dot(), Rgb(0x59, 0x59, 0x59));
     }
 
     #[test]
