@@ -74,7 +74,7 @@ wired into the Makefile, `target/` gitignored, binary installed to
   (`open -a` on macOS, `swaymsg` on Linux) → `SET_LAYER 0` dismiss.
 - **36 slots**: since input is positional (no keycodes needed), the
   left-half letter rows (LEDs 0–17, same row-major order) become
-  spillover slots 19–36. Assignment always prefers 1–18; the left
+  spillover slots 19–36, and their keycodes go with the right half's. Assignment always prefers 1–18; the left
   half only lights when the right is full. Home markers yield to
   occupied spillover slots as on the right.
 - **HUD + toasts in-process** (`egui`/eframe): GPU-rendered
@@ -162,10 +162,11 @@ Regressions to guard against:
 
 ## Firmware follow-up
 
-Once daemon input handling is proven, the agent layer's Hyper+A…R
-keycodes can become no-ops (position events fire regardless), removing
-the last OS-visible side effect. Keep them until the KC_NO event spike
-passes (below).
+Done: the agent layer's Hyper+A…R keycodes are `KC_NO`, so a session
+press has no OS-visible side effect at all. Its left half follows —
+those keys are spillover slots 19-36, and RGB, volume and media keycodes
+there would fire alongside a switch — leaving layer 3 as nothing but the
+status display. The RGB controls moved to layer 2.
 
 ## Spikes
 
@@ -181,9 +182,9 @@ passes (below).
    webhid effect scales writes by the same global brightness the layer
    ledmaps use (`rgb_matrix_config.hsv.v`, `rgb_matrix_kb.inc`), so
    colours should match; visual check still pending.
-4. Keypress events for `KC_NO` keys: still pending (needs the firmware
-   change); events fired for every key tested including modifiers, so
-   expected to pass — `pre_process_record` runs regardless of keycode.
+4. ~~Keypress events for `KC_NO` keys~~ — passed on hardware: with the
+   agent layer's letters flashed as `KC_NO`, presses still switch
+   sessions and nothing reaches the focused app.
 5. ~~Exclusive access / `pause` for flashing~~ — exclusivity is real
    and mutual: with Keymapp connected, opening fails with
    `exclusive access and device already open`, so Keymapp must be quit
@@ -221,7 +222,10 @@ or persist key events beyond agent-layer handling.
    the layer. Hammerspoon is gone — hotkeys, canvases, config symlink,
    cask and the marker-file HUD hop with it. `agent-deck preview` draws
    the panels without a board for styling work.
-4. Firmware: agent-layer keycodes to no-ops (post spike 4); reflash.
+4. ~~Firmware: agent-layer keycodes to no-ops~~ — the right-hand
+   session keys are flashed and verified; the build that blanks the
+   left half too (and moves RGB to layer 2) is committed, awaiting a
+   flash.
 5. Remove kontroll/Keymapp-API path and the agent-leds python daemon;
    keymapp-api make target becomes flash-only doc; update
    specs/READMEs/Makefile (`make agent-deck` builds + installs).
