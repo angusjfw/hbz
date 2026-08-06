@@ -1156,19 +1156,56 @@ doesn't gate that. Read the relevant store's schema before writing.
 
 ## Idle-detection query
 
-"Which workers are waiting for input?" — for each registry session
-with `tmux_session` set, identify Claude panes per § Detect pane
-processes, then capture each Claude pane's recent tail (use tmux
-interaction patterns or skills for the capture):
+"Which workers are waiting for input?" — answer from the hook-fed
+agent-status store, not by scraping the TUI. Claude Code hooks report
+every session event to it, so the state is recorded rather than
+inferred, and it's per-Claude with the pane it belongs to:
 
 ```bash
-tmux capture-pane -p -J -t "<tmux_session>:<w>.<p>" -S -30
+cat ~/.local/state/agent-status/<tmux_session>.json
 ```
 
-Heuristics (Claude Code TUI), applied only to known-Claude panes:
+```json
+{"tmux_session": "...", "state": "done", "label": "...",
+ "ts": 1786027174,
+ "claudes": {"<claude-session-id>": {"state": "done", "pane_id": "%35"}}}
+```
 
-- **Idle**: trailing `> ` prompt; no `esc to interrupt`; no spinner.
-- **Busy**: `esc to interrupt` present; spinner; streaming output.
+Each Claude's `state` answers the question directly:
+
+- `working` — mid-turn, busy.
+- `done` / `idle` — turn finished / fresh session: waiting on the user.
+- `needs_input` — a permission prompt or notification is pending.
+- `error` — errored.
+- `off` — Claude exited; the tmux session lives on.
+
+The top-level `state` aggregates by priority (`needs_input` > `error` >
+`working` > `done` > `idle`). See `keyboard/session-leds/` in the
+dotfiles repo for the store itself.
+
+It can still disagree with reality, so sanity-check before reporting:
+no hook fires when a turn is interrupted with Esc, an entry predating
+the hooks never gets written, and `off` alongside a live Claude pane
+means the entry is stale. Confirm the pane is alive and still Claude per
+§ Detect pane processes, treat a `working` entry whose `ts` is minutes
+old as suspect (`PostToolUse` re-stamps it during a live turn), and fall
+back to a capture where the entry is missing or contradicted.
+
+Capture fallback, applied only to known-Claude panes (use tmux
+interaction patterns or skills for the capture):
+
+- **Busy**: a spinner line carrying a live counter — gerund plus
+  `(<elapsed> · ↓ <n> tokens)`. Streaming output between two captures a
+  second apart says the same thing.
+- **Idle**: no such counter. A finished turn leaves a past-tense line
+  (`✻ Churned for 2m 57s`) and an input box below it.
+- **Blocked**: a dialog on screen (numbered options, `Esc to cancel`)
+  and no input box at all.
+
+Markers are TUI-specific and version-specific — capture the pane and
+match what this version actually renders rather than trusting the
+strings above. Do not read the input box as a message from the user;
+that box may hold Claude's own placeholder guess (see § Hard boundary).
 
 Heuristic, not authoritative. Report best-effort with evidence.
 
