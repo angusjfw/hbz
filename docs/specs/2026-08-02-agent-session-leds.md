@@ -66,11 +66,13 @@ assigners and evicted long-running sessions — removed).
 
 Persistence is a `slots.json` name→slot memory beside the state
 files: a recreated session (same tmux name) reclaims its key when
-free; a live incumbent always wins; new sessions prefer
-never-remembered slots, then take over the stalest memory when
-saturated. Dead sessions drop from the live store immediately (their
-memory survives ~60 days). `agent-status slot <session> <n>` pins
-manually; `clear` forgets.
+free; a live incumbent always wins. New sessions fill the right half
+before spilling left — within each half they prefer never-remembered
+slots, then take over the stalest memory, so a dead session's
+reservation never pushes a new session onto spillover. Dead sessions
+drop from the live store immediately (their memory survives
+~60 days). `agent-status slot <session> <n>` pins manually; `clear`
+forgets.
 
 ### LED renderer (portable core)
 

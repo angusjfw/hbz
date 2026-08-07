@@ -198,8 +198,11 @@ def forget_slot(name):
 
 def assign_slot(tmux_session, entries):
     """A live incumbent always keeps its slot; a returning session
-    reclaims its remembered one if free; new sessions prefer
-    never-remembered slots, then the stalest memory."""
+    reclaims its remembered one if free. New sessions fill the right
+    half (1-18) before spilling left: within each half, prefer
+    never-remembered slots, then take over the stalest memory — a
+    dead session's reservation never pushes a new session to the
+    other half."""
     live_taken = {e.get("slot") for e in entries.values()
                   if e.get("tmux_session") != tmux_session}
     mem = read_slot_memory()
@@ -208,13 +211,13 @@ def assign_slot(tmux_session, entries):
         return remembered
     reserved = {v["slot"]: v.get("ts", 0)
                 for k, v in mem.items() if k != tmux_session and "slot" in v}
-    for n in range(1, MAX_SLOTS + 1):
-        if n not in live_taken and n not in reserved:
-            return n
-    stale_free = [(ts, n) for n, ts in reserved.items()
-                  if n not in live_taken]
-    if stale_free:
-        return min(stale_free)[1]
+    for lo, hi in ((1, 18), (19, MAX_SLOTS)):
+        free = [n for n in range(lo, hi + 1) if n not in live_taken]
+        unreserved = [n for n in free if n not in reserved]
+        if unreserved:
+            return unreserved[0]
+        if free:
+            return min(free, key=lambda n: reserved[n])  # stalest memory
     return None  # more sessions than slots: tracked, unlit
 
 
