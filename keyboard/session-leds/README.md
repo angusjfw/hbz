@@ -58,7 +58,8 @@ error).
 
 New machine: `make common agent-deck-daemon`, flash the firmware. No
 accessibility or automation permissions needed — the board is the input
-device, so nothing taps the OS keyboard.
+device, so nothing taps the OS keyboard (Option-Space is one registered
+chord, not a tap).
 
 ##### 🚀 Run
 `make agent-deck-daemon` builds it, installs the launchd agent and
@@ -91,3 +92,10 @@ also flashes for ~1s (display only — key mapping is unaffected). Both
 panels are transparent, click-through and never take focus.
 `agent-deck preview` puts them on screen without the keyboard, for when
 the styling is being worked on.
+
+**Option-Space** summons the same HUD as a keyboard switcher — the
+no-board path, and the only time the overlay takes key focus. Press a
+session's key label (the same letter its board key uses), or pick with
+↑↓ and Enter; Escape, pressing Option-Space again or clicking away
+dismisses and hands focus back. The chord is a single OS-registered
+hot key, so no accessibility permission and no key logging surface.

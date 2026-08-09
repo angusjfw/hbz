@@ -11,6 +11,7 @@
 mod board;
 mod config;
 mod control;
+mod hotkey;
 mod input;
 mod overlay;
 mod render;
@@ -223,9 +224,10 @@ fn run(shared: Shared) {
         }
 
         // the HUD is up only while the agent layer is toggled, and refreshes
-        // under it as sessions move
+        // under it as sessions move; rows are pushed even while it's down,
+        // so the Option-Space switcher always has a current list
         let want_hud = paused != Some(Pause::All) && layer == Some(config::AGENT_LAYER);
-        if want_hud != hud_visible || (want_hud && rows_changed) {
+        if want_hud != hud_visible || rows_changed {
             overlay::set_hud(&shared, want_hud, rows(&snapshot));
             hud_visible = want_hud;
         }
@@ -252,6 +254,7 @@ fn rows(snapshot: &store::Snapshot) -> Vec<overlay::Row> {
             slot: t.slot,
             label: t.label.clone(),
             state: t.state,
+            session: t.session.clone(),
         })
         .collect()
 }

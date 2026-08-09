@@ -98,9 +98,12 @@ key position → slot → focus terminal + `tmux switch-client -t
 <tmux_session>` (target resolved from the store by slot). Per
 platform:
 
-- macOS and Linux: none — `agent-deck` reads key positions straight
-  from the board over raw HID (see the direct-HID spec), so no hotkey
-  is registered with the OS at all
+- macOS and Linux: none for the board — `agent-deck` reads key
+  positions straight from the board over raw HID (see the direct-HID
+  spec), so nothing taps the OS keyboard. One global chord
+  (Option-Space, a Carbon hot key — not an event tap, no accessibility
+  permission) summons the on-screen switcher for when the board isn't
+  plugged in.
 - WSL: a Windows-side HID bridge; later
 
 Terminal emulator is irrelevant to switching (tmux does it); the
@@ -112,7 +115,10 @@ inside a terminal.
 
 Same store, rendered as a labelled grid (session id, ticket, state),
 drawn by `agent-deck` itself as a transparent click-through overlay
-(eframe), on every platform it runs on.
+(eframe), on every platform it runs on. Option-Space opens the same
+grid as a keyboard switcher — the no-board path: it takes key focus,
+a session's own key label (or arrows + Enter) switches to it, and
+Escape or focus loss dismisses.
 
 ## Keyboard layout change
 

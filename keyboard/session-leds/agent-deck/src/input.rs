@@ -1,6 +1,7 @@
-//! Agent-layer presses. The board is the input device for its own
-//! feature: a press arrives as a key position, so switching needs no
-//! global hotkey and no keycode reaches the OS.
+//! Switching to a session. The board is the input device for its own
+//! feature — a press arrives as a key position, so no keycode reaches
+//! the OS; the Option-Space switcher (`hotkey`, `overlay`) lands here
+//! too when the board isn't around.
 
 use std::process::Command;
 use std::thread;

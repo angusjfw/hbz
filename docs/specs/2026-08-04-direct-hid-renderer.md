@@ -127,6 +127,11 @@ Deliberate improvements:
   pulses subtly instead of raising an on-screen alert.
 - 36 slots via left-half spillover (above).
 - One process, one supervisor; the Keymapp relaunch dance is gone.
+- **Option-Space switcher**, for when the board isn't plugged in: one
+  OS-registered chord (Carbon hot key — no event tap, no accessibility
+  permission) summons the HUD as a keyboard switcher. Type a session's
+  key label (the same letters the board uses), or arrows + Enter;
+  Escape or focus loss dismisses and hands activation back.
 
 Design decisions (settled up front):
 
@@ -153,7 +158,9 @@ Regressions to guard against:
   cold window + GPU context init would be slower than today's
   pathwatcher. Show/hide must stay <50ms.
 - **Focus stealing**: the overlay must never take key focus (macOS
-  accessory activation policy; no activation on show).
+  accessory activation policy; no activation on show). The one
+  exception is the summoned Option-Space switcher, which takes it
+  deliberately and returns it on dismissal.
 - **Visual fidelity**: egui defaults look like a game UI, so the panels
   are styled to the canvases they replace (dark translucent slabs,
   dot/key/label/state rows). Its bundled font has no keycap glyphs
