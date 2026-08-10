@@ -99,8 +99,20 @@ else
 	ln -sf ${DIR}/vscode/settings.json ~/.config/Code/User/settings.json
 endif
 
-tmux: ## Symlink tmux config
+tmux: ## Symlink tmux config, fetch tpm + resurrect/continuum plugins
 	ln -sf ${DIR}/tmux/.tmux.conf ~/.tmux.conf
+	@# tpm clones the rest itself, but resurrect and continuum are the
+	@# crash-safety substrate claude-manager reads, so fetch them here
+	@# and let `prefix+I` handle anything added to the conf later.
+	mkdir -p ~/.tmux/plugins
+	for p in tpm tmux-resurrect tmux-continuum; do \
+	  [ -d ~/.tmux/plugins/$$p ] \
+	    || git clone -q --depth 1 https://github.com/tmux-plugins/$$p ~/.tmux/plugins/$$p; \
+	done
+	@# custom save-command strategy — see the script for why the
+	@# bundled `ps` one mis-saves Claude panes
+	ln -sf ${DIR}/tmux/resurrect/save_command_strategies/pane-tty.sh \
+	  ~/.tmux/plugins/tmux-resurrect/save_command_strategies/pane-tty.sh
 
 ghostty: ## Symlink Ghostty config + acme-hbz theme
 	mkdir -p ~/.config/ghostty/themes
