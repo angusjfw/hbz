@@ -281,6 +281,24 @@ Recognised session fields:
   written and surfaced in full — never truncated or abbreviated with
   `<prefix>-...`. Reading the registry alone should be enough to fire
   a manual `claude --resume` for the common single-worker case.
+- `worker` — **repeatable**, one line per Claude pane *beyond* the
+  primary (a coordinator's sub-workers, a forked worker in another
+  window). Format:
+
+  ```
+  worker: <claude-session-id> cwd=<path> [label=<short description>]
+  ```
+
+  Added when the pane is created, removed when it goes. The id is the
+  same `--resume` token as `resumed_session_id`, held to the same
+  no-truncation rule.
+
+  No window or pane position: `renumber-windows on` shifts indexes
+  whenever a window closes, so a position recorded now is not an
+  address later. The id and the cwd are stable; geometry comes from the
+  background save (see Crash recovery). Every Claude pane needs a line
+  here — an unrecorded conversation is one that cannot be brought back,
+  which is exactly what a server death exposes.
 - `snapshot` — path to multi-window pane snapshot captured at shutdown
   or wrap
 - `resume_state` — path to the structured per-window state file under
@@ -351,6 +369,8 @@ model: opus
 effort: high
 started: 2026-04-29 14:00
 last_touched: 2026-04-29 16:20
+resumed_session_id: 7f1c9e02-4b6a-4d51-9f83-2ac0be7d5511
+worker: c40b8d17-9e22-4a76-bb31-6e5f0d92a418 cwd=~/code/repo-bar/_wt/eng-1240 label=API half
 notes: ~/code/journal/2026-04-29-eng-1234.md
 ```
 
@@ -364,11 +384,17 @@ The registry is shared state between the manager and its workers. The
 mkdir lock serialises writes from either side.
 
 **Workers may write to their own entry only.** Allowed fields:
-`last_touched`, `notes`, ticket/branch updates, `paused`, and the
-shutdown/wrap fields (`shutdown`, `resumed_session_id`, `snapshot`,
+`last_touched`, `notes`, ticket/branch updates, `paused`, `worker`, and
+the shutdown/wrap fields (`shutdown`, `resumed_session_id`, `snapshot`,
 `resume_state`, `wrap_requested`). Workers may also write their own
 snapshot file under `~/.local/state/claude-manager/snapshots/` and
 resume_state file under `~/.local/state/claude-manager/resume/`.
+
+`worker` is worker-writable because the manager is not present when a
+sub-worker is created. A coordinator that starts another Claude in its
+own tmux session adds the `worker:` line itself, in the same action —
+the same discipline the coordinator-worker playbook already applies to
+keeping its team inside one tmux session.
 
 **Workers must not touch:** the header block, or any other session's
 entry. Workers DO write to journals, wikis, runbooks and other
@@ -658,6 +684,15 @@ On demand, diff the registry against `tmux ls`:
 - tmux session present but no matching registry entry → ask: import
   or ignore. Don't silently take ownership.
 
+- **Claude pane present but no `worker` line for it.** Walk each live
+  entry's session per § Detect pane processes and compare the Claude
+  panes found against the entry's `resumed_session_id` plus its
+  `worker:` lines. Add a line for anything missing, drop lines whose id
+  no longer runs. This is the one reconcile check that recovers state
+  rather than just reporting it — an unrecorded Claude pane is silently
+  fine until the server dies, and then it is gone. Cheap enough to run
+  on every pass.
+
 Sync the visible task list after reconciling.
 
 The watch auto-triggers a reconcile pass on any worker write, so
@@ -905,6 +940,8 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
    (see Registry section). The rewrite:
    - Refreshes `resumed_session_id` (primary worker = first window,
      pane 0) if it somehow isn't already set from spawn.
+   - Reconciles `worker:` lines against the Claude panes found in step
+     1 — one line per non-primary pane, stale ones dropped.
    - Adds `snapshot: <path>`, `resume_state: <path>`,
      `shutdown: <today>`.
    - Adds `resume_target: <date>` if known.

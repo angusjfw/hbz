@@ -213,6 +213,9 @@ covers the worker-side specifics.
 
    - Refreshes `resumed_session_id` (primary worker = first window,
      pane 0) if it somehow isn't already set from spawn.
+   - Reconciles `worker:` lines against the Claude panes found in step
+     1 — one line per non-primary pane, stale ones dropped. Cheap here,
+     since step 3 has just resolved every id.
    - Adds `snapshot: <path>`, `resume_state: <path>`,
      `shutdown: <today>`.
    - Adds `resume_target` if the user mentioned a date.

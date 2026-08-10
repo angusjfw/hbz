@@ -56,6 +56,14 @@ tmux session so the manager still tracks the whole team as one unit.
   snapshot, not resumed with the team — while gaining nothing. If a worker genuinely needs
   an independent lifecycle, register it as its *own* `claude-manager` session instead of
   leaving it untracked.
+- **Mint each worker's conversation id and record it, in the same action as spawning it.**
+  Start the worker as `claude --session-id <uuid> …`, then add a `worker:` line to your own
+  registry entry (`claude-manager` § Registry) with that id, the worker's cwd and a short
+  label. Being inside your tmux session only protects the team against a *clean* shutdown,
+  which walks the panes and reads their ids. It buys nothing against the case that actually
+  loses work — the tmux server dying with no warning — because nothing outside the panes
+  knows those conversations existed. The `worker:` line is what survives that, and writing
+  it later means not writing it at all. Drop the line when the worker goes.
 
 ## The worker contract — a written BRIEF.md at spawn
 
