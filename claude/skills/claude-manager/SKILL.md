@@ -657,39 +657,49 @@ Per session, one tmux sweep plus a per-pane process lookup:
 
 ```bash
 tmux list-panes -s -t "$tmux_session" \
-  -F '#{window_index} #{pane_index} #{pane_pid} #{pane_current_path}'
+  -F '#{window_index} #{pane_index} #{pane_pid} #{pane_tty} #{pane_current_path}'
 ```
 
-For each pane row, identify the foreground process. Usually the pane
-is rooted in a shell that has spawned one foreground child (the
-running command). Occasionally the shell `exec`'d into a process
-directly, in which case `pane_pid` itself is the foreground process.
+For each pane row, identify the foreground process. The pane is
+usually rooted in a shell; the foreground command is the child of that
+shell **on the pane's own tty**. Occasionally the shell `exec`'d into a
+process directly, in which case `pane_pid` itself is it.
+
+The tty condition is load-bearing, not defensive. A Claude pane has two
+children of its shell: `claude`, and a second shell Claude spawns for
+its own tool calls on a separate pty. Picking the first child by pid
+(`pgrep -P "$pane_pid" | head -1`) returns that tool shell, because it
+has the lower pid — so every Claude pane classifies as a plain shell,
+resume_state records `command: -zsh` with no `claude_session_id`, and
+cold resume sends `-zsh` into the pane instead of bringing Claude back.
+Checked against a live server: the wrong process on every pane.
 
 ```bash
-# macOS quirks: `comm` returns the full path ("/bin/zsh") and `ucomm`
-# returns the basename but pads with trailing spaces to a fixed width
-# (which defeats exact case matches). Use `comm` and strip to the
-# basename with parameter expansion.
-shell_comm=$(ps -p "$pane_pid" -o comm= 2>/dev/null)
-shell_comm="${shell_comm##*/}"
-case "$shell_comm" in
-  bash|zsh|fish|sh|-bash|-zsh|-fish)
-    fg_pid=$(pgrep -P "$pane_pid" 2>/dev/null | head -1)
-    ;;
-  *)
-    fg_pid="$pane_pid"
-    ;;
-esac
-[ -n "$fg_pid" ] && ps -p "$fg_pid" -o command= 2>/dev/null
+# Take the child sharing the pane's tty. `ps -ax` with an exact ppid
+# match, not `pgrep -P`, and not a `grep "^$pane_pid"` prefix match
+# (pane pid 3378 would also match an unrelated 33780).
+pane_tty="${pane_tty#/dev/}"   # from #{pane_tty} in the sweep above
+fg=$(ps -ax -o pid=,ppid=,tty=,command= 2>/dev/null \
+  | awk -v pid="$pane_pid" -v tty="$pane_tty" \
+      '$2==pid && $3==tty { $1="";$2="";$3=""; sub(/^[ \t]+/,""); print; exit }')
 ```
 
-Classify each pane by the `ps -p $fg_pid -o command=` output:
+Add `#{pane_tty}` to the `list-panes` format above to get `pane_tty`.
+An empty `$fg` means an idle shell — verified against a freshly created
+pane.
 
-- **No `fg_pid`** (idle shell, no foreground child) → resume_state's
-  `command:` for this pane is empty.
+The same walk is what `tmux/resurrect/save_command_strategies/pane-tty.sh`
+in the dotfiles repo does for the background save (see Crash recovery),
+so both agree on what a pane is running.
+
+Classify each pane by the `$fg` command line:
+
+- **Empty `$fg`** (idle shell, no child on the pane's tty) →
+  resume_state's `command:` for this pane is empty.
 - **argv matches `node\b.*\bclaude` or `\bclaude(-code)?( |$)`** →
-  Claude pane. Record the pid; the JSONL session-id lookup proceeds
-  per Shutdown § step 3.
+  Claude pane. Its `--session-id` / `--resume` argument *is* the
+  `claude_session_id`; fall back to the JSONL lookup (Shutdown § step 3)
+  only for a pane whose argv carries neither.
 - **Anything else** → capture the full argv verbatim and record it as
   resume_state's `command:` for this pane. Cold resume replays it.
   No hardcoded "known patterns" list — `yarn dev`, `task foo`,
@@ -700,10 +710,10 @@ Notes:
 - `pane_current_command` (from `tmux list-panes`) reports the OS comm
   field, which Claude Code overrides to its version string (e.g.
   `2.1.150`). Fast first signal but not reliable on its own; other
-  tools also override their process titles. The `pgrep`/`ps` walk is
+  tools also override their process titles. The `ps` walk is
   authoritative.
-- Cost: one tmux call plus one `ps`+`pgrep` per pane (~50–150ms per
-  session of 1–5 panes). Bounded and fast.
+- Cost: one tmux call plus one `ps` sweep per session (~50–150ms).
+  Bounded and fast.
 - Don't use `tmux capture-pane` for detection. Slow, depends on TUI
   state (vim mode, busy indicator, last frame rendered), false-
   positives against any tool with similar visual conventions.
