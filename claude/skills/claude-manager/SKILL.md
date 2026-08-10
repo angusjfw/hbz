@@ -480,9 +480,23 @@ net.
    ```
 
    `-d` keeps the focus rule (no stealing the user's view). `-n`
-   names window 0 after the session id for tidiness; the user is free
-   to rename later. Additional windows or panes inside this session
-   are user free space — the registry doesn't track them while alive.
+   names the first window after the session id for tidiness; the user
+   is free to rename later.
+
+   **Never assume window index 0.** With `base-index 1` set (as in the
+   dotfiles repo's tmux config) the first window is `1`, so a literal
+   `:0.0` target fails. Resolve it instead of hardcoding it:
+
+   ```bash
+   w0=$(tmux list-windows -t "$session_id" -F '#{window_index}' | head -1)
+   primary="${session_id}:${w0}.0"
+   ```
+
+   "Primary worker" means the first window's pane 0 throughout this
+   skill. Layout and pane positions are otherwise the user's free
+   space — but every *Claude* pane in the session gets recorded (see
+   Registry § `worker`), because an unrecorded conversation is one that
+   cannot be brought back.
 5. Decide the brief — what the manager types into the worker's input
    box on the first prompt. Default is narrow: one line stating the
    working directory and the topic the user named, optionally one
@@ -794,7 +808,7 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
 3. **Find Claude session IDs for every Claude pane** identified in
    step 1. For each:
 
-   - If this is the primary pane (window 0 pane 0) and the registry
+   - If this is the primary pane (first window, pane 0) and the registry
      entry already has `resumed_session_id`, reuse it — `claude
      --resume <id>` continues writing to the same JSONL, so the id is
      stable across resume cycles.
@@ -844,7 +858,7 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
 
    shutdown: 2026-05-22
 
-   ## window 0: claude
+   ## window 1: claude
    layout: 5fe4,200x50,0,0,0
 
    ### pane 0
@@ -852,7 +866,7 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
    command: claude --effort high --resume abc-123
    claude_session_id: abc-123
 
-   ## window 3: dev
+   ## window 2: dev
    layout: 9a3c,200x50,0,0{100x50,0,0,1,99x50,101,0,2}
 
    ### pane 0
@@ -916,7 +930,7 @@ worker doesn't exist yet — cold resume is what creates it).
 
    ```bash
    tmux new-session -d -s "$session_id" \
-     -n "$window0_name" -c "$pane0_cwd"
+     -n "$first_window_name" -c "$pane0_cwd"
    ```
 
    For each subsequent window in the resume_state file, in order:
@@ -924,6 +938,21 @@ worker doesn't exist yet — cold resume is what creates it).
    ```bash
    tmux new-window -d -t "$session_id": -n "$name" -c "$pane0_cwd"
    ```
+
+   **Recorded window indexes are not addresses.** They come out of the
+   rebuild renumbered — `base-index` decides where they start, and
+   `renumber-windows on` keeps them contiguous, so a resume_state
+   recording windows 1 and 4 rebuilds as 1 and 2. Read the resume_state
+   blocks in file order and address each window by the index it actually
+   got:
+
+   ```bash
+   # after creating each window, capture the index it landed on
+   w=$(tmux list-windows -t "$session_id" -F '#{window_index}' | tail -1)
+   ```
+
+   Use that `$w` for the splits, layout and sends below. Never reuse the
+   recorded number as a target.
 
 4. For each window, run (n-1) splits, where n = the number of panes
    recorded for that window in the resume_state file:
@@ -1029,7 +1058,8 @@ absolute paths and `--` separators.
 
    ```bash
    tmux new-session -d -s "$session_id" -n "$session_id" -c "$cwd"
-   tmux send-keys -t "${session_id}:0.0" "claude --resume <id>" Enter
+   # bare -t <session> hits its only pane, whatever base-index is
+   tmux send-keys -t "$session_id" "claude --resume <id>" Enter
    ```
 
 4. Register the entry with `tmux_session`, `started`, `last_touched`;
@@ -1046,7 +1076,7 @@ case: the registry entry already holds `resumed_session_id` and
 
    ```bash
    tmux new-session -d -s "$session_id" -n "$session_id" -c "$cwd"
-   tmux send-keys -t "${session_id}:0.0" \
+   tmux send-keys -t "$session_id" \
      "claude --resume <resumed_session_id>" Enter
    ```
 
