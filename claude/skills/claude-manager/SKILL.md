@@ -276,7 +276,8 @@ Recognised session fields:
   a timestamp from memory or infer it from context. A model fills the slot with
   a plausible-looking time otherwise; it has happened.
 - `resumed_session_id` — Claude `--resume` token for the primary
-  worker (window 0 pane 0), captured at shutdown or wrap. Always
+  worker (the first window's pane 0), recorded at spawn and kept
+  current across resume cycles. Always
   written and surfaced in full — never truncated or abbreviated with
   `<prefix>-...`. Reading the registry alone should be enough to fire
   a manual `claude --resume` for the common single-worker case.
@@ -566,12 +567,26 @@ net.
 
    Thin signal or a blank spawn defaults to `opus --effort medium`. The
    choice is infrastructure — it does not go into the worker's brief.
-7. Start Claude in window 0 pane 0 (the primary worker): launch
-   `claude --model <alias> --effort <level>` (the pick from step 6) in
-   `${session_id}:0.0`, wait for the TUI input line to be
-   ready, send the brief from step 5 (skip the send when the brief is
-   blank), then submit. Two traps this flow must handle, whatever the
-   mechanics:
+7. **Mint the conversation id, then start Claude** in the primary pane
+   (`$primary` from step 4). Generate a UUID and pass it, rather than
+   discovering the id later:
+
+   ```bash
+   claude_session_id=$(uuidgen | tr 'A-Z' 'a-z')
+   # launched in $primary:
+   claude --session-id "$claude_session_id" --model <alias> --effort <level>
+   ```
+
+   This is what makes a session recoverable from the moment it starts.
+   Discovering the id at shutdown is too late — a tmux server that dies
+   without a clean shutdown leaves nothing to resume from, and the
+   fallback is a content hunt through every transcript under the
+   project dir. It also puts the id in the process's own argv, so the
+   background save (see Crash recovery) records it for free.
+
+   Then wait for the TUI input line to be ready, send the brief from
+   step 5 (skip the send when the brief is blank), then submit. Two
+   traps this flow must handle, whatever the mechanics:
 
    - **Wait on a marker with a timeout.** Poll for a TUI-ready marker
      before sending, and bound the wait so a failed launch surfaces
@@ -587,10 +602,14 @@ net.
    Every marker is TUI-specific — capture the pane first and match what
    the current version renders; don't hardcode a string.
 8. Add the session to the registry with `tmux_session: $session_id`,
-   plus `model:` and `effort:` from step 6. Add to the visible task
-   list (`[active]` prefix). (Session-LED key slots are none of the
-   manager's business — the agent-status store assigns and remembers
-   them itself.)
+   `resumed_session_id: $claude_session_id` from step 7, plus `model:`
+   and `effort:` from step 6. Add to the visible task list (`[active]`
+   prefix). (Session-LED key slots are none of the manager's business —
+   the agent-status store assigns and remembers them itself.)
+
+   `resumed_session_id` at spawn, not at shutdown. The registry must be
+   enough on its own to fire `claude --resume` for a session that never
+   got a clean shutdown.
 9. Tell the user how to switch to it (see Switch UX), stating the chosen
    model and effort with a one-line reason. The user can override; ask
    up front only for a genuinely ambiguous or blank spawn.
@@ -884,7 +903,8 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
 
 5. **Acquire the lock, rewrite the registry entry, release the lock**
    (see Registry section). The rewrite:
-   - Adds `resumed_session_id` (primary worker = window 0 pane 0).
+   - Refreshes `resumed_session_id` (primary worker = first window,
+     pane 0) if it somehow isn't already set from spawn.
    - Adds `snapshot: <path>`, `resume_state: <path>`,
      `shutdown: <today>`.
    - Adds `resume_target: <date>` if known.

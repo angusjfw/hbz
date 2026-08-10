@@ -157,11 +157,21 @@ covers the worker-side specifics.
    is the user's.
 
 3. **Resolve Claude session ids for every Claude pane** identified in
-   step 1. The calling worker is itself a Claude session; the
-   most-recently-modified JSONL under its project dir is this session
-   by definition. For other Claude panes (forked workers in other
-   windows), do the same per-pane resolution as in the manager-side
-   mechanics (step 3 of `claude-manager/SKILL.md` Shutdown).
+   step 1.
+
+   Try the cheap routes first — the JSONL hunt below is the fallback,
+   not the default:
+
+   - The registry entry's own `resumed_session_id` and `worker:` lines
+     (ids are recorded at spawn, so they are usually already there).
+   - The pane's argv, which carries `--session-id` or `--resume` for any
+     Claude started through the manager or the coordinator playbook.
+
+   Otherwise: the calling worker is itself a Claude session, so the
+   most-recently-modified JSONL under its project dir is this session by
+   definition. For other Claude panes (forked workers in other windows),
+   do the same per-pane resolution as in the manager-side mechanics
+   (step 3 of `claude-manager/SKILL.md` Shutdown).
 
    ```bash
    # for each pane that looks like Claude:
@@ -201,7 +211,8 @@ covers the worker-side specifics.
 5. **Acquire the lock, rewrite the entry, release the lock** (see
    Lock pattern). The rewrite:
 
-   - Adds `resumed_session_id` (primary worker = window 0 pane 0).
+   - Refreshes `resumed_session_id` (primary worker = first window,
+     pane 0) if it somehow isn't already set from spawn.
    - Adds `snapshot: <path>`, `resume_state: <path>`,
      `shutdown: <today>`.
    - Adds `resume_target` if the user mentioned a date.
