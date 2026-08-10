@@ -131,7 +131,7 @@ pub fn run(shared: Shared) -> Result<(), eframe::Error> {
             Ok(Box::new(Window {
                 shared,
                 visible: false,
-                sized: false,
+                fit: None,
                 selected: 0,
                 focus: Focus::Off,
                 _hotkey: hotkey,
@@ -153,7 +153,8 @@ enum Focus {
 struct Window {
     shared: Shared,
     visible: bool,
-    sized: bool,
+    /// The (monitor size, top offset) the window last fitted itself to.
+    fit: Option<(egui::Vec2, f32)>,
     selected: usize,
     focus: Focus,
     _hotkey: Option<global_hotkey::GlobalHotKeyManager>,
@@ -321,7 +322,7 @@ const HUD_WIDTH: f32 = 430.0;
 const HUD_TOP: f32 = 48.0;
 const TOAST_WIDTH: f32 = 260.0;
 const MARGIN: f32 = 16.0;
-const TEXT_SIZE: f32 = 14.0;
+const TEXT_SIZE: f32 = 15.0;
 const DOT: f32 = 5.5;
 /// Keycaps vary in width, so they get a column of their own and the labels
 /// line up under each other.
@@ -335,21 +336,24 @@ impl eframe::App for Window {
     /// Runs while the window is hidden too, which is what lets a hidden
     /// window bring itself back.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if !self.sized {
-            // Cover the screen below the menu bar, once — the panels are
-            // then placed within the window and it never moves again. The
-            // window can't sit under the menu bar, so its own top offset
-            // comes off the height, or the toasts fall off the bottom.
-            let (monitor, outer) =
-                ctx.input(|i| (i.viewport().monitor_size, i.viewport().outer_rect));
-            if let Some(monitor) = monitor {
-                let top = outer.map_or(0.0, |rect| rect.min.y);
+        // Cover the screen below the menu bar — re-fitted whenever the
+        // display arrangement changes (laptop screen to external monitor),
+        // since the OS drags the window along but keeps its old size. The
+        // window can't sit under the menu bar, so its own top offset comes
+        // off the height, or the toasts fall off the bottom; the clamp
+        // stops wherever the OS parked the window from becoming that
+        // offset, and the loop settles once position and size match.
+        let (monitor, outer) = ctx.input(|i| (i.viewport().monitor_size, i.viewport().outer_rect));
+        if let Some(monitor) = monitor {
+            let top = outer.map_or(0.0, |rect| rect.min.y).clamp(0.0, 64.0);
+            if self.fit != Some((monitor, top)) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(0.0, top)));
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
                     monitor.x,
                     monitor.y - top,
                 )));
-                self.sized = true;
+                self.fit = Some((monitor, top));
+                ctx.request_repaint(); // read back where the OS put it
             }
         }
 
