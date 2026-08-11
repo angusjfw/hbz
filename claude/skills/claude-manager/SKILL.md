@@ -1254,7 +1254,12 @@ wording: "wrap up", "complete", "close out", "finish".
    ```
 
 3. Write the journal entry per the project's schema, using the
-   snapshot and any `notes` from the registry entry. If notes are
+   snapshot and any `notes` from the registry entry. **Carry the
+   resume pointers into it: `resumed_session_id` in full plus the
+   entry's `cwd`, and the same pair off every `worker:` line. Read
+   them off the registry entry before step 5 deletes it — wrap
+   destroys the only other copy, so an entry written without them
+   strands the transcripts.** If notes are
    thin and there's no obvious narrative from snapshot + recent git
    activity in the worktree, ask the user a focused question before
    writing. Otherwise proceed. The drafting can go to a `sonnet`
@@ -1287,13 +1292,19 @@ and removes the entry) is intentional: the worker tears its own session
 down promptly on wrap rather than leaving it alive until a manager
 happens to process the marker.
 
-**Forked workers.** Wrap records only the calling (primary) worker's
-`resumed_session_id`, by design: wrap is final, so per-fork resume ids
-serve nothing — a wrapped session isn't resumed. The forks' context
-isn't lost; the snapshot walks every window and pane (step 2), so the
-manager sees each fork's output when writing the journal. Contrast
-Shutdown, which records every Claude pane's `claude_session_id`
-precisely because the session will be rebuilt.
+**Forked workers.** A wrapped session still gets resumed — to read
+detail the entry compressed away, or to pick the work back up — and
+that applies to its forks too. So the journal entry records every
+Claude pane the registry knows about: the primary's
+`resumed_session_id` plus each `worker:` line, id and cwd, labelled.
+The snapshot (step 2) walks every window and pane and gives the
+manager each fork's output to write from, but it is not a substitute
+for the ids: once step 5 removes the entry, an id absent from the
+journal is gone.
+
+The one gap left is a Claude pane never recorded as a `worker:` line.
+Wrap can only pass on what the registry holds, which is why every
+Claude pane needs its line (see Registry).
 
 ## Pause
 
