@@ -198,8 +198,13 @@ session is recreated, so recovery copies the store aside first.
 - `claude/skills/claude-manager/SKILL.md` — tty-scoped pane detection;
   `--session-id` at spawn and `resumed_session_id` recorded there;
   `worker:` field in the recognised and worker-writable field lists; cold
-  resume keeps its record; new crash-recovery section; window indexes
-  corrected for `base-index 1`.
+  resume keeps its record; window indexes corrected for `base-index 1`.
+- `claude/skills/claude-manager/CRASH-RECOVERY.md` — the recovery
+  mechanics, loaded on demand. A rare path with long mechanics has no
+  business in the manager's default context; what stays in `SKILL.md` is
+  enough to recognise the situation plus the one instruction that must
+  not wait for a file read ("don't create anything yet", since rebuilding
+  the first session destroys the evidence for the rest).
 - `claude/skills/coordinator-worker/SKILL.md` — registering each
   sub-worker becomes part of standing one up.
 

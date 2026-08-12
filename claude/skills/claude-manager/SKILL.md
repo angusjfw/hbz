@@ -1093,70 +1093,16 @@ accidental kill. Every live entry lost its container at once and none of
 them has a `resume_state`. Distinct from Cold resume, which rebuilds one
 session from a record written deliberately.
 
-There is a background record to rebuild from. The dotfiles repo's tmux
-config runs tmux-resurrect under tmux-continuum, which writes the whole
-server — sessions, windows, layouts, pane cwds, pane titles, and each
-pane's full command line including its `--session-id` / `--resume`
-argument — to `~/.local/state/tmux/resurrect/last` every few minutes.
-Restore is deliberately not wired to tmux (no auto-restore, and
-`prefix+C-r` is unbound) because rebuilding sessions is this skill's job,
-not a keystroke's: the registry has to be reconciled in the same pass,
-and sessions that were shut down on purpose must stay down.
+There is a background record to rebuild from: the dotfiles repo's tmux
+config runs tmux-resurrect under tmux-continuum, saving the whole server
+— windows, layouts, pane cwds and titles, and each pane's full command
+line — to `~/.local/state/tmux/resurrect/last` every few minutes.
 
-**Read all the evidence before creating anything.** Order matters.
-
-1. **Copy the agent-status store aside first.**
-
-   ```bash
-   cp -R ~/.local/state/agent-status \
-     ~/.local/state/claude-manager/agent-status.crash-$(date +%Y%m%dT%H%M%S)
-   ```
-
-   It maps every Claude session id to its pane, per tmux session, so it
-   can name conversations the save file missed. But it is a live status
-   store, not a record: it drops any Claude whose recorded `pane_id` no
-   longer runs one, and pane ids do not survive a server restart. The
-   first hook event in a recreated session therefore wipes every *other*
-   id from that entry. The pre-crash inventory is readable up until the
-   first session is rebuilt, and not after — so copy it before touching
-   anything, not when it is needed.
-
-2. **Read the save file** (`.../resurrect/last`, tab-separated: `pane`,
-   `window` and `state` records). Two ways it can be thinner than
-   expected, both silent, so check its mtime against the time of death
-   before trusting it:
-
-   - Autosave runs from a `status-right` hook, so it only fires while a
-     client is attached. A long detached stretch saves nothing.
-   - continuum does not install the hook at all if a second tmux server
-     was running when the config loaded.
-
-3. **Read the registry.** It is the authority on what should exist and
-   on lifecycle — which entries were deliberately `shutdown`, which were
-   `paused`, which carry `wrap_requested`. The save file says only what
-   was running.
-
-**Then rebuild.** Reconcile the three sources into one list and *surface
-it before acting* — this is a mass operation, so the user confirms the
-set, not each session. Per entry, cold-resume mechanics apply (windows,
-splits, layout, sends), with the save file standing in for
-`resume_state`. Per Claude pane, the id comes from the first of these
-that has it: the entry's `resumed_session_id` or a `worker:` line; the
-saved argv; the copied agent-status store; a JSONL content hunt
-(Untracked cold resume). A pane whose id can't be established comes back
-as a fresh Claude — say so explicitly rather than letting it look
-resumed.
-
-Record what happened in each entry's `notes`, including which ids were
-recovered by which route, and re-add `worker:` lines for every
-non-primary pane brought back.
-
-**A Claude pane in the save file with no registry entry** is a
-coordinator's sub-worker that was never recorded. The save file's pane
-title and cwd usually identify it; its own first prompt says more. If
-its parent can't be established, give it its own registry entry rather
-than guessing a parent — and treat it as a failure of the `worker:`
-discipline, not of recovery.
+**Don't create anything yet.** Rebuilding the first session destroys the
+only record of any Claude pane that was never registered. Read
+`CRASH-RECOVERY.md` (next to this file) and follow it from the top; it
+carries the evidence order, the save-file format, the id-resolution
+routes and the failure modes.
 
 ## Reopening from disk
 
