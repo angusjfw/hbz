@@ -18,6 +18,14 @@
 #define AUTOMOUSE_SCROLL_THRESHOLD AUTOMOUSE_THRESHOLD / NAVIGATOR_SCROLL_DIVIDER
 #define RGB_MATRIX_STARTUP_SPD 60
 
+// ZSA ships the Voyager capped at 175/255 brightness, budgeted for the
+// worst case of all 52 LEDs lit white. The session display lights a
+// fraction of that, so take back some of the margin. After flashing,
+// the old 175 is still stored in EEPROM — raise it once with the
+// brightness-up key (layer 2, V) to reach the new ceiling.
+#undef RGB_MATRIX_MAXIMUM_BRIGHTNESS
+#define RGB_MATRIX_MAXIMUM_BRIGHTNESS 200
+
 #undef ENABLE_RGB_MATRIX_ALPHAS_MODS
 #undef ENABLE_RGB_MATRIX_GRADIENT_UP_DOWN
 #undef ENABLE_RGB_MATRIX_GRADIENT_LEFT_RIGHT
