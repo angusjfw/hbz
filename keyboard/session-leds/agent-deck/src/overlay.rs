@@ -463,11 +463,17 @@ fn paint_hud(ctx: &egui::Context, rows: &[Row], screen: egui::Vec2, selected: Op
                                 let key = ui.available_rect_before_wrap();
                                 ui.allocate_ui(egui::vec2(KEY_COLUMN, key.height()), |ui| {
                                     ui.centered_and_justified(|ui| {
-                                        // monospace: the sans face draws I as a
-                                        // bare stroke, unreadable as a keycap (|)
-                                        ui.label(
-                                            row_text(config::slot_key(row.slot), false).monospace(),
-                                        );
+                                        // the sans face draws I as a bare stroke,
+                                        // unreadable as a keycap (|); the mono
+                                        // face serifs it. Only I — mono's other
+                                        // caps sit oddly next to the labels
+                                        // (its O reads as a zero).
+                                        let cap = config::slot_key(row.slot);
+                                        let mut text = row_text(cap, false);
+                                        if cap == "I" {
+                                            text = text.monospace();
+                                        }
+                                        ui.label(text);
                                     });
                                 });
                                 ui.label(row_text(
