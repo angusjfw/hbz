@@ -214,7 +214,40 @@ walk only as the fallback.
 
 1. Read the registry, mirror live sessions to the in-conversation
    task list as `in_progress`.
-2. Refresh the manager header line for this Claude:
+2. Name this manager's own tmux session. The skill names every session
+   it spawns, but a manager conversation is started by hand, so its own
+   session keeps whatever tmux auto-numbered it — `0` in `prefix+w`,
+   and a session-LED label that falls back to the cwd basename because
+   the name is numeric. Rename it, and only when it is auto-numbered:
+
+   ```bash
+   mgr_session="$(tmux display-message -p -t "$TMUX_PANE" '#S')"
+   case "$mgr_session" in
+     ""|*[!0-9]*) ;;  # unresolved, or already has a real name
+     *) tmux has-session -t '=claude-manager' 2>/dev/null \
+          || tmux rename-session -t "=$mgr_session" claude-manager ;;
+   esac
+   ```
+
+   Quote the `=` exact-match targets. Unquoted, zsh reads
+   `=claude-manager` as EQUALS expansion — it resolves a command of
+   that name, fails, and aborts the line before tmux runs, so the
+   rename silently never happens.
+
+   Both guards matter: a non-numeric name is one the user chose, and a
+   live `claude-manager` keeps its name (multiple managers are allowed,
+   so the second stays auto-numbered rather than colliding).
+
+   Do this before the header refresh and the watch start — both key off
+   the manager's tmux address. Renaming after them leaves a stale
+   `manager:` line and a watch PID file under the old address, so the
+   next invocation finds no PID file and spawns a duplicate watch. If a
+   PID file for the pre-rename address is alive, it is this manager's:
+   move it to the new address rather than starting a second watch.
+
+   The name is all this changes — key slots stay the store's business
+   (see Spawning a session, step 8).
+3. Refresh the manager header line for this Claude:
 
    ```bash
    mgr_pane="$(tmux display-message -p -t "$TMUX_PANE" '#S:#I.#P')"
@@ -230,14 +263,14 @@ walk only as the fallback.
    `# Sessions` heading. Leave other manager lines alone (multiple
    managers are allowed). Refresh on later registry-touching
    actions so the line stays current.
-3. **Start the registry watch and attach a `Monitor` to it** (see
+4. **Start the registry watch and attach a `Monitor` to it** (see
    Watching the registry). Spawning the background watch without wiring
    a `Monitor` onto its stdout is inert — the watch logs every worker
    write but the manager never reacts, so self-wraps and shutdowns go
    unnoticed until a manual re-read. If a live watch process for this
    manager already exists (PID file present and PID alive), reuse it
    (re-attach the Monitor); otherwise spawn a fresh one.
-4. Install the paused-session switcher binding (see Pause § Switcher
+5. Install the paused-session switcher binding (see Pause § Switcher
    badge). Idempotent — safe to re-run every invocation.
 
 That's it. Project rulebook, tmux state and knowledge stores are
@@ -447,7 +480,9 @@ Lifecycle:
   — keyed by the manager's tmux address with `:` and `.` replaced by
   `-` (`tr ':.' '--'`) so the basename has a single `.pid` extension.
   On invocation: if the PID file exists and the PID is alive, reuse
-  it; else start a new watch and write the PID.
+  it; else start a new watch and write the PID. The address changes if
+  the manager's session is renamed (see On invocation, step 2), so a
+  live watch under the old address is re-keyed, not duplicated.
 - **Reaction loop:** on each `changed:` event, re-read the registry,
   diff against the in-conversation last-known state, surface a brief
   note for any worker-driven change ("worker `eng-1234` shut itself
