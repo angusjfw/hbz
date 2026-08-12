@@ -52,12 +52,15 @@ impl State {
         }
     }
 
-    /// Slot colour, or None for a state that leaves the key dark.
+    /// Slot colour, or None for a state that leaves the key dark. The
+    /// firmware scales every channel down by its brightness cap, so each
+    /// colour peaks a channel at 0xFF — anything less is left on the
+    /// table (done was, at 0xCC; the rest already peaked).
     pub fn color(self) -> Option<Rgb> {
         Some(match self {
             State::Idle => BOARD_WHITE,
             State::Working => Rgb(0x00, 0x66, 0xFF),
-            State::Done => Rgb(0x00, 0xCC, 0x33),
+            State::Done => Rgb(0x00, 0xFF, 0x40),
             State::NeedsInput => Rgb(0xFF, 0xCC, 0x00),
             State::Error => Rgb(0xFF, 0x00, 0x00),
             State::Off => return None,
