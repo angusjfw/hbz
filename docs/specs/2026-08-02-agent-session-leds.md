@@ -70,9 +70,18 @@ free; a live incumbent always wins. New sessions fill the right half
 before spilling left — within each half they prefer never-remembered
 slots, then take over the stalest memory, so a dead session's
 reservation never pushes a new session onto spillover. Dead sessions
-drop from the live store immediately (their memory survives
-~60 days). `agent-status slot <session> <n>` pins manually; `clear`
-forgets.
+drop from the live store immediately (their memory survives ~7 days —
+enough to reclaim a key across a shutdown or a rebuild, short enough
+that accumulated names don't reserve the whole right half and push new
+sessions onto spillover). `agent-status slot <session> <n>` pins
+manually; `clear` forgets.
+
+Memory is deliberately not liveness-gated. A live tmux session holds
+its key through its own store entry (parked `off` when Claude exits),
+so memory is the only thing that carries a key across the session's
+lifetime; forgetting every name without a live session would empty it
+out, and would fire on the first hook after a boot — when nothing has
+started yet — handing keys out by whichever session raced first.
 
 ### LED renderer (portable core)
 

@@ -16,6 +16,7 @@ brew/Brewfile.work
 
 # Subproject build artifacts
 keyboard/session-leds/agent-deck/target/
+__pycache__/
 
 # Local Claude settings — live file holds machine/work-local fields;
 # seeded from claude/settings.json.example by `make ai`

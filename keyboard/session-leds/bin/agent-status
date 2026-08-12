@@ -134,7 +134,7 @@ def make_label(tmux_session, cwd):
 
 SLOTS_FILE = os.path.join(STATE_DIR, "slots.json")
 LOCK_DIR = os.path.join(STATE_DIR, ".lock")
-SLOT_MEMORY_DAYS = 60
+SLOT_MEMORY_DAYS = 7  # long enough to reclaim a key, short enough not to silt up
 
 
 @contextlib.contextmanager

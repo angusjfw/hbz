@@ -18,9 +18,9 @@ client to it. Spec and design decisions:
 | off | unlit (grey in HUD) | Claude exited cleanly; slot stays bound to the tmux session |
 
 Slots belong to tmux sessions, not Claude processes — a Claude restart
-keeps its key, and `slots.json` remembers name→slot so a recreated
-session reclaims its key when free — a live incumbent always wins.
-The claude-manager plays no part in slots; assignment is the CLI's
+keeps its key, and `slots.json` remembers name→slot for ~7 days so a
+recreated session reclaims its key when free — a live incumbent always
+wins. The claude-manager plays no part in slots; assignment is the CLI's
 alone, under a store lock. `agent-status slot <session> <n>` pins.
 With several Claudes in one session, the entry shows the
 highest-priority state among them (needs_input > error > working >
