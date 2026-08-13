@@ -88,8 +88,9 @@ tmux session so the manager still tracks the whole team as one unit.
   label. Being inside your tmux session only protects the team against a *clean* shutdown,
   which walks the panes and reads their ids. It buys nothing against the case that actually
   loses work — the tmux server dying with no warning — because nothing outside the panes
-  knows those conversations existed. The `worker:` line is what survives that, and writing
-  it later means not writing it at all. Drop the line when the worker goes.
+  knows those conversations existed. The `worker:` line is what survives that, and putting it
+  off is how it never gets written (recoverable, but only while the pane lives — see below).
+  Drop the line when the worker goes.
 - **The id has to survive your launcher.** Spawning through a worktree wrapper is where it
   gets quietly dropped, because the natural thing to type is the wrapper's own happy path
   (`wt switch --create <branch> -x claude`) and that starts a worker with no minted id. Put
@@ -99,6 +100,35 @@ tmux session so the manager still tracks the whole team as one unit.
   read the id back out of the pane's argv to confirm it took. Same care for any other agent
   you launch through a wrapper: its argv is what a cold resume replays, so whatever you left
   out of it is gone.
+
+### Reconciling, and recovering a worker that wasn't minted
+
+Spawn-time discipline is not enough on its own, because a spawn-time rule only covers workers
+*you* spawned and only if nothing went wrong. So **reconcile**: walk the Claude panes in your
+session, check each has a `worker:` line, and do it at the points where you'd hate to lose them
+— once the team is up, and before any long or risky step. `claude-manager` reconciles the same
+lines, but only at shutdown/wrap, which is the clean case where those lines were never what
+saved you. Reconcile while the session is alive or not at all.
+
+Two rules the reconcile enforces that a spawn-time rule can't:
+
+- **Any Claude pane in your session is yours to record, whoever opened it.** A window the human
+  opened themselves holds a conversation that dies just as unrecorded, and it is nobody else's
+  job to notice.
+- **A missed mint is recoverable, not lost.** The conversation has an id regardless — it's the
+  JSONL filename under `~/.claude/projects/<slugged-cwd>/`; you just didn't get to choose it.
+  Recover it rather than writing the worker off.
+
+Recovering one, while its pane still lives:
+
+- **Resolve from the pane's cwd, not its argv.** A worker started without `--session-id` has
+  nothing to read in argv. A worker with a unique cwd (any worktree) has exactly one JSONL in
+  its project dir — that's the id, done.
+- **On a shared cwd, disambiguate on the *first* user message.** A worker's opening prompt is
+  the brief handoff you sent it. Do not trust a phrase match anywhere in a transcript: grepping
+  for the brief's name also hits your own conversation, because you wrote the brief, and any
+  later session that investigated the team. A hit proves nothing; only the opening prompt does.
+  Fall back to mtime last, and say so when you do — an idle worker's file is old.
 
 ## What's in each window, and what each one needs
 
