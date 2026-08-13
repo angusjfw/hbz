@@ -1,14 +1,15 @@
 ---
 name: coordinator-worker
-description: The engineering-coordination playbook for running several related threads of work in parallel as a coordinator, one worker Claude per task in its own tmux window, while you own the shared contract, the ordering, verification, and the quality gate. Use this when the user names the pattern — "act as a coordinator", "coordinate this build", "run this as a coordinator/worker build", "spawn a worker per ticket", "set up a worker team" — and equally when they don't name it but ask for its pieces: "create and coordinate two new tmux windows in this session", "spawn another window with claude working on X", "run these in parallel", or any set of several related tasks that each want their own durable session. If a request pairs "coordinate" with more than one new window or worker, this applies. The tasks need not be tickets or even code: a mixed team of code workers in worktrees, non-code workers on docs/tickets/comms, and plain tooling panes you drive yourself is the normal case, not an exception. Composes with claude-manager (which owns session lifecycle: spawn, tmux, registry, resume) rather than replacing it. NOT for a single task, a quick edit, or a one-off read-only subagent lookup.
+description: The engineering-coordination playbook for running several related threads of work in parallel as a coordinator, one worker per task in its own tmux window, while you own the shared contract, the ordering, verification, and the quality gate. Use this when the user names the pattern — "act as a coordinator", "coordinate this build", "run this as a coordinator/worker build", "spawn a worker per ticket", "set up a worker team" — and equally when they don't name it but ask for its pieces: "create and coordinate two new tmux windows in this session", "spawn another window with claude working on X", "run these in parallel", or any set of several related tasks that each want their own durable session. If a request pairs "coordinate" with more than one new window or worker, this applies. The tasks need not be tickets or even code, and the windows need not all hold Claude: a mixed team of code workers in worktrees, non-code workers on docs/tickets/comms, other agent CLIs such as codex, and plain tool panes you drive yourself is the normal case, not an exception. Composes with claude-manager (which owns session lifecycle: spawn, tmux, registry, resume) rather than replacing it. NOT for a single task, a quick edit, or a one-off read-only subagent lookup.
 ---
 
 # Coordinator/worker
 
-A multi-task pattern: you are a **coordinator** running one **worker** Claude per task —
-a task being whatever the unit actually is, a ticket, a repo, an ops job, a write-up — and
-you never write product code yourself. Workers are durable peers, full sessions with their
-own context, not fire-and-forget subagents. The point is that the work is long-lived,
+A multi-task pattern: you are a **coordinator** running one **worker** per task — a task
+being whatever the unit actually is, a ticket, a repo, an ops job, a write-up — and you never
+write product code yourself. Workers are durable peers, full sessions with their own context,
+not fire-and-forget subagents. Usually they're Claude; a worker can equally be another agent
+CLI, and some windows hold no agent at all. The point is that the work is long-lived,
 steerable mid-flight, and survives across turns and resume, while your own context stays
 clean because the workers' tool spam never enters it.
 
@@ -81,8 +82,8 @@ tmux session so the manager still tracks the whole team as one unit.
   snapshot, not resumed with the team — while gaining nothing. If a worker genuinely needs
   an independent lifecycle, register it as its *own* `claude-manager` session instead of
   leaving it untracked.
-- **Mint each worker's conversation id and record it, in the same action as spawning it.**
-  Start the worker as `claude --session-id <uuid> …`, then add a `worker:` line to your own
+- **Mint each Claude worker's conversation id and record it, in the same action as spawning
+  it.** Start it as `claude --session-id <uuid> …`, then add a `worker:` line to your own
   registry entry (`claude-manager` § Registry) with that id, the worker's cwd and a short
   label. Being inside your tmux session only protects the team against a *clean* shutdown,
   which walks the panes and reads their ids. It buys nothing against the case that actually
@@ -95,32 +96,61 @@ tmux session so the manager still tracks the whole team as one unit.
   the whole command in the execute string, quoted —
   `wt switch --create <branch> -b origin/<default> -x 'claude --session-id <uuid> --effort high'`
   — because unquoted trailing flags get parsed by the wrapper, not passed to Claude. Then
-  read the id back out of the pane's argv to confirm it took.
+  read the id back out of the pane's argv to confirm it took. Same care for any other agent
+  you launch through a wrapper: its argv is what a cold resume replays, so whatever you left
+  out of it is gone.
 
-## Three kinds of window, and what each one needs
+## What's in each window, and what each one needs
 
-A real team is usually mixed. Decide which kind each window is *before* you open it, because
-the isolation and the paperwork differ:
+A real team is usually mixed, and not every window has Claude in it. Two independent questions
+per window, settled *before* you open it, because the isolation and the bookkeeping follow from
+them: **is this task code or not** (which decides the boundary), and **what's running in the
+pane — Claude, another agent, or a tool you drive** (which decides how it gets recorded, and
+whether it can come back).
 
-- **Code worker.** Its own worktree off fresh `origin/<default>`, its own DB and ports, a
-  BRIEF, a STATUS file, a minted id and a `worker:` line. The pre-push review gate applies.
-- **Non-code worker** — project updates, ticket writing, docs, a drafted message. Still a
-  full peer session, still gets a BRIEF, a STATUS file, a minted id and a `worker:` line.
-  What it does *not* get is a worktree, and that's the trap: a worktree is what silently
-  keeps code workers off each other's files, and a non-code worker has no such fence. So
-  **name the files and surfaces it owns, and the ones it must not touch.** Two workers with
-  write access to one doc, or one editing a ticket you're also editing, clobber each other
-  the same way two editors on a PR body do.
-- **A tooling pane you drive yourself.** Ops tooling, a DLQ shovel, a prod shell, a tailing
-  log. No Claude, so no BRIEF, no STATUS, no minted id and no `worker:` line — the registry
-  line is for Claude panes only, and inventing one for a shell pane makes a resume try to
-  restore a conversation that never existed. It still belongs in your spawned-resource
-  inventory so teardown finds it, and its commands are yours: don't hand a destructive ops
-  step to a worker to run on your behalf.
+**Is the task code?** That decides the fence:
 
-Non-code work is not a lesser member of the team. A write-up that has to describe what the
-other workers actually did is *downstream of them*, which makes it exactly the thing that
-goes stale if you let it start early or forget to feed it the verified outcome.
+- **Code** — its own worktree off fresh `origin/<default>`, its own DB and ports. The
+  pre-push review gate applies.
+- **Not code** — project updates, ticket writing, docs, a drafted message. No worktree, and
+  that's the trap: the worktree is what silently keeps code workers off each other's files,
+  and this kind has no such fence. So **name the files and surfaces it owns, and the ones it
+  must not touch.** Two workers with write access to one doc, or one editing a ticket you're
+  also editing, clobber each other the same way two editors on a PR body do. Non-code work
+  isn't a lesser member of the team; it's usually the part that gets posted.
+
+**What's running in the pane?** That decides the bookkeeping:
+
+- **A Claude worker** — BRIEF, STATUS file, minted id, `worker:` line.
+- **Another agent** — `codex`, any agent CLI that takes a task and works on it autonomously.
+  A worker in every respect that matters: BRIEF file, stated boundary, STATUS protocol,
+  claims verified rather than believed. Don't assume it has your connectors or your rulebook,
+  so inline more into the BRIEF than you would for a Claude worker. What differs is only the
+  bookkeeping, below.
+- **A tool you drive yourself** — a prod shell, ops tooling, a DLQ shovel, a tailing log. No
+  BRIEF, no STATUS, nothing autonomous. Its commands are yours: don't hand a destructive ops
+  step to a worker to run on your behalf. Keep it in your spawned-resource inventory so
+  teardown finds it.
+
+**The bookkeeping, and the resume trap for non-Claude panes.** `claude-manager` captures
+*every* pane at a clean shutdown, not just Claude ones: a Claude pane gets its session id, an
+idle shell gets an empty command, and anything else gets its **full argv recorded verbatim and
+replayed** on cold resume — no known-patterns list, so an agent CLI is covered without you
+doing anything. Two things follow, and they cut opposite ways:
+
+- A `worker:` registry line is **Claude-only** by definition — it holds a `--resume` token. Don't
+  invent one for a codex or shell pane; it would send a resume after a conversation that
+  doesn't exist in that form.
+- **Argv replay restores the command, not the conversation.** Your codex worker comes back as a
+  *fresh* agent with an empty head, looking exactly like the one you left. So for any non-Claude
+  agent worker, find out whether the tool has its own resume handle, record it yourself
+  (registry `notes` is fine — it is prose, unlike `worker:`), and lean on its **STATUS file as
+  the real continuity mechanism**: a worker whose context you cannot reliably restore has to
+  keep its state on disk, where a replacement can pick it up.
+
+Watch the ordering that falls out of a mixed team: a write-up describing what the other workers
+did is *downstream of them*, so it goes stale if you let it start early or forget to feed it the
+verified outcome.
 
 ## The worker contract — a written BRIEF.md at spawn
 
@@ -176,7 +206,10 @@ The first three are code-worker concerns; the last two apply to every pane.
   insert mode), so a dropped or extra press lands a worker in a *different* mode than you
   chose. The permission mode is the hard gate; a BRIEF guardrail is only soft, so a worker
   one step too autonomous can act unattended. After setup, re-capture every worker's status
-  line and reconcile actual mode to intent.
+  line and reconcile actual mode to intent. Another agent CLI has its own approval or sandbox
+  setting — usually a launch flag, so more reliable than a keystroke, but **don't assume its
+  default matches Claude's.** Look it up and set it explicitly; an agent that auto-approves by
+  default is the one that will act unattended while you think a BRIEF line is holding it.
 - **A fresh worktree's dependency tree is a liar.** Have each worker prove its toolchain
   resolves *locally* before trusting any green result. A copied virtualenv can keep its
   interpreter shebangs and `.pth` entries pointing at the original clone, so tests and type
