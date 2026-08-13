@@ -70,18 +70,26 @@ free; a live incumbent always wins. New sessions fill the right half
 before spilling left — within each half they prefer never-remembered
 slots, then take over the stalest memory, so a dead session's
 reservation never pushes a new session onto spillover. Dead sessions
-drop from the live store immediately (their memory survives ~7 days —
-enough to reclaim a key across a shutdown or a rebuild, short enough
-that accumulated names don't reserve the whole right half and push new
-sessions onto spillover). `agent-status slot <session> <n>` pins
-manually; `clear` forgets.
+drop from the live store immediately. `agent-status slot <session> <n>`
+pins manually; `clear` forgets.
+
+Memory has two tiers, because nothing in tmux tells a session that is
+coming back from one that is simply gone. A name is remembered for a
+day — enough to cover a reboot — and `park <session>` vouches for one
+that will return, holding its key for a week. Whoever knows the
+difference says so at the transition: the claude-manager parks a
+session it shuts down and clears one it wraps. The verbs are generic
+and this store never reads the registry, so slots work the same for a
+session no manager has ever heard of; they just age out in a day.
 
 Memory is deliberately not liveness-gated. A live tmux session holds
 its key through its own store entry (parked `off` when Claude exits),
 so memory is the only thing that carries a key across the session's
 lifetime; forgetting every name without a live session would empty it
 out, and would fire on the first hook after a boot — when nothing has
-started yet — handing keys out by whichever session raced first.
+started yet — handing keys out by whichever session raced first. The
+two tiers get the same result the honest way: an unvouched name simply
+expires.
 
 ### LED renderer (portable core)
 

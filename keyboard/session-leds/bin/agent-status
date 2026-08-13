@@ -16,6 +16,11 @@ session names to slots so a recreated session reclaims its key; a
 live incumbent always wins; new sessions prefer never-remembered
 slots. Assignment runs under a store lock. `slot <session> <n>`
 pins manually.
+
+A name is remembered for a day, which covers a reboot. `park
+<session>` vouches for one that is coming back and holds its key for
+a week; `clear <session>` releases it at once. Nothing here knows who
+calls those — a session manager, a script, or you.
 """
 
 import contextlib
@@ -134,7 +139,15 @@ def make_label(tmux_session, cwd):
 
 SLOTS_FILE = os.path.join(STATE_DIR, "slots.json")
 LOCK_DIR = os.path.join(STATE_DIR, ".lock")
-SLOT_MEMORY_DAYS = 7  # long enough to reclaim a key, short enough not to silt up
+# Slot memory has two tiers, because nothing in tmux distinguishes a
+# session that is coming back from one that is simply gone. By default a
+# name is remembered just long enough to survive a reboot; `park` vouches
+# for one that will return and holds its key far longer. Whoever knows
+# the difference says so — the claude-manager parks a session it shuts
+# down and clears one it wraps — but the verbs are generic and this file
+# stays ignorant of who called them.
+SLOT_MEMORY_HOURS = 24
+PARKED_MEMORY_DAYS = 7
 
 
 @contextlib.contextmanager
@@ -173,27 +186,55 @@ def read_slot_memory():
         return {}
 
 
-def remember_slot(name, slot):
-    """Persist name -> slot so a recreated session reclaims its key."""
-    if not slot:
-        return
-    mem = read_slot_memory()
-    mem[name] = {"slot": slot, "ts": int(time.time())}
-    cutoff = time.time() - SLOT_MEMORY_DAYS * 86400
-    mem = {k: v for k, v in mem.items() if v.get("ts", 0) > cutoff}
+def write_slot_memory(mem):
     tmp = SLOTS_FILE + ".tmp"
     with open(tmp, "w") as f:
         json.dump(mem, f)
     os.replace(tmp, SLOTS_FILE)
 
 
+def prune_memory(mem):
+    """Drop memories past their tier's limit. Parked names outlive
+    ordinary ones; everything is timestamped, so nothing here has to
+    guess whether a session is alive."""
+    now = time.time()
+    kept = {}
+    for name, e in mem.items():
+        limit = (PARKED_MEMORY_DAYS * 86400 if e.get("park")
+                 else SLOT_MEMORY_HOURS * 3600)
+        if now - e.get("ts", 0) < limit:
+            kept[name] = e
+    return kept
+
+
+def remember_slot(name, slot):
+    """Persist name -> slot so a recreated session reclaims its key.
+    Called from live events, so it also drops any `park`: the session
+    is back, and a later disappearance should be vouched for afresh."""
+    if not slot:
+        return
+    mem = read_slot_memory()
+    mem[name] = {"slot": slot, "ts": int(time.time())}
+    write_slot_memory(prune_memory(mem))
+
+
+def park_slot(name):
+    """Vouch for a name that is going away but coming back. Uses the
+    live entry's slot when memory doesn't already hold one."""
+    mem = read_slot_memory()
+    entry = mem.get(name) or {}
+    slot = entry.get("slot") or (read_all().get(name) or {}).get("slot")
+    if not slot:
+        return None
+    mem[name] = {"slot": slot, "ts": int(time.time()), "park": True}
+    write_slot_memory(prune_memory(mem))
+    return slot
+
+
 def forget_slot(name):
     mem = read_slot_memory()
     if mem.pop(name, None) is not None:
-        tmp = SLOTS_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(mem, f)
-        os.replace(tmp, SLOTS_FILE)
+        write_slot_memory(mem)
 
 
 def assign_slot(tmux_session, entries):
@@ -329,6 +370,19 @@ def cmd_list():
     return 0
 
 
+def cmd_park(tmux_session):
+    """Hold a session's key past the ordinary window, for one that is
+    going away but coming back."""
+    with store_lock():
+        slot = park_slot(tmux_session)
+    if slot is None:
+        print(f"no slot known for {tmux_session!r} — nothing to park",
+              file=sys.stderr)
+        return 1
+    print(f"{tmux_session} parked on slot {slot}")
+    return 0
+
+
 def cmd_clear(tmux_session=None):
     with store_lock():
         if tmux_session:
@@ -383,10 +437,12 @@ def main():
         return cmd_list()
     if cmd == "clear":
         return cmd_clear(rest[0] if rest else None)
+    if cmd == "park" and len(rest) == 1:
+        return cmd_park(rest[0])
     if cmd == "slot" and len(rest) == 2:
         return cmd_slot(*rest)
     print("usage: agent-status event|set <session> <state>|list"
-          "|clear [session]|slot <session> <n>",
+          "|clear [session]|park <session>|slot <session> <n>",
           file=sys.stderr)
     return 1
 

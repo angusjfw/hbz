@@ -18,10 +18,16 @@ client to it. Spec and design decisions:
 | off | unlit (grey in HUD) | Claude exited cleanly; slot stays bound to the tmux session |
 
 Slots belong to tmux sessions, not Claude processes — a Claude restart
-keeps its key, and `slots.json` remembers name→slot for ~7 days so a
-recreated session reclaims its key when free — a live incumbent always
-wins. The claude-manager plays no part in slots; assignment is the CLI's
-alone, under a store lock. `agent-status slot <session> <n>` pins.
+keeps its key, and `slots.json` remembers name→slot so a recreated
+session reclaims its key when free — a live incumbent always wins.
+Memory lasts a day, enough to cover a reboot; `agent-status park
+<session>` vouches for one that is coming back and holds its key for a
+week, `clear <session>` releases it at once. Assignment is the CLI's
+alone, under a store lock, and it never reads anything outside its own
+store — the claude-manager parks what it shuts down and clears what it
+wraps, because only it knows which a dead session was, but the CLI
+works the same with no manager in sight.
+`agent-status slot <session> <n>` pins.
 With several Claudes in one session, the entry shows the
 highest-priority state among them (needs_input > error > working >
 done > idle) and parks `off` when the last one leaves. Idle
