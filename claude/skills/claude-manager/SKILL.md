@@ -170,7 +170,7 @@ pane, which can belong to an unrelated session entirely.
 
 This bites two things that assume `$TMUX_PANE` is trustworthy: the
 manager's own header refresh (`On invocation` step 2 below), and every
-worker-side self-identification in `claude-manager-end/FLOW.md`'s
+worker-side self-identification in `END-FLOW.md`'s
 Common preamble (`/claude-manager-wrap`, `/claude-manager-shutdown`).
 A worker whose `$TMUX_PANE` is empty can't confidently answer "am I in
 a tmux pane, and if so which one" — it either misidentifies itself
@@ -678,7 +678,7 @@ net.
    store alone — never here. The manager's only say is at the ends of a
    session's life: `agent-status park` when it shuts one down, `clear`
    when it wraps one, because only the manager knows which of those a
-   dead tmux session was. See claude-manager-end/FLOW.md.)
+   dead tmux session was. See END-FLOW.md (next to this file).)
 
    `resumed_session_id` at spawn, not at shutdown. The registry must be
    enough on its own to fire `claude --resume` for a session that never
@@ -1322,7 +1322,7 @@ registry `paused` field and a per-session `@cm_paused` tmux option.
 The registry rewrite uses the same lock and re-read-under-lock
 discipline as everything else (see Registry). A worker acting on its own
 entry resolves and matches it the same way the shutdown/wrap flow does
-(`claude-manager-end/FLOW.md` § Common preamble).
+(`END-FLOW.md` § Common preamble).
 
 **Pause** (active → parked):
 

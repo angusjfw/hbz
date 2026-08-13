@@ -12,7 +12,7 @@ entry so the session can be cold-resumed later. Sits between active
 and wrap (final, removes the entry, writes journal).
 
 This is a thin wrapper. The shared lifecycle flow lives at
-`../claude-manager-end/FLOW.md`. Read it and run with `mode=shutdown`.
+`../claude-manager/END-FLOW.md`. Read it and run with `mode=shutdown`.
 
 The worker handles shutdown itself: walks every window and pane in
 the tmux session, writes a multi-window snapshot file, builds a

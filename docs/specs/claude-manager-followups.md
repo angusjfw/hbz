@@ -1,7 +1,7 @@
 # Claude manager follow-ups
 
 Ongoing list of known issues and pending work for the `claude-manager`
-skill and its `-wrap` / `-shutdown` / `-end` siblings. Companions to
+skill and its `-wrap` / `-shutdown` / `-pause` siblings. Companions to
 `2026-04-29-claude-manager-workflow.md` and the
 `2026-05-22-claude-manager-sessions-pivot.md` follow-up spec. One
 heading per item, terse context only — fixes and scoping decided when
@@ -9,11 +9,18 @@ picked up. Items below are ordered by priority, high to low.
 
 ## Manager-exit vs worker "-end" naming clash
 
-"End" is overloaded: the `claude-manager-end` dir holds the *worker*
-shutdown/wrap shared flow (FLOW.md, itself not a skill — no SKILL.md),
-while the *manager* close-out is only the "Ending the manager session"
-section in `claude-manager/SKILL.md` with no command of its own.
-Confusing when invoking.
+"End" is overloaded. The *manager* close-out is only the "Ending the
+manager session" section in `claude-manager/SKILL.md`, with no command
+of its own — that half is still open.
+
+The dir half is resolved: the *worker* shutdown/wrap shared flow used to
+sit in a `claude-manager-end` dir that held no SKILL.md, so it installed
+into `~/.claude/skills/` looking like a skill nobody could invoke. It is
+now `claude-manager/END-FLOW.md`, a companion doc beside
+`CRASH-RECOVERY.md` in the skill that owns it. That removes the bogus
+skill entry and one use of "end", but it is a local fix, not this item's
+resolution — the `amux` scheme below still stands, and under it this doc
+moves again into `amux-worker-teardown`.
 
 Leading resolution (probably — not committed; the prefix is unsettled):
 rename the whole family to a role-based scheme `amux-<role>-<action>`,
@@ -31,7 +38,7 @@ Name still tentative.
 
 Scope is two layers with very different risk:
 
-- **User-facing** — ~92 `claude-manager` refs across skills + specs, 5
+- **User-facing** — ~92 `claude-manager` refs across skills + specs, 4
   skill dirs, the `~/.claude/skills` symlinks. Mechanical, no runtime
   risk.
 - **Internal plumbing** — `~/.local/state/claude-manager/` (registry,

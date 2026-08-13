@@ -14,7 +14,7 @@ lifecycle transition that produces a journal record, so use it only
 when the work is genuinely done.
 
 This is a thin wrapper. The shared lifecycle flow lives at
-`../claude-manager-end/FLOW.md`. Read it and run with `mode=wrap`.
+`../claude-manager/END-FLOW.md`. Read it and run with `mode=wrap`.
 
 The worker handles its phase itself:
 

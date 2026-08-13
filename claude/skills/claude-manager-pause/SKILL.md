@@ -20,7 +20,7 @@ this session.
 From the worker's own pane:
 
 1. Resolve this session and find its entry — the same preamble the
-   shutdown/wrap flow uses (`claude-manager-end/FLOW.md` § Common
+   shutdown/wrap flow uses (`../claude-manager/END-FLOW.md` § Common
    preamble): `src_session=$(tmux display-message -p -t "$TMUX_PANE" '#S')`,
    then match `$src_session` against each entry's `tmux_session`.
 2. Branch on whether the entry already has a `paused` field, then run
