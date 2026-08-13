@@ -674,8 +674,11 @@ net.
 8. Add the session to the registry with `tmux_session: $session_id`,
    `resumed_session_id: $claude_session_id` from step 7, plus `model:`
    and `effort:` from step 6. Add to the visible task list (`[active]`
-   prefix). (Session-LED key slots are none of the manager's business —
-   the agent-status store assigns and remembers them itself.)
+   prefix). (Session-LED key slots are assigned by the agent-status
+   store alone — never here. The manager's only say is at the ends of a
+   session's life: `agent-status park` when it shuts one down, `clear`
+   when it wraps one, because only the manager knows which of those a
+   dead tmux session was. See claude-manager-end/FLOW.md.)
 
    `resumed_session_id` at spawn, not at shutdown. The registry must be
    enough on its own to fire `claude --resume` for a session that never
@@ -994,10 +997,14 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
    - Appends to `notes`: "Tmux killed <date>; resume via the manager."
    - Removes `tmux_session` and `paused` (if set).
 
-6. **Kill the tmux session** (after the lock is released), moving any
+6. **Park the session's LED key** so it survives until resume:
+   `agent-status park "$tmux_session"`. Ordinary slot memory lasts a
+   day; parking says this one is coming back. Non-fatal.
+
+7. **Kill the tmux session** (after the lock is released), moving any
    attached client off it first — see § Killing a session.
 
-7. **Update the visible task list:** set the description prefix to
+8. **Update the visible task list:** set the description prefix to
    `[shutdown]` per the Task list hygiene rule.
 
 **Trigger paths:**
@@ -1005,7 +1012,7 @@ Flexible wording: "shutdown", "kill that one", "drop tmux".
 - The user asks the manager directly. Manager runs the full mechanics
   above.
 - A worker self-shuts via `/claude-manager-shutdown`. The worker does
-  steps 1–6 itself. For multi-Claude sessions (forked workers in other
+  steps 1–7 itself. For multi-Claude sessions (forked workers in other
   windows), the worker walks all panes per step 3, not just its own.
   The manager observes the change via the watch and updates the task
   list.
@@ -1258,7 +1265,10 @@ wording: "wrap up", "complete", "close out", "finish".
 4. Mark the visible task list entry `completed`, then delete it from
    the list.
 5. Remove the entry from the registry.
-6. Kill the tmux session if it's still alive, moving any attached
+6. Release the session's LED key: `agent-status clear "$tmux_session"`.
+   Wrap is final, so the key goes back at once instead of being held
+   for a session that will never return. Non-fatal.
+7. Kill the tmux session if it's still alive, moving any attached
    client off it first — see § Killing a session.
 
 **Trigger paths:**
@@ -1268,10 +1278,10 @@ wording: "wrap up", "complete", "close out", "finish".
 - A worker self-wraps via `/claude-manager-wrap`. The worker captures
   the snapshot, resolves its `resumed_session_id`, gathers any
   context for the journal into `notes`, sets `wrap_requested: true`
-  on its registry entry, then kills the tmux session. The watch
-  fires; the manager picks up the marker and runs steps 3–5
-  (journal write, task-list completion, registry removal). Step 6
-  (kill) is already done.
+  on its registry entry, releases its LED key, then kills the tmux
+  session. The watch fires; the manager picks up the marker and runs
+  steps 3–5 (journal write, task-list completion, registry removal).
+  Steps 6 and 7 (key release, kill) are already done.
 
 If the manager isn't running when a worker wraps, the
 `wrap_requested` marker persists on the entry. The next manager

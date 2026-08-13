@@ -225,7 +225,19 @@ covers the worker-side specifics.
    - Drops `tmux_session` and `paused` (active-only).
    - Preserves all other fields and prose.
 
-6. **Kill the tmux session.** Only do this after the lock has been
+6. **Park the session's LED key**, so it is still there on resume:
+
+   ```bash
+   agent-status park "$src_session"
+   ```
+
+   Ordinary slot memory only lasts a day, which is enough to survive a
+   reboot but not a session parked for a week. Parking says this one is
+   coming back. Skip it and the key is handed to whoever asks next;
+   there is no harm beyond a session resuming onto a different key.
+   Non-fatal — a missing `agent-status` is not a reason to abort a
+   shutdown.
+7. **Kill the tmux session.** Only do this after the lock has been
    released and the registry write has landed; this kills the
    worker's own pane, so any remaining work must be done first. Move
    any attached client off `$src_session` before the kill — see
@@ -294,7 +306,16 @@ fulfils the journal write.
    - Drops `tmux_session` (and `paused`, if set) — the session is
      about to be killed.
 
-5. **Kill the tmux session** after the lock has been released and the
+5. **Release the session's LED key.** Wrap is final, so the key goes
+   back immediately rather than being held for a session that is never
+   coming back:
+
+   ```bash
+   agent-status clear "$src_session"
+   ```
+
+   This is the counterpart to shutdown's `park`. Non-fatal, as there.
+6. **Kill the tmux session** after the lock has been released and the
    registry write has landed. This kills the worker's own pane, so
    any remaining work must be done first. Move any attached client off
    `$src_session` before the kill — see `claude-manager/SKILL.md`
@@ -306,7 +327,7 @@ fulfils the journal write.
    ```
 
 **Manager phase** (driven by the watch — no action needed from the
-worker after step 5): the manager's reaction loop sees `wrap_requested:
+worker after step 6): the manager's reaction loop sees `wrap_requested:
 true`, reads the project's journal schema, reviews the snapshot and
 notes, asks the user a focused question if the picture is thin, writes
 the journal entry, removes the registry entry, and marks the task
