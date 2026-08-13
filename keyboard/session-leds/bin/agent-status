@@ -11,6 +11,7 @@ read by renderers (keyboard LEDs, on-screen twin). State lives in
 States: idle, working, done, needs_input, error, off. The top-level
 state aggregates the per-Claude sub-states by priority
 (needs_input > error > working > done > idle; off when none remain).
+One Claude is tracked per pane, the newest to report owning it.
 Slot assignment is single-mechanism and remembered: slots.json maps
 session names to slots so a recreated session reclaims its key; a
 live incumbent always wins; new sessions prefer never-remembered
@@ -322,13 +323,20 @@ def apply_event(event, hook, tmux_session, caller_id, caller_pane):
         entry.pop("session_id", None)
         entry.pop("pane_id", None)
     claudes[caller_id] = {"state": state, "pane_id": caller_pane}
-    # drop Claudes whose pane no longer runs one (crashed/replaced)
+    # A pane hosts one Claude, so the newest report owns it. Drop
+    # Claudes whose pane no longer runs one (crashed/replaced), and any
+    # earlier occupant of the caller's own pane: a nested `claude -p`
+    # inherits TMUX_PANE and reports under its own session id, and tools
+    # that spawn them tend to kill them, so no SessionEnd ever arrives
+    # to clear them. Left to accumulate they also hold the pane's state
+    # at whatever they died mid-turn on.
     panes = claude_panes(tmux_session)
     for sid in list(claudes):
-        if sid != caller_id:
-            pane = claudes[sid].get("pane_id")
-            if not (pane and panes.get(pane)):
-                del claudes[sid]
+        if sid == caller_id:
+            continue
+        pane = claudes[sid].get("pane_id")
+        if pane == caller_pane or not (pane and panes.get(pane)):
+            del claudes[sid]
     entry["claudes"] = claudes
     entry["label"] = make_label(tmux_session, hook.get("cwd"))
     entry["state"] = aggregate(claudes)

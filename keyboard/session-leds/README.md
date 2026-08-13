@@ -30,7 +30,10 @@ works the same with no manager in sight.
 `agent-status slot <session> <n>` pins.
 With several Claudes in one session, the entry shows the
 highest-priority state among them (needs_input > error > working >
-done > idle) and parks `off` when the last one leaves. Idle
+done > idle) and parks `off` when the last one leaves. Tracking is one
+Claude per pane, newest report wins — a nested `claude -p` inherits the
+pane it was spawned from, so it shows there while it runs and the
+pane's own session takes it back on its next event. Idle
 "waiting for your input" notifications don't count as needs_input;
 permission requests do. Labels prefer the tmux session name (manager sessions
 are named descriptively), falling back to the cwd basename for
