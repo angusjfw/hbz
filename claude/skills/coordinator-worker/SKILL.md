@@ -63,6 +63,12 @@ you use both at once:
 Because of that layering, one rule matters most (below): keep your workers inside your own
 tmux session so the manager still tracks the whole team as one unit.
 
+**Which file owns what.** This page holds *what you must do*; `claude-manager` holds *how the
+mechanism works*. So the registry format, pane detection, snapshot and resume behaviour are
+its to define and this page only points at them — a mechanism restated here is a copy that
+goes stale silently, and it already has once. When something here looks like a description of
+the manager's internals, go and read the manager's section instead of trusting it.
+
 ## Shape
 
 - One coordinator (top tier); one worker per task, each in its own tmux window. A worker
@@ -106,9 +112,13 @@ tmux session so the manager still tracks the whole team as one unit.
 Spawn-time discipline is not enough on its own, because a spawn-time rule only covers workers
 *you* spawned and only if nothing went wrong. So **reconcile**: walk the Claude panes in your
 session, check each has a `worker:` line, and do it at the points where you'd hate to lose them
-— once the team is up, and before any long or risky step. `claude-manager` reconciles the same
-lines, but only at shutdown/wrap, which is the clean case where those lines were never what
-saved you. Reconcile while the session is alive or not at all.
+— once the team is up, and before any long or risky step.
+
+`claude-manager` has the same check and can repair it for you (§ Reconcile), but don't hand it
+the job. It runs on demand or when its watch sees a registry write, so a coordinator that
+spawns workers and never writes to the registry is precisely the case that triggers nothing —
+and it needs a live manager, which a dying tmux server does not guarantee. Yours is the copy
+that runs while the session is alive.
 
 Two rules the reconcile enforces that a spawn-time rule can't:
 
@@ -162,21 +172,21 @@ whether it can come back).
   step to a worker to run on your behalf. Keep it in your spawned-resource inventory so
   teardown finds it.
 
-**The bookkeeping, and the resume trap for non-Claude panes.** `claude-manager` captures
-*every* pane at a clean shutdown, not just Claude ones: a Claude pane gets its session id, an
-idle shell gets an empty command, and anything else gets its **full argv recorded verbatim and
-replayed** on cold resume — no known-patterns list, so an agent CLI is covered without you
-doing anything. Two things follow, and they cut opposite ways:
+**The bookkeeping, and the resume trap for non-Claude panes.** `claude-manager` classifies and
+captures *every* pane at a clean shutdown, not just Claude ones (§ Detect pane processes,
+§ Shutdown — read those for what is actually captured; don't trust a summary here). Two
+consequences you have to act on, and they cut opposite ways:
 
-- A `worker:` registry line is **Claude-only** by definition — it holds a `--resume` token. Don't
+- A `worker:` registry line is **Claude-only** — it holds a `--resume` token (§ Registry). Don't
   invent one for a codex or shell pane; it would send a resume after a conversation that
-  doesn't exist in that form.
-- **Argv replay restores the command, not the conversation.** Your codex worker comes back as a
-  *fresh* agent with an empty head, looking exactly like the one you left. So for any non-Claude
-  agent worker, find out whether the tool has its own resume handle, record it yourself
-  (registry `notes` is fine — it is prose, unlike `worker:`), and lean on its **STATUS file as
-  the real continuity mechanism**: a worker whose context you cannot reliably restore has to
-  keep its state on disk, where a replacement can pick it up.
+  doesn't exist in that form. The registry has no equivalent field for a non-Claude agent
+  worker, so there is nowhere structured to put one today.
+- **Replay restores the command, not the conversation.** A non-Claude pane comes back by having
+  its command re-run, so your codex worker returns as a *fresh* agent with an empty head that
+  looks exactly like the one you left. So: find out whether the tool has its own resume handle
+  and record it yourself (registry `notes` — prose, but it's what there is), and lean on its
+  **STATUS file as the real continuity mechanism**. A worker whose context you cannot reliably
+  restore has to keep its state on disk, where a replacement can pick it up.
 
 Watch the ordering that falls out of a mixed team: a write-up describing what the other workers
 did is *downstream of them*, so it goes stale if you let it start early or forget to feed it the
