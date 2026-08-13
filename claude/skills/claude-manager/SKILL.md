@@ -225,9 +225,18 @@ walk only as the fallback.
    case "$mgr_session" in
      ""|*[!0-9]*) ;;  # unresolved, or already has a real name
      *) tmux has-session -t '=claude-manager' 2>/dev/null \
-          || tmux rename-session -t "=$mgr_session" claude-manager ;;
+          || { tmux rename-session -t "=$mgr_session" claude-manager \
+                 && agent-status clear "$mgr_session"; } ;;
    esac
    ```
+
+   The `clear` is not tidiness. This Claude's `SessionStart` hook has
+   already fired under the old numeric name, so the store holds an entry
+   and a slot reservation for `0`. After the rename the manager reclaims
+   its own remembered key, abandoning that reservation — and because
+   every boot re-stamps the timestamp, it never ages out, silently
+   costing one right-half key per boot. `clear` drops the old name's
+   state file and its slot memory together.
 
    Quote the `=` exact-match targets. Unquoted, zsh reads
    `=claude-manager` as EQUALS expansion — it resolves a command of
