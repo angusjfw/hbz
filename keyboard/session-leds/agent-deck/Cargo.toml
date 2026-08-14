@@ -8,7 +8,10 @@ publish = false
 [dependencies]
 eframe = { version = "0.36.0", default-features = false, features = [
   "default_fonts",
-  "glow",
+  # wgpu, not glow: an OpenGL context loses its drawable when the display
+  # arrangement changes and never gets it back, so the overlay went on
+  # painting frames that reached no screen. wgpu rebuilds its surface.
+  "wgpu",
   "wayland",
   "x11",
 ] }
