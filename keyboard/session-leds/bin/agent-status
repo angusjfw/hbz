@@ -2,7 +2,11 @@
 """Track Claude Code session status per tmux session.
 
 Fed by Claude Code hooks (`agent-status event` with hook JSON on stdin),
-read by renderers (keyboard LEDs, on-screen twin). State lives in
+read by renderers (keyboard LEDs, on-screen switcher). Every write to
+the store goes through here, under the store lock — a renderer that
+notices something no hook can report (a Claude that died with its tmux
+session still up, a `done` the user has now looked at, a session that
+has gone away) asks with `set`, `demote` or `drop`. State lives in
 ~/.local/state/agent-status/<tmux-session>.json:
 
     {"tmux_session", "state", "slot", "label", "ts",
@@ -76,12 +80,21 @@ def read_all():
 
 
 def write(entry):
+    """Atomic per entry. The temp name carries the pid: writers are
+    serialised by the store lock, but a caller that skipped it must not
+    be able to pull another writer's temp file out from under it."""
     os.makedirs(STATE_DIR, exist_ok=True)
     entry["ts"] = int(time.time())
-    tmp = state_path(entry["tmux_session"]) + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(entry, f)
-    os.replace(tmp, state_path(entry["tmux_session"]))
+    path = state_path(entry["tmux_session"])
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(entry, f)
+        os.replace(tmp, path)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def current_tmux_session():
@@ -196,7 +209,7 @@ def read_slot_memory():
 
 
 def write_slot_memory(mem):
-    tmp = SLOTS_FILE + ".tmp"
+    tmp = f"{SLOTS_FILE}.{os.getpid()}.tmp"
     with open(tmp, "w") as f:
         json.dump(mem, f)
     os.replace(tmp, SLOTS_FILE)
@@ -358,14 +371,15 @@ def cmd_set(tmux_session, state):
         print(f"unknown state {state!r}, want one of {', '.join(STATES)}",
               file=sys.stderr)
         return 1
-    entries = read_all()
-    entry = entries.get(tmux_session) or {
-        "tmux_session": tmux_session,
-        "slot": assign_slot(tmux_session, entries),
-        "label": tmux_session,
-    }
-    entry["state"] = state
-    write(entry)
+    with store_lock():
+        entries = read_all()
+        entry = entries.get(tmux_session) or {
+            "tmux_session": tmux_session,
+            "slot": assign_slot(tmux_session, entries),
+            "label": tmux_session,
+        }
+        entry["state"] = state
+        write(entry)
     return 0
 
 
@@ -384,6 +398,33 @@ def cmd_list():
         key = SLOT_KEYS[slot - 1] if slot and slot <= len(SLOT_KEYS) else "-"
         print(f"{key:>2}  {e['state']:<11} "
               f"{e['tmux_session']}  ({e.get('label', '')})")
+    return 0
+
+
+def cmd_demote(tmux_session):
+    """`done` back to `idle`, for a session the user is now looking at.
+    Per-Claude sub-states too: the top-level state is only their
+    aggregate, so leaving one at `done` would have the next event from a
+    sibling revive it. Only a still-done entry demotes — a hook may have
+    moved the session on since whoever asked last looked."""
+    with store_lock():
+        entry = read_all().get(tmux_session)
+        if not entry or entry.get("state") != "done":
+            return 0
+        for claude in (entry.get("claudes") or {}).values():
+            if claude.get("state") == "done":
+                claude["state"] = "idle"
+        entry["state"] = "idle"
+        write(entry)
+    return 0
+
+
+def cmd_drop(tmux_session):
+    """Forget a tmux session that has gone away, keeping its slot
+    memory — `clear` is the one that releases the key as well."""
+    with store_lock():
+        with contextlib.suppress(OSError):
+            os.remove(state_path(tmux_session))
     return 0
 
 
@@ -454,12 +495,17 @@ def main():
         return cmd_list()
     if cmd == "clear":
         return cmd_clear(rest[0] if rest else None)
+    if cmd == "demote" and len(rest) == 1:
+        return cmd_demote(rest[0])
+    if cmd == "drop" and len(rest) == 1:
+        return cmd_drop(rest[0])
     if cmd == "park" and len(rest) == 1:
         return cmd_park(rest[0])
     if cmd == "slot" and len(rest) == 2:
         return cmd_slot(*rest)
     print("usage: agent-status event|set <session> <state>|list"
-          "|clear [session]|park <session>|slot <session> <n>",
+          "|clear [session]|drop <session>|demote <session>"
+          "|park <session>|slot <session> <n>",
           file=sys.stderr)
     return 1
 

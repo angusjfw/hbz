@@ -131,8 +131,6 @@ const SLOTS: [(u8, &str); 33] = [
 ];
 
 pub const MAX_SLOTS: u32 = SLOTS.len() as u32;
-/// Where the left half starts, which is what the status CLI fills last.
-pub const LEFT_FIRST_SLOT: u32 = 18;
 
 fn slot(slot: u32) -> Option<&'static (u8, &'static str)> {
     SLOTS.get(usize::try_from(slot).ok()?.checked_sub(1)?)
@@ -178,18 +176,6 @@ pub fn state_dir() -> PathBuf {
     home().join(".local/state/agent-status")
 }
 
-/// The status CLI serialises its read-assign-write on this directory; our
-/// writes take the same one. Best-effort on both sides — a lock nobody
-/// released within `LOCK_STALE` is taken, and after `LOCK_TIMEOUT` the
-/// writer proceeds anyway rather than stalling a hook or a paint.
-pub fn lock_dir() -> PathBuf {
-    state_dir().join(".lock")
-}
-
-pub const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
-pub const LOCK_STALE: Duration = Duration::from_secs(10);
-pub const LOCK_POLL: Duration = Duration::from_millis(50);
-
 /// The pause marker, named for the binary that honours it.
 pub fn pause_file() -> PathBuf {
     state_dir().join("deck-paused")
@@ -204,7 +190,7 @@ mod tests {
         assert_eq!(slot_led(1), Some(26));
         assert_eq!(slot_led(8), Some(33)); // J: shares the home marker LED
         assert_eq!(slot_led(17), Some(42));
-        assert_eq!(slot_led(LEFT_FIRST_SLOT), Some(0)); // spillover
+        assert_eq!(slot_led(18), Some(0)); // spillover starts on the left
         assert_eq!(slot_led(MAX_SLOTS), Some(17));
         assert_eq!(slot_led(0), None);
         assert_eq!(slot_led(MAX_SLOTS + 1), None);

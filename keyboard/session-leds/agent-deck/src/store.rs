@@ -1,45 +1,35 @@
 //! The state store is the contract: `agent-status` writes one JSON file
-//! per tmux session, this reads them. Housekeeping lives here too — GC of
-//! dead sessions, the error state and done-demotion on focus. Slots are
-//! the CLI's alone; nothing here assigns or reserves one.
+//! per tmux session, this reads them. Writing is the CLI's alone, lock
+//! and all — so the transitions only a running renderer can notice (a
+//! Claude that died with its tmux session still up, a `done` the user
+//! has now looked at, a session that has gone away) are asked for
+//! rather than made. Slots are the CLI's too; nothing here assigns one.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde::Deserialize;
 
 use crate::config::{self, State};
 use crate::tmux::{self, Panes};
 
-/// One store entry. `state` is the aggregate the status CLI computes from
-/// the entry's per-Claude states; everything else it tracks (`claudes`,
-/// ids) rides along in `rest` so rewrites here never drop it.
-#[derive(Deserialize, Serialize)]
+/// One store entry, as much of it as the display needs.
+#[derive(Deserialize)]
 pub struct Entry {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tmux_session: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub slot: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ts: Option<i64>,
-    #[serde(flatten)]
-    rest: Map<String, Value>,
 }
 
 /// A session showing `done`, kept so focus can demote it.
 pub struct Done {
-    path: PathBuf,
     session: String,
 }
 
@@ -79,9 +69,9 @@ impl Snapshot {
 }
 
 /// Read the store: slot states for the board, plus the housekeeping that
-/// falls out of it. A tmux session that no longer exists is GC'd silently
-/// (killing a scratch session isn't a crash); one that outlived its Claude
-/// shows as an error.
+/// falls out of it. A tmux session that no longer exists is dropped
+/// silently (killing a scratch session isn't a crash); one that outlived
+/// its Claude shows as an error.
 pub fn read(health: &mut Health) -> Snapshot {
     let mut snap = Snapshot::default();
     let Ok(dir) = fs::read_dir(config::state_dir()) else {
@@ -96,7 +86,7 @@ pub fn read(health: &mut Health) -> Snapshot {
         if path.file_name().is_some_and(|name| name == "slots.json") {
             continue;
         }
-        let Some(mut entry) = read_entry(&path) else {
+        let Some(entry) = read_entry(&path) else {
             continue;
         };
         let session = entry.tmux_session.clone();
@@ -105,27 +95,28 @@ pub fn read(health: &mut Health) -> Snapshot {
             None => Alive::WithClaude,
         };
         if health == Alive::No {
-            let _ = fs::remove_file(&path);
+            if let Some(session) = &session {
+                ask(&["drop", session]);
+            }
             continue;
         }
 
         let mut state = entry.state.as_deref().and_then(State::parse);
         if let (Some(State::Done), Some(session)) = (state, &session) {
             snap.done.push(Done {
-                path: path.clone(),
                 session: session.clone(),
             });
         }
         // tmux alive but no Claude left: an unclean death, unless the entry
         // is parked `off` (a clean exit keeps the slot bound to the session).
-        // Persisted, so the HUD and `agent-status list` agree with the LEDs.
+        // Shown at once and persisted by the CLI, so the switcher and
+        // `agent-status list` agree with the LEDs.
         if health == Alive::NoClaude && state != Some(State::Off) {
             state = Some(State::Error);
-            if entry.state.as_deref() != Some(State::Error.as_str()) {
-                entry.state = Some(State::Error.as_str().to_string());
-                entry.ts = Some(now_ts());
-                let _lock = StoreLock::acquire();
-                write_entry(&path, &entry);
+            if entry.state.as_deref() != Some(State::Error.as_str())
+                && let Some(session) = &session
+            {
+                ask(&["set", session, State::Error.as_str()]);
             }
         }
 
@@ -159,119 +150,38 @@ pub fn read(health: &mut Health) -> Snapshot {
     snap
 }
 
-/// `done` is sticky until the user is looking at the session.
+/// `done` is sticky until the user is looking at the session. The CLI
+/// re-reads before it writes, so a session a hook has moved on since is
+/// left where it is.
 pub fn demote_done_on_focus(done: &[Done]) {
     if done.is_empty() {
         return;
     }
     let focused = tmux::focused_sessions();
-    let demoting = done.iter().filter(|d| focused.contains(&d.session));
-    let _lock = StoreLock::acquire();
-    for entry in demoting {
-        // re-read rather than rewrite the snapshot: a hook may have moved
-        // the session on since, and only a still-done entry demotes
-        let Some(mut fresh) = read_entry(&entry.path) else {
-            continue;
-        };
-        if fresh.state.as_deref() != Some(State::Done.as_str()) {
-            continue;
-        }
-        demote(&mut fresh);
-        write_entry(&entry.path, &fresh);
+    for entry in done.iter().filter(|d| focused.contains(&d.session)) {
+        ask(&["demote", &entry.session]);
     }
 }
 
-/// `done` back to `idle`, per-Claude states included — the top-level state
-/// is only their aggregate, so leaving a sub-state at `done` would have the
-/// next event from a sibling Claude revive it.
-fn demote(entry: &mut Entry) {
-    entry.state = Some(State::Idle.as_str().to_string());
-    entry.ts = Some(now_ts());
-    let Some(claudes) = entry.rest.get_mut("claudes").and_then(Value::as_object_mut) else {
-        return;
-    };
-    for claude in claudes.values_mut() {
-        if let Some(claude) = claude.as_object_mut()
-            && claude.get("state").and_then(Value::as_str) == Some(State::Done.as_str())
-        {
-            claude.insert("state".to_string(), Value::from(State::Idle.as_str()));
-        }
-    }
-}
-
-/// The status CLI's store lock, mirrored: a hook's read-assign-write and
-/// ours can't interleave. Held only around the write itself — never
-/// across a tmux call — and best-effort, so a paint is never blocked by
-/// a lock that isn't coming.
-struct StoreLock {
-    path: PathBuf,
-    held: bool,
-}
-
-impl StoreLock {
-    fn acquire() -> StoreLock {
-        StoreLock::at(config::lock_dir(), config::LOCK_TIMEOUT, config::LOCK_STALE)
-    }
-
-    fn at(path: PathBuf, timeout: Duration, stale_after: Duration) -> StoreLock {
-        let deadline = Instant::now() + timeout;
-        loop {
-            match fs::create_dir(&path) {
-                Ok(()) => return StoreLock { path, held: true },
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                    if held_since(&path).is_some_and(|held| held > stale_after) {
-                        let _ = fs::remove_dir(&path); // nobody is coming back for it
-                        continue;
-                    }
-                    if Instant::now() >= deadline {
-                        return StoreLock { path, held: false };
-                    }
-                    thread::sleep(config::LOCK_POLL);
-                }
-                // the state dir isn't there, or isn't writable: nothing to
-                // serialise against, so get on with it
-                Err(_) => return StoreLock { path, held: false },
-            }
-        }
-    }
-}
-
-impl Drop for StoreLock {
-    fn drop(&mut self) {
-        if self.held {
-            let _ = fs::remove_dir(&self.path);
-        }
-    }
-}
-
-fn held_since(path: &Path) -> Option<Duration> {
-    fs::metadata(path).ok()?.modified().ok()?.elapsed().ok()
+/// Ask the status CLI to write. Off-thread: it's python, and a paint
+/// shouldn't wait on an interpreter starting. Every one of these is
+/// idempotent, so the worst a lost race costs is asking twice.
+fn ask(args: &[&str]) {
+    let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+    thread::spawn(
+        move || match Command::new("agent-status").args(&args).status() {
+            Ok(status) if status.success() => {}
+            Ok(status) => crate::log(&format!(
+                "agent-status {} failed ({status})",
+                args.join(" ")
+            )),
+            Err(e) => crate::log(&format!("could not run agent-status ({e})")),
+        },
+    );
 }
 
 fn read_entry(path: &Path) -> Option<Entry> {
     serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
-}
-
-fn write_entry(path: &Path, entry: &Entry) {
-    let Ok(json) = serde_json::to_string(entry) else {
-        return;
-    };
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
-    let tmp = path.with_file_name(name);
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
-    if fs::write(&tmp, json).is_ok() {
-        let _ = fs::rename(&tmp, path);
-    }
-}
-
-fn now_ts() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or_default()
 }
 
 /// Whether a tmux session is around, and whether Claude is still in it.
@@ -354,62 +264,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_lock_is_exclusive_but_never_blocking() {
-        let dir = std::env::temp_dir().join(format!("agent-deck-lock-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        let lock_dir = dir.join(".lock");
-        let brief = Duration::from_millis(60);
-        let never_stale = Duration::from_secs(3600);
-
-        let held = StoreLock::at(lock_dir.clone(), brief, never_stale);
-        assert!(held.held, "an uncontended lock is taken");
-        assert!(lock_dir.exists());
-
-        let contended = StoreLock::at(lock_dir.clone(), brief, never_stale);
-        assert!(
-            !contended.held,
-            "a held lock times out rather than blocking"
-        );
-        drop(contended);
-        assert!(
-            lock_dir.exists(),
-            "and giving up doesn't release someone else's"
-        );
-
-        let stolen = StoreLock::at(lock_dir.clone(), brief, Duration::ZERO);
-        assert!(stolen.held, "a lock nobody released is taken");
-        drop(stolen);
-        assert!(!lock_dir.exists(), "releasing removes it");
-
-        drop(held);
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn demotion_reaches_the_per_claude_states() {
-        let mut entry: Entry = serde_json::from_str(
-            r#"{"tmux_session":"s","state":"done","slot":1,
-                "claudes":{"a":{"state":"done","pane_id":"%1"},
-                           "b":{"state":"idle","pane_id":"%2"}}}"#,
-        )
-        .unwrap();
-        demote(&mut entry);
-        assert_eq!(entry.state.as_deref(), Some("idle"));
-        let claudes = entry.rest["claudes"].as_object().unwrap();
-        assert_eq!(claudes["a"]["state"], "idle", "the done one falls back");
-        assert_eq!(claudes["b"]["state"], "idle");
-        assert_eq!(claudes["a"]["pane_id"], "%1", "and keeps its pane");
-    }
-
-    #[test]
     fn sparse_entries_parse() {
         let entry: Entry = serde_json::from_str(r#"{"tmux_session":"s","slot":1}"#).unwrap();
         assert_eq!(entry.state, None);
         assert_eq!(entry.label, None);
-        assert_eq!(
-            serde_json::to_string(&entry).unwrap(),
-            r#"{"tmux_session":"s","slot":1}"#
-        );
+        // the CLI tracks more than this per entry; anything we don't read
+        // has to be ignored rather than refused
+        let rich: Entry = serde_json::from_str(
+            r#"{"tmux_session":"s","slot":1,"state":"done","label":"l","ts":1,
+                "claudes":{"a":{"state":"done","pane_id":"%1"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(rich.state.as_deref(), Some("done"));
     }
 }
