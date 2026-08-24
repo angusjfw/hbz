@@ -68,6 +68,30 @@ pub fn latest_client() -> Option<String> {
         .map(|(_, tty)| tty.to_string())
 }
 
+/// Point `client` at `session`. Best-effort and unchecked: a switch can
+/// be accepted and still not land, so the caller confirms with
+/// `client_session` (see `input`).
+pub fn switch_client(client: &str, session: &str) {
+    let _ = Command::new("tmux")
+        .args(["switch-client", "-c", client, "-t", &format!("={session}")])
+        .status();
+}
+
+/// The session the client on `tty` is showing, as tmux lists it. None
+/// when it lists none there — a suspended client never appears, which is
+/// exactly what makes it worth asking.
+pub fn client_session(tty: &str) -> Option<String> {
+    let out = Command::new("tmux")
+        .args(["list-clients", "-F", "#{client_tty} #{client_session}"])
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| line.split_once(' '))
+        .find(|&(listed, _)| listed == tty)
+        .map(|(_, session)| session.to_string())
+}
+
 /// Sessions an attached client is currently looking at.
 pub fn focused_sessions() -> HashSet<String> {
     let Ok(out) = Command::new("tmux")

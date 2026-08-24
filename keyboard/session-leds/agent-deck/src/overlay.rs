@@ -25,9 +25,11 @@ pub struct Row {
     pub session: Option<String>,
 }
 
+/// A line and a coloured dot: a session's new state, or a notice about
+/// something the daemon couldn't do.
 struct Toast {
-    label: String,
-    state: State,
+    text: String,
+    dot: Rgb,
     raised: Instant,
 }
 
@@ -67,12 +69,32 @@ pub fn toggle_switcher(shared: &Shared) {
 }
 
 pub fn toast(shared: &Shared, label: &str, state: State) {
-    if let Ok(mut overlay) = shared.lock() {
-        overlay.toasts.push(Toast {
-            label: label.to_string(),
-            state,
+    raise(
+        shared,
+        Toast {
+            text: format!("{label} — {}", state.as_str()),
+            dot: state.dot(),
             raised: Instant::now(),
-        });
+        },
+    );
+}
+
+/// Say something went wrong where the user would otherwise be left
+/// guessing — a switch that didn't land looks like a slow terminal.
+pub fn notice(shared: &Shared, text: &str) {
+    raise(
+        shared,
+        Toast {
+            text: text.to_string(),
+            dot: State::Error.dot(),
+            raised: Instant::now(),
+        },
+    );
+}
+
+fn raise(shared: &Shared, toast: Toast) {
+    if let Ok(mut overlay) = shared.lock() {
+        overlay.toasts.push(toast);
         overlay.wake();
     }
 }
@@ -219,6 +241,7 @@ fn key_label(key: egui::Key) -> Option<&'static str> {
 /// switching itself is spawned off-thread by `input::switch_to`.
 fn drive_switcher(
     ctx: &egui::Context,
+    shared: &Shared,
     overlay: &mut Overlay,
     focus: &mut Focus,
     selected: &mut usize,
@@ -275,7 +298,7 @@ fn drive_switcher(
     });
     if let Some(session) = chosen.and_then(|row| overlay.rows.get(row)?.session.as_deref()) {
         crate::log(&format!("switcher: switching to {session}"));
-        input::switch_to(session);
+        input::switch_to(shared, session);
         dismiss = true;
     }
     if dismiss {
@@ -379,7 +402,13 @@ impl eframe::App for Window {
         }
 
         if overlay.switcher {
-            drive_switcher(ctx, &mut overlay, &mut self.focus, &mut self.selected);
+            drive_switcher(
+                ctx,
+                &self.shared,
+                &mut overlay,
+                &mut self.focus,
+                &mut self.selected,
+            );
         }
         if !overlay.switcher {
             self.focus = Focus::Off;
@@ -417,11 +446,10 @@ fn color(rgb: Rgb) -> egui::Color32 {
     egui::Color32::from_rgb(rgb.0, rgb.1, rgb.2)
 }
 
-fn dot(ui: &mut egui::Ui, state: State) {
+fn dot(ui: &mut egui::Ui, rgb: Rgb) {
     let (rect, _) =
         ui.allocate_exact_size(egui::vec2(DOT * 2.0 + 6.0, DOT * 2.0), egui::Sense::hover());
-    ui.painter()
-        .circle_filled(rect.center(), DOT, color(state.dot()));
+    ui.painter().circle_filled(rect.center(), DOT, color(rgb));
 }
 
 fn row_text(text: &str, faded: bool) -> egui::RichText {
@@ -459,7 +487,7 @@ fn paint_hud(ctx: &egui::Context, rows: &[Row], screen: egui::Vec2, selected: Op
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
                             ui.horizontal(|ui| {
-                                dot(ui, row.state);
+                                dot(ui, row.state.dot());
                                 let key = ui.available_rect_before_wrap();
                                 ui.allocate_ui(egui::vec2(KEY_COLUMN, key.height()), |ui| {
                                     ui.centered_and_justified(|ui| {
@@ -511,11 +539,8 @@ fn paint_toasts(ctx: &egui::Context, toasts: &[Toast], screen: egui::Vec2, now: 
                 panel().corner_radius(8.0).show(ui, |ui| {
                     ui.set_width(TOAST_WIDTH - 20.0);
                     ui.horizontal(|ui| {
-                        dot(ui, toast.state);
-                        ui.label(row_text(
-                            &format!("{} — {}", toast.label, toast.state.as_str()),
-                            false,
-                        ));
+                        dot(ui, toast.dot);
+                        ui.label(row_text(&toast.text, false));
                     });
                 });
             });

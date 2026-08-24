@@ -149,7 +149,7 @@ fn run(shared: Shared) {
 
         // layer changes are pushed, so there's no poll gap to paint through
         if let Some(open) = &board
-            && let Err(e) = read_board(open, &mut layer, &snapshot, &mut pulse, now)
+            && let Err(e) = read_board(open, &shared, &mut layer, &snapshot, &mut pulse, now)
         {
             log(&format!("board gone ({e})"));
             reported_down = true;
@@ -264,6 +264,7 @@ fn rows(snapshot: &store::Snapshot) -> Vec<overlay::Row> {
 /// ordinary typing — dropped without a look, never logged or kept.
 fn read_board(
     board: &Board,
+    shared: &Shared,
     layer: &mut Option<u8>,
     snapshot: &store::Snapshot,
     pulse: &mut Pulse,
@@ -282,7 +283,7 @@ fn read_board(
                     .and_then(|slot| snapshot.session(slot));
                 if let Some(session) = session {
                     log(&format!("switching to {session}"));
-                    input::switch_to(session);
+                    input::switch_to(shared, session);
                     // dismiss the layer ourselves, over HID
                     board.set_layer(config::BASE_LAYER)?;
                 }
