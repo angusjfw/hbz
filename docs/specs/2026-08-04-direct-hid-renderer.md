@@ -6,6 +6,16 @@ daemon that speaks the Oryx raw-HID protocol to the Voyager directly.
 Keymapp is then needed only to flash firmware; nothing GUI-resident is
 load-bearing.
 
+> **Superseded in part.** The agent layer is gone: its switcher and the
+> Option-Space one did the same job, and only the on-screen one has the
+> list, the arrows and Enter. The board's bottom-right key sends the
+> chord instead of toggling a layer, statuses show on the base layer,
+> and nothing reads key positions any more. Slots dropped the modifier
+> keys with it (33, not 36), the LED flash and the pause/base-display
+> knobs went as unearned, and the renderer asks the status CLI to write
+> rather than writing the store itself. See
+> `keyboard/session-leds/README.md` for how it stands.
+
 ## Why
 
 - **No resident Keymapp**: today's daemon breaks (and must self-heal)
