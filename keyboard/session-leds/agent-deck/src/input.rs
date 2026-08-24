@@ -1,4 +1,6 @@
-//! Switching to a session, and making sure the switch landed.
+//! Switching to a session, and making sure the switch landed. The one
+//! place that does it — the switcher goes through `switch_to`, and
+//! anything else through `agent-deck switch` (see `control`).
 //!
 //! `switch-client` names a client by its tty path and nothing else —
 //! tmux has no client id. A suspended client is hidden from
@@ -14,13 +16,26 @@ use crate::config;
 use crate::overlay::{self, Shared};
 use crate::tmux;
 
+/// How a switch went, for whoever has to report it.
+pub enum Switched {
+    Landed,
+    NoClient,
+    Stuck { client: String },
+}
+
 /// Switch to `session` and bring the terminal forward. Off the loop's
 /// thread — the tmux and launch calls cost more than a frame.
 pub fn switch_to(shared: &Shared, session: &str) {
     let session = session.to_string();
     let shared = shared.clone();
     thread::spawn(move || {
-        switch_tmux(&shared, &session);
+        match switch(None, &session) {
+            Switched::Landed => {}
+            Switched::NoClient => overlay::notice(&shared, "no tmux client to switch"),
+            Switched::Stuck { client } => {
+                overlay::notice(&shared, &format!("tmux didn't switch ({client})"));
+            }
+        }
         if cfg!(target_os = "macos") {
             let _ = Command::new("open")
                 .args(["-a", config::TERMINAL_APP])
@@ -29,24 +44,28 @@ pub fn switch_to(shared: &Shared, session: &str) {
     });
 }
 
-/// Switch, confirm, and clear a phantom out of the way if that's what
-/// swallowed it. Says so rather than leaving a switch that silently
-/// didn't happen looking like a slow terminal.
-fn switch_tmux(shared: &Shared, session: &str) {
-    let Some(client) = tmux::latest_client() else {
-        overlay::notice(shared, "no tmux client to switch");
-        return;
+/// Switch `client` — or whichever tmux lists as most recently active —
+/// to `session`, confirm it landed, and clear a phantom out of the way
+/// if that's what swallowed it. Synchronous, and says nothing itself:
+/// the caller knows whether it has a toast or a stderr to report on.
+pub fn switch(client: Option<&str>, session: &str) -> Switched {
+    let client = match client {
+        Some(client) => client.to_string(),
+        None => match tmux::latest_client() {
+            Some(client) => client,
+            None => return Switched::NoClient,
+        },
     };
     if switch_and_confirm(&client, session) {
-        return;
+        return Switched::Landed;
     }
     // nothing else can name the client we meant, so clear what outranks
     // it and ask again
     if clear_suspended(&client) > 0 && switch_and_confirm(&client, session) {
-        return;
+        return Switched::Landed;
     }
     crate::log(&format!("{client} did not switch to {session}"));
-    overlay::notice(shared, &format!("tmux didn't switch ({client})"));
+    Switched::Stuck { client }
 }
 
 fn switch_and_confirm(client: &str, session: &str) -> bool {

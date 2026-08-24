@@ -84,6 +84,12 @@ tracked sessions; `set`/`slot`/`clear` for manual control.
 is what frees the board for flashing firmware; `resume` and `status`
 round it out. Housekeeping keeps running while paused.
 
+`agent-deck switch <session> [client-tty]` is the switcher's own switch
+as a command, confirmation and all, for anything that has to move a
+client without the overlay — the claude-manager uses it to clear
+clients off a session before killing it. It exits non-zero if the
+client wouldn't move.
+
 The daemon needs the HID interface to itself, and Keymapp claims it
 exclusively — so quit Keymapp before starting agent-deck, and pause
 agent-deck before reaching for Keymapp.

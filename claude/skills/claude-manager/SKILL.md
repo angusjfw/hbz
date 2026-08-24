@@ -700,8 +700,10 @@ trivial PR.
 ## Switch UX
 
 Primary: `prefix+w` picker — interactive list across sessions and
-windows. Direct: `tmux switch-client -t <session-id>`. Manager hands
-back the session id; the user navigates.
+windows, or Option-Space for the session-LED switcher. Direct:
+`agent-deck switch <session>`, which confirms the switch landed (see
+"Killing a session" for what swallows one). Manager hands back the
+session name; the user navigates.
 
 ## Reconcile
 
@@ -850,10 +852,21 @@ other=$(tmux list-sessions -F '#{session_name}' \
   | grep -vx "$target_session" | head -1)
 if [ -n "$other" ]; then
   tmux list-clients -t "$target_session" -F '#{client_name}' \
-    | while read -r c; do tmux switch-client -c "$c" -t "$other"; done
+    | while read -r c; do agent-deck switch "$other" "$c"; done
 fi
 tmux kill-session -t "$target_session"
 ```
+
+`agent-deck switch`, not `tmux switch-client -c`, and the difference
+matters here: tmux names a client by its tty and has no client id, so a
+suspended client on the same tty — hidden from `list-clients`, but
+still first in the name lookup — takes the switch instead, silently and
+with exit 0. The client you meant to move stays where it is and the
+kill below drops it to a shell. `agent-deck switch` confirms the client
+landed and clears a suspended one out of the way first; it exits
+non-zero if the client still won't move, which is worth not killing the
+session over. Where agent-deck isn't installed, `tmux switch-client -c
+"$c" -t "=$other"` is the fallback, with that failure mode.
 
 If it's the only session on the server, the kill drops to the shell no
 matter what — nothing tmux can do. The manager runs this against an
