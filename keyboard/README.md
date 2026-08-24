@@ -4,17 +4,17 @@ Split ergonomic keyboard, per-key RGB, with the Navigator trackball attachment.
 Layout "voyup", maintained in [Oryx](https://configure.zsa.io/voyager/layouts/PYnPm/latest/0).
 
 ##### 📁 Contents
-- `voyager/src/` — QMK source (Oryx export + local agent-layer changes)
+- `voyager/src/` — QMK source (Oryx export + local changes)
 - `voyager/firmware/` — compiled firmware, flash with [Keymapp](https://www.zsa.io/flash)
-- `session-leds/` — Claude session status on the agent layer (own README)
+- `session-leds/` — Claude session status on the board (own README)
 
 ##### 🗺️ Layers
 | # | Access | Purpose |
 |---|--------|---------|
-| 0 | base | QWERTY. Ctrl/Shift on left pinky column, Esc·GUI·Alt inner bottom row, Del·Bspc and arrows bottom right. Green home markers. |
+| 0 | base | QWERTY. Ctrl/Shift on left pinky column, Esc·GUI·Alt inner bottom row, Del·Bspc and arrows bottom right, Option-Space on the bottom-right key to summon the session switcher (see `session-leds/`). Green home markers. |
 | 1 | hold either inner thumb key | Number row, shifted symbols, brackets/braces. |
 | 2 | hold bottom-left key | F1–F12, volume, RGB brightness/toggle, vim-style arrows on right home row, Caps Lock (red indicator while active). |
-| 3 | toggle bottom-right key | Agent sessions, nothing else: every key sends `KC_NO` and agent-deck reads positions over raw HID (see `session-leds/`). Slots 1–18 on the right rows, 19–36 spilling onto the left. Only the toggle key and the right-hand edge stay live. |
+| 3 | unreachable | Unused. Kept because 4 and 5 sit above it. |
 | 4 | automatic on trackball motion | Mouse buttons, drag scroll, CPI up/down, layer lock. |
 | 5 | hold second bottom-left key | Manual copy of the mouse layer. |
 
@@ -38,8 +38,8 @@ Custom keycodes: `DRAG_SCROLL` (hold to scroll), `TOGGLE_SCROLL`,
 - Automouse ↔ manual mouse layer handover works but is messy; revisit.
 
 ##### 🔄 Updating
-Source of truth is `voyager/src/` in this repo — the agent layer (3) was
-added locally and no longer matches the [Oryx layout](https://configure.zsa.io/voyager/layouts/PYnPm/latest/0),
+Source of truth is `voyager/src/` in this repo — local edits mean it no
+longer matches the [Oryx layout](https://configure.zsa.io/voyager/layouts/PYnPm/latest/0),
 which Oryx can't import back. For big layout edits: edit in Oryx,
 re-export, re-apply the local delta (or adopt
 [ZSA's Oryx+custom-QMK flow](https://blog.zsa.io/oryx-custom-qmk-features/)).
