@@ -30,9 +30,8 @@ use hidapi::HidApi;
 
 use board::{Board, Event};
 use config::State;
-use control::Pause;
 use overlay::Shared;
-use render::{Flash, Frame, Painter};
+use render::{Frame, Painter};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -107,7 +106,6 @@ fn run(shared: Shared) {
     let mut layer: Option<u8> = None;
     let mut reported_down = false;
     let mut painter = Painter::default();
-    let mut flash = Flash::default();
     let mut health = store::Health::new();
     let mut snapshot = store::Snapshot::default();
     let mut lit = BTreeMap::new();
@@ -119,9 +117,9 @@ fn run(shared: Shared) {
 
     while !quit.load(Ordering::Relaxed) {
         let now = Instant::now();
-        let paused = control::pause_mode();
+        let paused = control::paused();
 
-        if paused == Some(Pause::All) {
+        if paused {
             // a full pause frees the device: flashing firmware needs it
             if let Some(open) = &board {
                 let _ = painter.release(open);
@@ -185,30 +183,20 @@ fn run(shared: Shared) {
                 store::demote_done_on_focus(&snapshot.done);
             }
         }
-        let display = if paused == Some(Pause::All) {
+        let frame = if paused {
             Frame::new()
         } else {
-            render::frame_for(layer, &lit, control::base_display_on())
+            render::frame_for(layer, &lit)
         };
 
         // a toast is host-side and fires with no board at all
-        if !changes.is_empty() && paused != Some(Pause::All) {
+        if !paused {
             for &(slot, state) in &changes {
                 let fallback = format!("slot {slot}");
                 let label = snapshot.label(slot).unwrap_or(&fallback);
                 overlay::toast(&shared, label, state);
             }
-            // and a flash, when there's a board and it shows nothing
-            if display.is_empty() && layer.is_some() && paused != Some(Pause::Notify) {
-                flash.start(&changes, now);
-            }
         }
-
-        let frame = if display.is_empty() {
-            flash.frame(now)
-        } else {
-            display
-        };
         if let Some(open) = &board
             && let Err(e) = painter.show(open, &frame)
         {

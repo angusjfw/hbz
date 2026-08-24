@@ -67,7 +67,7 @@ impl State {
         })
     }
 
-    /// Worth a flash and a toast when a session enters it.
+    /// Worth a toast when a session enters it.
     pub fn worth_noticing(self) -> bool {
         matches!(self, State::Done | State::NeedsInput | State::Error)
     }
@@ -126,8 +126,6 @@ pub const TOAST: Duration = Duration::from_millis(2500);
 pub const HOME_MARKERS: [u8; 4] = [10, 24, 33, 51];
 pub const MARKER_COLOR: Rgb = Rgb(0x46, 0x69, 0x14);
 
-/// One flash of a changed slot on a layer that shows nothing.
-pub const FLASH: Duration = Duration::from_millis(1200);
 /// Store re-read cadence. Changes arrive by watcher; this only bounds how
 /// stale the tmux-derived bits (error, GC) can get.
 pub const STORE_REFRESH: Duration = Duration::from_secs(1);
@@ -160,13 +158,9 @@ pub const LOCK_TIMEOUT: Duration = Duration::from_secs(2);
 pub const LOCK_STALE: Duration = Duration::from_secs(10);
 pub const LOCK_POLL: Duration = Duration::from_millis(50);
 
-// Control markers, named for the binary that honours them.
+/// The pause marker, named for the binary that honours it.
 pub fn pause_file() -> PathBuf {
     state_dir().join("deck-paused")
-}
-
-pub fn base_off_file() -> PathBuf {
-    state_dir().join("deck-base-off")
 }
 
 #[cfg(test)]

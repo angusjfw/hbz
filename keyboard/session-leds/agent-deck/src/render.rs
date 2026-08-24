@@ -4,7 +4,6 @@
 //! straight back everywhere else.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::Instant;
 
 use hidapi::HidError;
 
@@ -17,9 +16,9 @@ pub type Frame = BTreeMap<u8, Rgb>;
 /// The frame for `layer`: statuses on the base layer, home markers
 /// repainted alongside. Any other layer, or no board, keeps the
 /// firmware's colours.
-pub fn frame_for(layer: Option<u8>, slots: &BTreeMap<u32, State>, base_display: bool) -> Frame {
+pub fn frame_for(layer: Option<u8>, slots: &BTreeMap<u32, State>) -> Frame {
     let mut frame = Frame::new();
-    if layer != Some(config::BASE_LAYER) || !base_display {
+    if layer != Some(config::BASE_LAYER) {
         return frame;
     }
     // markers first: an occupied slot outranks its marker
@@ -88,36 +87,9 @@ impl Painter {
     }
 }
 
-/// A single brief flash of changed slots, for layers that show nothing.
-#[derive(Default)]
-pub struct Flash {
-    frame: Frame,
-    until: Option<Instant>,
-}
-
-impl Flash {
-    pub fn start(&mut self, changes: &[(u32, State)], now: Instant) {
-        self.frame.extend(slot_leds(changes.iter().copied()));
-        self.until = Some(now + config::FLASH);
-    }
-
-    /// The flash frame while it lasts, empty once it's over.
-    pub fn frame(&mut self, now: Instant) -> Frame {
-        match self.until {
-            Some(until) if now < until => self.frame.clone(),
-            _ => {
-                self.frame.clear();
-                self.until = None;
-                Frame::new()
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     fn slots(pairs: &[(u32, State)]) -> BTreeMap<u32, State> {
         pairs.iter().copied().collect()
@@ -129,7 +101,6 @@ mod tests {
         let frame = frame_for(
             Some(config::BASE_LAYER),
             &slots(&[(8, State::Working), (1, State::Off)]),
-            true,
         );
         assert_eq!(frame.get(&33), Some(&State::Working.color().unwrap()));
         assert_eq!(frame.get(&10), Some(&config::MARKER_COLOR));
@@ -137,11 +108,10 @@ mod tests {
     }
 
     #[test]
-    fn base_display_off_and_other_layers_keep_firmware_colours() {
+    fn other_layers_keep_firmware_colours() {
         let busy = slots(&[(1, State::Working)]);
-        assert!(frame_for(Some(config::BASE_LAYER), &busy, false).is_empty());
-        assert!(frame_for(Some(1), &busy, true).is_empty());
-        assert!(frame_for(None, &busy, true).is_empty());
+        assert!(frame_for(Some(1), &busy).is_empty());
+        assert!(frame_for(None, &busy).is_empty());
     }
 
     #[test]
@@ -166,23 +136,6 @@ mod tests {
             diff(Some(&next), &first),
             vec![(33, config::OFF)],
             "a cleared LED goes black"
-        );
-    }
-
-    #[test]
-    fn flash_expires() {
-        let now = Instant::now();
-        let mut flash = Flash::default();
-        assert!(flash.frame(now).is_empty());
-        flash.start(&[(2, State::NeedsInput)], now);
-        assert_eq!(
-            flash.frame(now).get(&27),
-            Some(&State::NeedsInput.color().unwrap())
-        );
-        assert!(
-            flash
-                .frame(now + config::FLASH + Duration::from_millis(1))
-                .is_empty()
         );
     }
 }
