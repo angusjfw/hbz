@@ -73,10 +73,6 @@ impl Snapshot {
         self.find(slot).map(|t| t.label.as_str())
     }
 
-    pub fn session(&self, slot: u32) -> Option<&str> {
-        self.find(slot)?.session.as_deref()
-    }
-
     fn find(&self, slot: u32) -> Option<&Tracked> {
         self.tracked.iter().find(|t| t.slot == slot)
     }

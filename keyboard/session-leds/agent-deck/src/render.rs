@@ -1,7 +1,7 @@
 //! Frames and painting. Host RGB control is all-or-nothing — while it's
-//! engaged the firmware paints nothing — so the daemon owns the board only
-//! on the layers it displays statuses on, and hands it straight back
-//! everywhere else.
+//! engaged the firmware paints nothing — so the daemon owns the board
+//! only on the base layer, where it displays statuses, and hands it
+//! straight back everywhere else.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
@@ -14,22 +14,17 @@ use crate::config::{self, Rgb, State};
 /// What every LED should be showing. LEDs absent from a frame are dark.
 pub type Frame = BTreeMap<u8, Rgb>;
 
-/// The frame for `layer`: statuses on the base layer (home markers
-/// repainted alongside) and on the agent layer (toggle key lit); any other
-/// layer, or no board, keeps the firmware's colours.
+/// The frame for `layer`: statuses on the base layer, home markers
+/// repainted alongside. Any other layer, or no board, keeps the
+/// firmware's colours.
 pub fn frame_for(layer: Option<u8>, slots: &BTreeMap<u32, State>, base_display: bool) -> Frame {
     let mut frame = Frame::new();
-    match layer {
-        Some(config::AGENT_LAYER) => {
-            frame.insert(config::TOGGLE_LED, config::TOGGLE_COLOR);
-        }
-        Some(config::BASE_LAYER) if base_display => {
-            // markers first: an occupied slot outranks its marker
-            for led in config::HOME_MARKERS {
-                frame.insert(led, config::MARKER_COLOR);
-            }
-        }
-        _ => return frame,
+    if layer != Some(config::BASE_LAYER) || !base_display {
+        return frame;
+    }
+    // markers first: an occupied slot outranks its marker
+    for led in config::HOME_MARKERS {
+        frame.insert(led, config::MARKER_COLOR);
     }
     frame.extend(slot_leds(slots.iter().map(|(&slot, &state)| (slot, state))));
     frame
@@ -119,39 +114,6 @@ impl Flash {
     }
 }
 
-/// Press feedback: the pressed key blinks for a moment, dimly when no
-/// session sits behind it. Only ever overlaid on the agent layer — the
-/// base display is pure status and never blinks.
-#[derive(Default)]
-pub struct Pulse {
-    key: Option<(u8, Rgb)>,
-    until: Option<Instant>,
-}
-
-impl Pulse {
-    pub fn start(&mut self, led: u8, occupied: bool, now: Instant) {
-        let color = if occupied {
-            config::PULSE_COLOR
-        } else {
-            config::EMPTY_PULSE_COLOR
-        };
-        self.key = Some((led, color));
-        self.until = Some(now + config::PULSE);
-    }
-
-    pub fn overlay(&mut self, frame: &mut Frame, now: Instant) {
-        match (self.until, self.key) {
-            (Some(until), Some((led, color))) if now < until => {
-                frame.insert(led, color);
-            }
-            _ => {
-                self.key = None;
-                self.until = None;
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,18 +145,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_layer_lights_the_toggle_key_with_statuses() {
-        let frame = frame_for(
-            Some(config::AGENT_LAYER),
-            &slots(&[(19, State::Error)]),
-            true,
-        );
-        assert_eq!(frame.get(&config::TOGGLE_LED), Some(&config::TOGGLE_COLOR));
-        assert_eq!(frame.get(&0), Some(&State::Error.color().unwrap()));
-        assert_eq!(frame.get(&10), None, "no home markers on the agent layer");
-    }
-
-    #[test]
     fn first_paint_sends_only_lit_leds_then_diffs() {
         let mut first = Frame::new();
         first.insert(26, State::Working.color().unwrap());
@@ -217,38 +167,6 @@ mod tests {
             vec![(33, config::OFF)],
             "a cleared LED goes black"
         );
-    }
-
-    #[test]
-    fn pulse_marks_the_pressed_key_then_clears() {
-        let now = Instant::now();
-        let mut pulse = Pulse::default();
-        let mut frame = frame_for(
-            Some(config::AGENT_LAYER),
-            &slots(&[(1, State::Working)]),
-            true,
-        );
-
-        pulse.start(26, true, now);
-        pulse.overlay(&mut frame, now);
-        assert_eq!(
-            frame.get(&26),
-            Some(&config::PULSE_COLOR),
-            "over its status"
-        );
-
-        pulse.start(30, false, now);
-        pulse.overlay(&mut frame, now);
-        assert_eq!(frame.get(&30), Some(&config::EMPTY_PULSE_COLOR), "dim");
-
-        let mut later = frame_for(
-            Some(config::AGENT_LAYER),
-            &slots(&[(1, State::Working)]),
-            true,
-        );
-        pulse.overlay(&mut later, now + config::PULSE + Duration::from_millis(1));
-        assert_eq!(later.get(&30), None);
-        assert_eq!(later.get(&26), Some(&State::Working.color().unwrap()));
     }
 
     #[test]

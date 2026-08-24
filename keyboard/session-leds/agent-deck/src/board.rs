@@ -20,25 +20,18 @@ const EPSIZE: usize = 32;
 
 // Oryx_Command_Code
 const CMD_PAIRING_INIT: u8 = 1;
-const CMD_SET_LAYER: u8 = 4;
 const CMD_RGB_CONTROL: u8 = 5;
 const CMD_SET_RGB_LED: u8 = 6;
 
 // Oryx_Event_Code
 const EVT_LAYER: u8 = 5;
-const EVT_KEYDOWN: u8 = 6;
 
 pub enum Event {
     Layer(u8),
-    /// A key going down, by position. Positions arrive for every keypress
-    /// on every layer — effectively keystroke telemetry — so they are only
-    /// ever acted on while the agent layer is up, and never logged or
-    /// persisted.
-    KeyDown {
-        row: u8,
-        col: u8,
-    },
-    /// Key releases, pairing and RGB-control acks, firmware version.
+    /// Key positions, releases, pairing and RGB-control acks, firmware
+    /// version. The board pushes a position for every keypress on every
+    /// layer — effectively keystroke telemetry — and nothing here reads
+    /// it: the layer is all we listen for.
     Other,
 }
 
@@ -114,12 +107,6 @@ impl Board {
         self.send(CMD_RGB_CONTROL, &[0])
     }
 
-    /// Move the board to `layer` — how the agent layer dismisses itself
-    /// after a switch.
-    pub fn set_layer(&self, layer: u8) -> Result<(), HidError> {
-        self.send(CMD_SET_LAYER, &[1, layer])
-    }
-
     /// Wait up to `timeout_ms` for one event; None if nothing arrived.
     pub fn read_event(&self, timeout_ms: i32) -> Result<Option<Event>, HidError> {
         let mut frame = [0u8; EPSIZE];
@@ -128,10 +115,6 @@ impl Board {
         }
         Ok(Some(match frame[0] {
             EVT_LAYER => Event::Layer(frame[1]),
-            EVT_KEYDOWN => Event::KeyDown {
-                col: frame[1],
-                row: frame[2],
-            },
             _ => Event::Other,
         }))
     }

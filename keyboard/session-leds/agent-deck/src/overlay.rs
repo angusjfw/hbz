@@ -1,14 +1,12 @@
-//! The on-screen twin: a labelled session grid while the agent layer is
-//! up, and toasts when a session changes state.
+//! The switcher and the toasts.
 //!
 //! One transparent, undecorated, always-on-top window covering the
-//! screen, created at startup and shown or hidden with the layer, so
-//! showing it costs nothing. It never takes key focus and passes every
-//! click through — this display is keyboard-first and read-only. The one
-//! exception is switcher mode (Option-Space, for when the board isn't
-//! plugged in): the same grid takes key focus like a launcher would,
-//! a session's own key label — or arrows and Enter — switches to it,
-//! and Escape or clicking away hands focus straight back.
+//! screen, created at startup and shown or hidden as needed, so
+//! summoning it costs nothing. Toasts pass every click through and never
+//! take focus. The switcher (Option-Space, which is also what the
+//! board's bottom-right key sends) does take key focus, like a launcher:
+//! a session's own key label — or arrows and Enter — switches to it, and
+//! Escape or clicking away hands focus straight back.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -37,7 +35,6 @@ struct Toast {
 #[derive(Default)]
 pub struct Overlay {
     ctx: Option<egui::Context>,
-    hud: bool,
     switcher: bool,
     rows: Vec<Row>,
     toasts: Vec<Toast>,
@@ -50,10 +47,10 @@ pub fn shared() -> Shared {
     Arc::new(Mutex::new(Overlay::default()))
 }
 
-/// Show or hide the HUD, and keep its rows current while it's up.
-pub fn set_hud(shared: &Shared, visible: bool, rows: Vec<Row>) {
+/// Keep the session list current. Pushed whether or not the switcher is
+/// up, so summoning it costs nothing.
+pub fn set_rows(shared: &Shared, rows: Vec<Row>) {
     if let Ok(mut overlay) = shared.lock() {
-        overlay.hud = visible;
         overlay.rows = rows;
         overlay.wake();
     }
@@ -341,8 +338,8 @@ const PANEL: egui::Color32 = egui::Color32::from_rgba_premultiplied(18, 18, 18, 
 const SELECTED: egui::Color32 = egui::Color32::from_rgba_premultiplied(70, 70, 70, 200);
 const TEXT: egui::Color32 = egui::Color32::from_rgb(0xF2, 0xF2, 0xF2);
 const DIM: egui::Color32 = egui::Color32::from_rgb(0xB0, 0xB0, 0xB0);
-const HUD_WIDTH: f32 = 430.0;
-const HUD_TOP: f32 = 48.0;
+const LIST_WIDTH: f32 = 430.0;
+const LIST_TOP: f32 = 48.0;
 const TOAST_WIDTH: f32 = 260.0;
 const MARGIN: f32 = 16.0;
 const TEXT_SIZE: f32 = 15.0;
@@ -395,7 +392,7 @@ impl eframe::App for Window {
             self.focus = Focus::Wanted(0);
         }
 
-        let showing = overlay.hud || overlay.switcher || !overlay.toasts.is_empty();
+        let showing = overlay.switcher || !overlay.toasts.is_empty();
         if showing != self.visible {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(showing));
             self.visible = showing;
@@ -427,9 +424,8 @@ impl eframe::App for Window {
         let Ok(overlay) = self.shared.lock() else {
             return;
         };
-        if overlay.hud || overlay.switcher {
-            let selected = overlay.switcher.then_some(self.selected);
-            paint_hud(&ctx, &overlay.rows, screen, selected);
+        if overlay.switcher {
+            paint_list(&ctx, &overlay.rows, screen, self.selected);
         }
         paint_toasts(&ctx, &overlay.toasts, screen, now);
     }
@@ -458,24 +454,23 @@ fn row_text(text: &str, faded: bool) -> egui::RichText {
         .color(if faded { DIM } else { TEXT })
 }
 
-/// `selected` is Some only in switcher mode: it highlights the arrow-key
-/// choice and adds the hint footer.
-fn paint_hud(ctx: &egui::Context, rows: &[Row], screen: egui::Vec2, selected: Option<usize>) {
-    let left = ((screen.x - HUD_WIDTH) / 2.0).max(0.0);
-    egui::Area::new(egui::Id::new("hud"))
-        .fixed_pos(egui::pos2(left, HUD_TOP))
+/// The session list, with `selected` highlighted for the arrow keys.
+fn paint_list(ctx: &egui::Context, rows: &[Row], screen: egui::Vec2, selected: usize) {
+    let left = ((screen.x - LIST_WIDTH) / 2.0).max(0.0);
+    egui::Area::new(egui::Id::new("sessions"))
+        .fixed_pos(egui::pos2(left, LIST_TOP))
         .interactable(false)
         .show(ctx, |ui| {
-            ui.set_width(HUD_WIDTH);
+            ui.set_width(LIST_WIDTH);
             panel().show(ui, |ui| {
-                ui.set_width(HUD_WIDTH - 20.0);
+                ui.set_width(LIST_WIDTH - 20.0);
                 ui.spacing_mut().item_spacing.y = 6.0;
                 if rows.is_empty() {
                     ui.label(row_text("no sessions", true));
                     return;
                 }
                 for (i, row) in rows.iter().enumerate() {
-                    let fill = if selected == Some(i) {
+                    let fill = if selected == i {
                         SELECTED
                     } else {
                         egui::Color32::TRANSPARENT
@@ -511,14 +506,12 @@ fn paint_hud(ctx: &egui::Context, rows: &[Row], screen: egui::Vec2, selected: Op
                             });
                         });
                 }
-                if selected.is_some() {
-                    ui.add_space(2.0);
-                    ui.label(
-                        egui::RichText::new("type a session's key · ↑↓ ↵ · esc")
-                            .size(TEXT_SIZE - 3.0)
-                            .color(DIM),
-                    );
-                }
+                ui.add_space(2.0);
+                ui.label(
+                    egui::RichText::new("type a session's key · ↑↓ ↵ · esc")
+                        .size(TEXT_SIZE - 3.0)
+                        .color(DIM),
+                );
             });
         });
 }

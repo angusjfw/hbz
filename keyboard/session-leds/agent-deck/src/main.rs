@@ -32,7 +32,7 @@ use board::{Board, Event};
 use config::State;
 use control::Pause;
 use overlay::Shared;
-use render::{Flash, Frame, Painter, Pulse};
+use render::{Flash, Frame, Painter};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -60,15 +60,17 @@ pub fn log(message: &str) {
     println!("agent-deck: {message}");
 }
 
-/// Put the overlays on screen from the live store, without a board or a
-/// layer toggle — how the panels get looked at while they're being styled.
+/// Put the overlays on screen from the live store, without a board and
+/// without the chord — how the panels get looked at while they're being
+/// styled. The switcher is live, so a key press switches for real.
 fn preview() {
     let shared = overlay::shared();
     let feed = Arc::clone(&shared);
     thread::spawn(move || {
         let snapshot = store::read(&mut store::Health::new());
         let first = snapshot.tracked.first().map(|t| (t.label.clone(), t.state));
-        overlay::set_hud(&feed, true, rows(&snapshot));
+        overlay::set_rows(&feed, rows(&snapshot));
+        overlay::toggle_switcher(&feed);
         loop {
             let (label, state) = first
                 .clone()
@@ -106,13 +108,11 @@ fn run(shared: Shared) {
     let mut reported_down = false;
     let mut painter = Painter::default();
     let mut flash = Flash::default();
-    let mut pulse = Pulse::default();
     let mut health = store::Health::new();
     let mut snapshot = store::Snapshot::default();
     let mut lit = BTreeMap::new();
     // None until the first read: starting the daemon is not a state change
     let mut previous: Option<BTreeMap<u32, State>> = None;
-    let mut hud_visible = false;
     let mut store_dirty = true;
     let (mut last_open, mut last_read) = (None, None);
     let mut last_focus = None;
@@ -149,7 +149,7 @@ fn run(shared: Shared) {
 
         // layer changes are pushed, so there's no poll gap to paint through
         if let Some(open) = &board
-            && let Err(e) = read_board(open, &shared, &mut layer, &snapshot, &mut pulse, now)
+            && let Err(e) = read_board(open, &mut layer)
         {
             log(&format!("board gone ({e})"));
             reported_down = true;
@@ -185,18 +185,14 @@ fn run(shared: Shared) {
                 store::demote_done_on_focus(&snapshot.done);
             }
         }
-        let mut display = if paused == Some(Pause::All) {
+        let display = if paused == Some(Pause::All) {
             Frame::new()
         } else {
             render::frame_for(layer, &lit, control::base_display_on())
         };
-        if layer == Some(config::AGENT_LAYER) {
-            pulse.overlay(&mut display, now);
-        }
 
-        // a layer that displays the change needs no announcement; elsewhere
-        // it's a toast, which is host-side and fires with no board at all
-        if !changes.is_empty() && paused != Some(Pause::All) && layer != Some(config::AGENT_LAYER) {
+        // a toast is host-side and fires with no board at all
+        if !changes.is_empty() && paused != Some(Pause::All) {
             for &(slot, state) in &changes {
                 let fallback = format!("slot {slot}");
                 let label = snapshot.label(slot).unwrap_or(&fallback);
@@ -223,13 +219,10 @@ fn run(shared: Shared) {
             painter.forget();
         }
 
-        // the HUD is up only while the agent layer is toggled, and refreshes
-        // under it as sessions move; rows are pushed even while it's down,
-        // so the Option-Space switcher always has a current list
-        let want_hud = paused != Some(Pause::All) && layer == Some(config::AGENT_LAYER);
-        if want_hud != hud_visible || rows_changed {
-            overlay::set_hud(&shared, want_hud, rows(&snapshot));
-            hud_visible = want_hud;
+        // pushed whether or not the switcher is up, so summoning it shows
+        // a current list rather than the one from last time
+        if rows_changed {
+            overlay::set_rows(&shared, rows(&snapshot));
         }
 
         if board.is_none() {
@@ -259,39 +252,17 @@ fn rows(snapshot: &store::Snapshot) -> Vec<overlay::Row> {
         .collect()
 }
 
-/// Drain the board's event stream: track the layer, and handle presses
-/// while the agent layer is up. Presses on any other layer are the user's
-/// ordinary typing — dropped without a look, never logged or kept.
-fn read_board(
-    board: &Board,
-    shared: &Shared,
-    layer: &mut Option<u8>,
-    snapshot: &store::Snapshot,
-    pulse: &mut Pulse,
-    now: Instant,
-) -> Result<(), hidapi::HidError> {
+/// Drain the board's event stream for the layer it's on — the base
+/// display is the only thing that depends on it. Everything else the
+/// board pushes, key positions included, is dropped without a look.
+fn read_board(board: &Board, layer: &mut Option<u8>) -> Result<(), hidapi::HidError> {
     // the first read paces the loop, the rest drain what's queued
     let mut timeout = config::READ_TIMEOUT_MS;
     while let Some(event) = board.read_event(timeout)? {
         timeout = 0;
         match event {
             Event::Layer(active) => *layer = Some(active),
-            Event::KeyDown { row, col } if *layer == Some(config::AGENT_LAYER) => {
-                let led = config::key_led(row, col);
-                let session = led
-                    .and_then(config::led_slot)
-                    .and_then(|slot| snapshot.session(slot));
-                if let Some(session) = session {
-                    log(&format!("switching to {session}"));
-                    input::switch_to(shared, session);
-                    // dismiss the layer ourselves, over HID
-                    board.set_layer(config::BASE_LAYER)?;
-                }
-                if let Some(led) = led {
-                    pulse.start(led, session.is_some(), now);
-                }
-            }
-            Event::KeyDown { .. } | Event::Other => {}
+            Event::Other => {}
         }
     }
     Ok(())
