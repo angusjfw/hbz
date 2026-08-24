@@ -192,8 +192,8 @@ fn deactivate() {
     }
 }
 
-/// The base-keycap label a typed key stands for, matching `SLOT_KEYS`.
-/// The two modifier-glyph slots (⇧ ⌃) can't be typed; arrows reach them.
+/// The base-keycap label a typed key stands for, matching the slot keys
+/// in `config` — every slot sits on one of these.
 fn key_label(key: egui::Key) -> Option<&'static str> {
     use egui::Key::*;
     Some(match key {
@@ -545,7 +545,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_slot_key_is_typeable_or_a_modifier() {
+    fn every_slot_key_is_typeable() {
         let typeable: Vec<&str> = egui::Key::ALL
             .iter()
             .filter_map(|&k| key_label(k))
@@ -553,7 +553,7 @@ mod tests {
         for slot in 1..=config::MAX_SLOTS {
             let label = config::slot_key(slot);
             assert!(
-                typeable.contains(&label) || matches!(label, "⇧" | "⌃"),
+                typeable.contains(&label),
                 "slot {slot} ({label}) is unreachable from the switcher"
             );
         }

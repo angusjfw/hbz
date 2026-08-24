@@ -85,33 +85,65 @@ impl State {
 
 pub const BASE_LAYER: u8 = 0;
 
-/// Slots 1-18 are the three right-hand letter rows, slot 1 = LED 26 (Y).
-const RIGHT_FIRST_LED: u8 = 26;
-const RIGHT_SLOTS: u32 = 18;
-/// Slots 19-36 spill over onto the left half's letter rows (LEDs 0-17) in
-/// the same row-major order. Assignment prefers the right half, so the
-/// left only lights once the right is full.
-const LEFT_FIRST_LED: u8 = 0;
-const LEFT_FIRST_SLOT: u32 = RIGHT_SLOTS + 1;
-pub const MAX_SLOTS: u32 = 36;
-
-pub fn slot_led(slot: u32) -> Option<u8> {
-    match slot {
-        1..=RIGHT_SLOTS => Some(RIGHT_FIRST_LED + (slot - 1) as u8),
-        LEFT_FIRST_SLOT..=MAX_SLOTS => Some(LEFT_FIRST_LED + (slot - LEFT_FIRST_SLOT) as u8),
-        _ => None,
-    }
-}
-
-/// The key each slot lives on, as the switcher labels it — base keycaps,
-/// so a shifted symbol is never shown for a key you'd press unshifted.
-const SLOT_KEYS: [&str; MAX_SLOTS as usize] = [
-    "Y", "U", "I", "O", "P", "\\", "H", "J", "K", "L", ";", "'", "N", "M", ",", ".", "/", "⇧", "⇥",
-    "Q", "W", "E", "R", "T", "⌃", "A", "S", "D", "F", "G", "⇧", "Z", "X", "C", "V", "B",
+/// Every slot: the LED it lights, and the base keycap the switcher labels
+/// it with — a shifted symbol is never shown for a key you'd press
+/// unshifted. The three right-hand letter rows come first (slot 1 = Y),
+/// then the left half, which only fills once the right is full. The
+/// modifier keys in among them are skipped: the switcher is typed into,
+/// so a key you can't type is a slot you can't reach. Keep this in step
+/// with `SLOT_KEYS` in `bin/agent-status`.
+const SLOTS: [(u8, &str); 33] = [
+    // right half, LEDs 26-42, less right shift (43)
+    (26, "Y"),
+    (27, "U"),
+    (28, "I"),
+    (29, "O"),
+    (30, "P"),
+    (31, "\\"),
+    (32, "H"),
+    (33, "J"),
+    (34, "K"),
+    (35, "L"),
+    (36, ";"),
+    (37, "'"),
+    (38, "N"),
+    (39, "M"),
+    (40, ","),
+    (41, "."),
+    (42, "/"),
+    // left half, LEDs 0-17, less left ctrl (6) and left shift (12)
+    (0, "⇥"),
+    (1, "Q"),
+    (2, "W"),
+    (3, "E"),
+    (4, "R"),
+    (5, "T"),
+    (7, "A"),
+    (8, "S"),
+    (9, "D"),
+    (10, "F"),
+    (11, "G"),
+    (13, "Z"),
+    (14, "X"),
+    (15, "C"),
+    (16, "V"),
+    (17, "B"),
 ];
 
-pub fn slot_key(slot: u32) -> &'static str {
-    SLOT_KEYS.get(slot as usize - 1).copied().unwrap_or("?")
+pub const MAX_SLOTS: u32 = SLOTS.len() as u32;
+/// Where the left half starts, which is what the status CLI fills last.
+pub const LEFT_FIRST_SLOT: u32 = 18;
+
+fn slot(slot: u32) -> Option<&'static (u8, &'static str)> {
+    SLOTS.get(usize::try_from(slot).ok()?.checked_sub(1)?)
+}
+
+pub fn slot_led(n: u32) -> Option<u8> {
+    slot(n).map(|&(led, _)| led)
+}
+
+pub fn slot_key(n: u32) -> &'static str {
+    slot(n).map_or("?", |&(_, key)| key)
 }
 
 /// What to bring forward after a switch. tmux does the session switching,
@@ -171,11 +203,27 @@ mod tests {
     fn slots_map_right_half_then_left() {
         assert_eq!(slot_led(1), Some(26));
         assert_eq!(slot_led(8), Some(33)); // J: shares the home marker LED
-        assert_eq!(slot_led(18), Some(43));
-        assert_eq!(slot_led(19), Some(0)); // spillover starts on the left
-        assert_eq!(slot_led(36), Some(17));
+        assert_eq!(slot_led(17), Some(42));
+        assert_eq!(slot_led(LEFT_FIRST_SLOT), Some(0)); // spillover
+        assert_eq!(slot_led(MAX_SLOTS), Some(17));
         assert_eq!(slot_led(0), None);
-        assert_eq!(slot_led(37), None);
+        assert_eq!(slot_led(MAX_SLOTS + 1), None);
+        assert_eq!(slot_key(1), "Y");
+        assert_eq!(slot_key(MAX_SLOTS), "B");
+        assert_eq!(slot_key(MAX_SLOTS + 1), "?");
+    }
+
+    #[test]
+    fn no_slot_sits_on_a_modifier_key() {
+        // left ctrl and both shifts, which can't be typed at the switcher
+        for led in [6, 12, 43] {
+            assert!(
+                !SLOTS.iter().any(|&(slot_led, _)| slot_led == led),
+                "LED {led} is a modifier key"
+            );
+        }
+        let leds: std::collections::BTreeSet<u8> = SLOTS.iter().map(|&(led, _)| led).collect();
+        assert_eq!(leds.len(), SLOTS.len(), "no LED serves two slots");
     }
 
     #[test]
