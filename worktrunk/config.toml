@@ -4,3 +4,26 @@ skip-commit-generation-prompt = true
 
 [post-start]
 copy = "wt step copy-ignored"
+
+[step.copy-ignored]
+# A Python virtualenv bakes absolute paths into its .pth files and console
+# scripts, so a copied .venv still points at the source worktree: pytest dies
+# with ImportPathMismatchError before collection and mypy fails to construct the
+# Django plugin. uv sync rebuilds it correctly and the tool caches rebuild
+# themselves, so neither is worth copying. Each directory needs both forms —
+# the bare form drops the directory, the glob drops entries a nested .gitignore
+# would otherwise re-expose.
+exclude = [
+  ".venv/",
+  ".venv/**",
+  "__pycache__/",
+  "__pycache__/**",
+  ".mypy_cache/",
+  ".mypy_cache/**",
+  ".pytest_cache/",
+  ".pytest_cache/**",
+  ".ruff_cache/",
+  ".ruff_cache/**",
+  "*.egg-info/",
+  "*.egg-info/**",
+]
