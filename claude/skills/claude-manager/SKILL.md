@@ -29,7 +29,7 @@ In scope:
   Includes the journal entry triggered by a worker's `wrap_requested`
   marker.
 - Conversation-level planning and routing: deciding what worker to
-  spawn and what context it needs.
+  spawn and which of the user's words it carries.
 - Trivial meta updates explicitly requested (one-line ticket/todo,
   registry-adjacent setting).
 
@@ -42,10 +42,13 @@ Out of scope, deferred to a worker:
   user has explicitly asked for.
 - Running tests, builds, linters.
 - Anything where the manager would learn something new.
-- Packing analysis, candidate scopes, reproductions, or prescribed
-  fixes into a worker's spawn brief. Same as doing the work from the
-  manager, just one step removed; the worker reads it as authoritative
-  and bends to it. See the brief step in Spawning a session.
+- Putting anything into a worker's spawn brief that the user did not
+  say — analysis, leads, candidate scopes, reproductions, prescribed
+  fixes, background the manager gathered. Same as doing the work from
+  the manager, just one step removed; the worker reads it as
+  authoritative and bends to it, and hedging it as "a lead, not an
+  answer" does not change that. See the brief step in Spawning a
+  session.
 
 When in doubt, spawn a worker. The manager may read worker pane output
 (`tmux capture-pane -p`). It does not send keys or prompts to workers
@@ -569,45 +572,64 @@ net.
    Registry § `worker`), because an unrecorded conversation is one that
    cannot be brought back.
 5. Decide the brief — what the manager types into the worker's input
-   box on the first prompt. Default is narrow: one line stating the
-   working directory and the topic the user named, optionally one
-   line of obvious context (existing branch, open todos, files to
-   start with). Hand back to the user for direction inside the
-   session.
+   box on the first prompt. The brief carries the user's words and
+   little else. Length is not the test: a brief the user wrote goes in
+   unedited however long it runs, and three lines the manager composed
+   can be two too many. Provenance is the test. Sending nothing at all
+   is a fine outcome in most cases — they switch into the session and
+   type the first prompt themselves — so hand back to them for
+   direction inside the session.
 
-   Do NOT include: multi-step plan, list of candidate scopes,
-   reproductions, prescribed commits, implicit time pressure,
-   directive phrasings the worker will fixate on ("read-only, hand
-   back after", "ONLY do X"), or assertions about how a system works
-   or what the setup/fix mechanism is ("you'll need to run the auth
-   flow", "it authenticates via OAuth", "the fix lives in module X").
-   Those are manager work disguised as a brief; they bias the worker
-   before they've read the room. A stated mechanism is stickier than a
-   directive — the worker reads it as established fact, not a claim to
-   test — and the manager can't have verified it, since that's worker
-   work. It's a guess dressed as context.
+   What goes in:
 
-   When the task points at a guide, doc, runbook or thread, the brief
-   points at it and lets it drive: give the link and the goal, and let
-   the worker read the guide for the how. Do not restate, summarize or
-   pre-empt what the guide says — least of all how a tool authenticates
-   or what the setup steps are. The manager hasn't read it (reading it
-   is worker work), so the guide is the authority and any mechanism the
-   brief states is just a guess that biases the worker against what the
-   guide actually says. If the user's own framing guesses at the
-   mechanism, pass it as an assumption to check, not a step to take
-   ("user thinks this may need an OAuth step — confirm against the
-   guide").
+   - What the user said, in their framing. Quoted, trimmed, or pasted
+     wholesale.
+   - The pointer they named — ticket, PR, doc, runbook, thread. The
+     link, not a summary of what sits behind it. The manager hasn't
+     read it (reading it is worker work), so the source is the
+     authority and anything the brief says about its contents is a
+     guess that biases the worker against what it actually says. If
+     the user's own framing guesses at a mechanism, pass it as their
+     assumption to check rather than a step to take ("user thinks this
+     may need an OAuth step — confirm against the guide").
+   - Facts about the container the manager itself built, where the
+     worker cannot start or would be misled without them: working
+     directory, worktree and branch, a detached HEAD and why. The
+     manager made these, so they are the one class of fact it can
+     state without guessing.
 
-   If I have observations worth surfacing, list them to the user in
-   chat *before* spawning. They can fold them into the brief, ignore,
-   or defer.
+   The test, applied per sentence before sending: **which of the
+   user's words is this from?** A sentence with no answer goes to them
+   in chat instead. "It follows from what they asked" is not an
+   answer — that chain makes anything at all justifiable, and it is
+   the rationalisation to watch for in yourself.
 
-   Exceptions where a fuller brief is fine:
-   - The user explicitly described the work in their message.
-   - The worker is for research on a ticket the user pinged.
-   - The user said "spawn a worker that does X" rather than "open a
-     session for me to work on X".
+   Everything else goes to the user in chat before spawning. That is a
+   redirect, not a ban: the observation still reaches them, and they
+   fold it in, ignore it, or defer it. What they fold in becomes their
+   words. Nothing worth saying is lost — it just isn't the manager's
+   to install in a worker's head unread.
+
+   Standing rules don't need restating. Approval before anything is
+   posted externally, personal data staying local, conventional
+   commits — the worker loads the same global instructions the manager
+   does, so repeating them adds length and signals nothing.
+
+   Real briefs have failed this test in ways that read as helpful at
+   the time: the user's rota, timezone and working days; a deadline,
+   or what can "realistically be finished"; other live sessions,
+   summarised or even just named; leads from other investigations,
+   however carefully hedged as leads and not answers; any claim about
+   how a system works or where a fix lives; directive phrasings the
+   worker will fixate on ("read-only, hand back after", "ONLY do X").
+   Hedging does not neutralise a lead — the worker reads it as the
+   place to start — and a manager that has read enough to offer one
+   has already done worker work. These are examples of the test
+   failing, not the boundary. The test is the boundary.
+
+   If a brief does carry something beyond the user's words, say so in
+   the message that reports the spawn: what was added, and why.
+   Needing no such line is the normal case.
 
    If the user asks for a "blank" or "empty" spawn, send no brief at
    all — they'll type the first prompt themselves.
