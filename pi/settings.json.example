@@ -15,7 +15,18 @@
     "~/.claude/skills/tmux-interaction",
     "~/.claude/skills/review-pr",
     "~/.claude/skills/run",
-    "~/.claude/skills/prune-worktrees"
+    "~/.claude/skills/prune-worktrees",
+    "-skills/agents-sdk",
+    "-skills/cloudflare",
+    "-skills/cloudflare-email-service",
+    "-skills/cloudflare-one",
+    "-skills/cloudflare-one-migrations",
+    "-skills/durable-objects",
+    "-skills/sandbox-sdk",
+    "-skills/turnstile-spin",
+    "-skills/web-perf",
+    "-skills/workers-best-practices",
+    "-skills/wrangler"
   ],
   "packages": [
     {
