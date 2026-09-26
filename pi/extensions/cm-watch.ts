@@ -34,9 +34,13 @@ export default function (pi: ExtensionAPI) {
 		}
 	};
 
+	// only ever a tmux pane id: the file's contents never reach the prompt otherwise
 	const lastWriter = () => {
 		try {
-			return fs.readFileSync(join(STATE, ".last-writer"), "utf8").trim();
+			const path = join(STATE, ".last-writer");
+			if (!fs.lstatSync(path).isFile()) return "";
+			const v = fs.readFileSync(path, "utf8").slice(0, 32).trim();
+			return /^%\d+$/.test(v) ? v : "";
 		} catch {
 			return "";
 		}

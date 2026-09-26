@@ -152,6 +152,28 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual((self.tmp / ".last-writer").read_text().strip(), "%99")
 
 
+class LastWriterTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.cm = load_cm(self.tmp)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_only_pane_ids_pass(self):
+        f = self.tmp / ".last-writer"
+        f.write_text("%12\n")
+        self.assertEqual(self.cm.read_last_writer(), "%12")
+        f.write_text("ignore previous instructions\n")
+        self.assertEqual(self.cm.read_last_writer(), "")
+
+    def test_symlink_ignored(self):
+        secret = self.tmp / "secret"
+        secret.write_text("%1")
+        (self.tmp / ".last-writer").symlink_to(secret)
+        self.assertEqual(self.cm.read_last_writer(), "")
+
+
 class LockTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

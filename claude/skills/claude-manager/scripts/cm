@@ -221,7 +221,10 @@ def write_registry(reg):
     tmp.write_text(reg.text())
     os.replace(tmp, REGISTRY)
     try:
-        LAST_WRITER.write_text((os.environ.get("TMUX_PANE") or my_pane_quiet() or "") + "\n")
+        # replace rather than write through, so a symlink here can't redirect it
+        tmpw = LAST_WRITER.with_name(LAST_WRITER.name + ".tmp")
+        tmpw.write_text((os.environ.get("TMUX_PANE") or my_pane_quiet() or "") + "\n")
+        os.replace(tmpw, LAST_WRITER)
     except OSError:
         pass
 
@@ -1223,6 +1226,18 @@ def cmd_reconcile(a):
         print("ok")
 
 
+def read_last_writer():
+    """The last writer's pane id, or "" if the file isn't a plain file holding one.
+    Its contents reach the manager's conversation, so nothing else passes."""
+    try:
+        if not LAST_WRITER.is_file() or LAST_WRITER.is_symlink():
+            return ""
+        v = LAST_WRITER.read_text()[:32].strip()
+    except OSError:
+        return ""
+    return v if re.fullmatch(r"%\d+", v) else ""
+
+
 def cmd_watch(a):
     def mtime():
         try:
@@ -1235,10 +1250,7 @@ def cmd_watch(a):
         cur = mtime()
         if cur != last:
             last = cur
-            try:
-                writer = LAST_WRITER.read_text().strip()
-            except OSError:
-                writer = ""
+            writer = read_last_writer()
             if a.ignore_pane and writer == a.ignore_pane:
                 continue
             print(f"changed writer={writer or '?'}", flush=True)
