@@ -1,0 +1,3 @@
+# gpt-oss:20b with an agent-sized context (Ollama's default is too small)
+FROM gpt-oss:20b
+PARAMETER num_ctx 32768

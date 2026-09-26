@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -15,7 +15,7 @@ wsl: common ## WSL setup (common + Windows Terminal settings)
 	ln -sf ${DIR}/WindowsTerminal/settings.json \
 	  /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
 
-common: zsh vim nvim tmux ai worktrunk git vscode session-leds ## Cross-platform configs (shell, editor, tmux, ai, git)
+common: zsh vim nvim tmux ai pi worktrunk git vscode session-leds ## Cross-platform configs (shell, editor, tmux, ai, git)
 
 brew: ## Install Homebrew bundle (+ work overlay if present)
 	brew bundle --file=${DIR}/brew/Brewfile
@@ -137,6 +137,24 @@ ai: ## Symlink Claude config (instructions, settings, hooks, skills, agents)
 	@# external skills + tools
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
+
+pi: ## Install pi coding agent + symlink its config (instructions, settings, models, extensions)
+	npm ls -g @earendil-works/pi-coding-agent >/dev/null 2>&1 || npm install -g @earendil-works/pi-coding-agent
+	mkdir -p ~/.pi/agent/extensions
+	ln -sf ${DIR}/agents/AGENTS.md ~/.pi/agent/AGENTS.md
+	@# settings — live file is gitignored (pi writes to it); merge the committed baseline
+	@# under any existing local fields (local wins), same as the Claude settings
+	@test -f ${DIR}/pi/settings.json || echo '{}' > ${DIR}/pi/settings.json
+	@jq -s '.[0] * .[1]' ${DIR}/pi/settings.json.example ${DIR}/pi/settings.json > ${DIR}/pi/settings.json.tmp && mv ${DIR}/pi/settings.json.tmp ${DIR}/pi/settings.json
+	ln -sf ${DIR}/pi/settings.json ~/.pi/agent/settings.json
+	ln -sf ${DIR}/pi/models.json ~/.pi/agent/models.json
+	for f in ${DIR}/pi/extensions/*.ts; do ln -sf "$$f" ~/.pi/agent/extensions/; done
+
+pi-local: ## Pull the local fallback models for pi and build their agent variants (needs ollama serve)
+	ollama pull ornith:9b
+	ollama pull gpt-oss:20b
+	ollama create ornith-agent -f ${DIR}/pi/ollama/ornith-agent.Modelfile
+	ollama create gpt-oss-agent -f ${DIR}/pi/ollama/gpt-oss-agent.Modelfile
 
 worktrunk: ## Symlink worktrunk config
 	mkdir -p ~/.config/worktrunk

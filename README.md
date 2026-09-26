@@ -13,7 +13,7 @@ differences handled with conditional sourcing in shared files.
 ##### 📦 Common
 `zsh/`, `vim/`, `tmux/`, `git/`, `vscode/` — shared across platforms.
 
-`agents/`, `claude/` — AI tool config, symlinked to `~/.claude/`.
+`agents/`, `claude/`, `pi/` — AI tool config, symlinked to `~/.claude/` and `~/.pi/agent/`.
 
 ##### 🍏 Mac
 `ghostty/` terminal config. `brew/` for packages.

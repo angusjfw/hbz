@@ -16,8 +16,9 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 ## What's here
 - `zsh/`, `vim/`, `tmux/` — core config (shared across platforms)
 - `ghostty/` — terminal emulator (macOS)
-- `agents/` — global AI agent instructions, symlinked as `~/.claude/CLAUDE.md`
+- `agents/` — global AI agent instructions, symlinked as `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
+- `pi/` — pi coding agent settings, models, extensions (symlinked to `~/.pi/agent/`); local model Modelfiles
 - `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
 - `keyboard/` — ZSA Voyager layout: QMK source and firmware (repo is source of truth; flashed, not symlinked) + session-leds tooling
 - `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch)
