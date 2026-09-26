@@ -19,6 +19,9 @@ brew "media-info"
 brew "rust"
 brew "worktrunk"
 brew "raine/git-surgeon/git-surgeon"
+brew "jq"
+brew "node"
+brew "ollama", restart_service: :changed
 
 cask "ghostty"
 cask "keymapp"

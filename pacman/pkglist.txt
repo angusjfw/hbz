@@ -171,6 +171,7 @@ nmap
 nodejs
 noto-fonts-emoji
 npm
+ollama
 openscad
 openssh
 orca
