@@ -7,56 +7,6 @@ skill and its `-wrap` / `-shutdown` / `-pause` siblings. Companions to
 heading per item, terse context only — fixes and scoping decided when
 picked up. Items below are ordered by priority, high to low.
 
-## Manager-exit vs worker "-end" naming clash
-
-"End" is overloaded. The *manager* close-out is only the "Ending the
-manager session" section in `claude-manager/SKILL.md`, with no command
-of its own — that half is still open.
-
-The dir half is resolved: the *worker* shutdown/wrap shared flow used to
-sit in a `claude-manager-end` dir that held no SKILL.md, so it installed
-into `~/.claude/skills/` looking like a skill nobody could invoke. It is
-now `claude-manager/END-FLOW.md`, a companion doc beside
-`CRASH-RECOVERY.md` in the skill that owns it. That removes the bogus
-skill entry and one use of "end", but it is a local fix, not this item's
-resolution — the `amux` scheme below still stands, and under it this doc
-moves again into `amux-worker-teardown`.
-
-Leading resolution (probably — not committed; the prefix is unsettled):
-rename the whole family to a role-based scheme `amux-<role>-<action>`,
-which dissolves the clash by disambiguating on role rather than on the
-action word (no more juggling end/teardown/exit):
-
-- `amux-manager` (coordinator) + a new `amux-manager-exit` command (the
-  missing close-out entry point)
-- `amux-worker-{shutdown,wrap,pause}`; shared-flow dir
-  `amux-worker-teardown`
-
-`amux` = agent + tmux — motivation is that nothing here is Claude-
-specific and `claude-manager` is a long, Claude-only-sounding prefix.
-Name still tentative.
-
-Scope is two layers with very different risk:
-
-- **User-facing** — ~92 `claude-manager` refs across skills + specs, 4
-  skill dirs, the `~/.claude/skills` symlinks. Mechanical, no runtime
-  risk.
-- **Internal plumbing** — `~/.local/state/claude-manager/` (registry,
-  snapshots, resume), `@cm_paused`, watch PID naming. Renaming needs a
-  *live* migration: at last check there was a running watch (manager in
-  tmux `0:1.0`) and live registry sessions, so a careless `mv` orphans
-  them and breaks in-flight workers (renamed commands stop resolving).
-  Do it when the system is quiescent, or migrate the dir + restart the
-  watch + have the running manager re-read.
-
-Related gap (pending regardless of the rename): the manager exit flow's
-step 5 is just "Exit" and says nothing about the manager's own tmux
-session. Workers kill their tmux on shutdown/wrap; the manager can't
-blanket-kill — it often runs in the user's primary/attached session
-(e.g. default `0`), where killing tmux would drop the user to a bare
-shell. The flow should state the rule: kill a dedicated manager session,
-leave a shared/primary one.
-
 ## Demote paused sessions in the switcher
 
 The paused state itself shipped (see

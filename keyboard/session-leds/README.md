@@ -26,7 +26,7 @@ Memory lasts a day, enough to cover a reboot; `agent-status park
 <session>` vouches for one that is coming back and holds its key for a
 week, `clear <session>` releases it at once. Assignment is the CLI's
 alone, under a store lock, and it never reads anything outside its own
-store — the claude-manager parks what it shuts down and clears what it
+store — amx parks what it shuts down and clears what it
 wraps, because only it knows which a dead session was, but the CLI
 works the same with no manager in sight.
 `agent-status slot <session> <n>` pins.
@@ -86,7 +86,7 @@ round it out. Housekeeping keeps running while paused.
 
 `agent-deck switch <session> [client-tty]` is the switcher's own switch
 as a command, confirmation and all, for anything that has to move a
-client without the overlay — the claude-manager uses it to clear
+client without the overlay — amx uses it to clear
 clients off a session before killing it. It exits non-zero if the
 client wouldn't move.
 

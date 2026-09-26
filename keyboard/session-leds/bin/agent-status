@@ -162,7 +162,7 @@ LOCK_DIR = os.path.join(STATE_DIR, ".lock")
 # session that is coming back from one that is simply gone. By default a
 # name is remembered just long enough to survive a reboot; `park` vouches
 # for one that will return and holds its key far longer. Whoever knows
-# the difference says so — the claude-manager parks a session it shuts
+# the difference says so — amx parks a session it shuts
 # down and clears one it wraps — but the verbs are generic and this file
 # stays ignorant of who called them.
 SLOT_MEMORY_HOURS = 24
