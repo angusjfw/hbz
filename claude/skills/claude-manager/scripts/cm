@@ -669,10 +669,17 @@ def cmd_panes(a):
 # ---------------------------------------------------------------- commands: snapshot, resume-state
 
 def cmd_snapshot(a):
+    snapshot_session(a.session, a.out, a.lines)
+    print(Path(a.out).expanduser())
+
+
+def snapshot_session(session, out, lines):
+    a = argparse.Namespace(session=session, out=out, lines=lines)
     out = Path(a.out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
     chunks = []
-    for p in inspect_panes(a.session):
+    panes = inspect_panes(a.session)
+    for p in panes:
         t = p["pane_id"]
         cap = tmux("capture-pane", "-p", "-J", "-t", t, "-S", f"-{a.lines}", check=False).stdout
         chunks.append(f"--- window {p['window']} pane {p['pane']} ({p['kind']}"
@@ -682,11 +689,22 @@ def cmd_snapshot(a):
             chunks.append(f"--- input box: {box} ---")
         chunks.append("")
     out.write_text("\n".join(chunks) + "\n")
-    print(out)
+    return panes
 
 
 def cmd_resume_state(a):
-    reg = Registry.load()
+    out, missing, _ = write_resume_state(a.session, a.out)
+    print(out)
+    if missing:
+        print("WARNING: no session id for: " + "; ".join(missing) +
+              ". Resolve with `cm transcripts` and edit the file, or they come back as plain shells.",
+              file=sys.stderr)
+        sys.exit(3)
+
+
+def write_resume_state(session, out, reg=None):
+    reg = reg or Registry.load()
+    a = argparse.Namespace(session=session, out=out)
     entries = reg.by_tmux_session(a.session)
     entry = entries[0] if len(entries) == 1 else None
     name = entry.name if entry else a.session
@@ -724,12 +742,7 @@ def cmd_resume_state(a):
     out = Path(a.out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines).rstrip() + "\n")
-    print(out)
-    if missing:
-        print("WARNING: no session id for: " + "; ".join(missing) +
-              ". Resolve with `cm transcripts` and edit the file, or they come back as plain shells.",
-              file=sys.stderr)
-        sys.exit(3)
+    return out, missing, panes
 
 
 def parse_resume_state(text):
@@ -953,6 +966,11 @@ def cmd_rebuild(a):
 
 
 def cmd_kill(a):
+    kill_session(a.session)
+
+
+def kill_session(session):
+    a = argparse.Namespace(session=session)
     if not has_session(a.session):
         die(f"no tmux session '{a.session}'")
     others = [s for s in list_sessions() if s != a.session]
@@ -973,6 +991,124 @@ def cmd_kill(a):
                 tmux("switch-client", "-c", c, "-t", f"={dest}", check=False)
     tmux("kill-session", "-t", f"={a.session}")
     print(f"killed {a.session}" + (f" (clients moved to {dest})" if dest and clients else ""))
+
+
+# ---------------------------------------------------------------- commands: lifecycle
+
+SWITCHER = ("choose-tree -Zw -F '#{?session_format,#{?#{@cm_paused},⏸ paused · ,}#{session_windows}w"
+            "#{?session_attached, (attached),},#{?window_format,#{window_name}#{window_flags},"
+            "#{pane_current_command}}}'")
+
+
+def install_switcher():
+    """prefix+w with a paused badge. Global, and gone after a server restart."""
+    tmux("bind-key", "w", *shlex.split(SWITCHER), check=False)
+
+
+def live_entry(reg, name):
+    e = reg.block(name)
+    ts = e.get("tmux_session")
+    if not ts:
+        state = "wrap requested" if e.get("wrap_requested") else "shut down" if e.get("shutdown") else "not active"
+        die(f"{name} is already {state} (no tmux_session); nothing to do")
+    if not has_session(ts):
+        die(f"{name}: tmux session {ts} isn't running; run cm reconcile")
+    return e, ts
+
+
+def sync_workers(b, panes):
+    """Make worker lines match the non-primary agent panes that have ids."""
+    running = {p["session_id"]: p for p in panes if p["session_id"] and not p["primary"]}
+    have = {(v.split() or [""])[0] for v in b.get_all("worker")}
+    for wid in have - set(running):
+        b.unset("worker", wid)
+    for sid in set(running) - have:
+        p = running[sid]
+        b.append("worker", f"{sid} cwd={p['cwd']}" + (f" label={p['label']}" if p["label"] else ""))
+
+
+def agent_status(action, session):
+    """park: keep the session's LED key for a resume; clear: release it. Non-fatal."""
+    if shutil.which("agent-status"):
+        run(["agent-status", action, session], check=False)
+
+
+def cmd_pause(a):
+    reg = Registry.load()
+    e, ts = live_entry(reg, a.id)
+    on = {"on": True, "off": False}.get(a.mode, not e.get("paused"))
+
+    def fn(reg):
+        b = reg.block(a.id)
+        if on:
+            b.set("paused", datetime.now().strftime("%Y-%m-%d"))
+            if a.reason:
+                b.set("notes", (b.get("notes") + " " if b.get("notes") else "") + f"Paused: {a.reason}")
+        else:
+            b.unset("paused")
+        b.set("last_touched", now_str())
+    mutate(fn)
+    if on:
+        tmux("set-option", "-t", f"={ts}:", "@cm_paused", "1")
+        install_switcher()
+    else:
+        tmux("set-option", "-u", "-t", f"={ts}:", "@cm_paused", check=False)
+    print(f"{a.id} {'paused' if on else 'unpaused'}")
+
+
+def cmd_shutdown(a):
+    reg = Registry.load()
+    e, ts = live_entry(reg, a.id)
+    snap = STATE / "snapshots" / f"{a.id}.txt"
+    snapshot_session(ts, snap, 500)
+    rs, missing, panes = write_resume_state(ts, STATE / "resume" / f"{a.id}.md", reg)
+    if missing and not a.force:
+        die("no session id for: " + "; ".join(missing) + f". Find it with `cm transcripts`, add it to {rs} "
+            "(session_id: and harness: lines), then rerun with --force. Nothing killed.")
+
+    def fn(reg):
+        b = reg.block(a.id)
+        sync_workers(b, panes)
+        b.set("snapshot", str(snap))
+        b.set("resume_state", str(rs))
+        b.set("shutdown", now_str())
+        if a.resume_target:
+            b.set("resume_target", a.resume_target)
+        b.set("last_touched", now_str())
+        b.unset("tmux_session")
+        b.unset("paused")
+    mutate(fn)
+    agent_status("park", ts)
+    print(f"{a.id} shut down; snapshot {snap}; resume_state {rs}", flush=True)
+    kill_session(ts)
+
+
+def cmd_wrap(a):
+    reg = Registry.load()
+    e, ts = live_entry(reg, a.id)
+    snap = STATE / "snapshots" / f"{a.id}.txt"
+    panes = snapshot_session(ts, snap, 500)
+
+    def fn(reg):
+        b = reg.block(a.id)
+        sync_workers(b, panes)
+        b.set("snapshot", str(snap))
+        if a.notes:
+            n = b.get("notes")
+            p = Path(n).expanduser() if n else None
+            if p and p.is_file():
+                with open(p, "a") as f:
+                    f.write(f"\n{a.notes}\n")
+            else:
+                b.set("notes", f"{n} {a.notes}" if n else a.notes)
+        b.set("wrap_requested", "true")
+        b.set("last_touched", now_str())
+        b.unset("tmux_session")
+        b.unset("paused")
+    mutate(fn)
+    agent_status("clear", ts)
+    print(f"{a.id} wrap requested; snapshot {snap}", flush=True)
+    kill_session(ts)
 
 
 # ---------------------------------------------------------------- commands: transcripts, reconcile, watch
@@ -1170,6 +1306,23 @@ def main(argv=None):
     p = sub.add_parser("kill", help="move attached clients off a session, then kill it")
     p.add_argument("session")
     p.set_defaults(fn=cmd_kill)
+
+    p = sub.add_parser("pause", help="pause/unpause an active entry (registry, @cm_paused, switcher badge)")
+    p.add_argument("id")
+    p.add_argument("mode", nargs="?", choices=["on", "off", "toggle"], default="toggle")
+    p.add_argument("--reason")
+    p.set_defaults(fn=cmd_pause)
+
+    p = sub.add_parser("shutdown", help="snapshot, write resume_state, mark shutdown, park the LED key, kill tmux")
+    p.add_argument("id")
+    p.add_argument("--resume-target")
+    p.add_argument("--force", action="store_true", help="proceed even if some agent pane has no session id")
+    p.set_defaults(fn=cmd_shutdown)
+
+    p = sub.add_parser("wrap", help="worker phase of wrap: snapshot, notes, wrap_requested, release LED key, kill tmux")
+    p.add_argument("id")
+    p.add_argument("--notes", help="context for the manager's journal entry (one line)")
+    p.set_defaults(fn=cmd_wrap)
 
     p = sub.add_parser("transcripts", help="list a harness's transcripts for a cwd")
     p.add_argument("harness", choices=["claude", "pi"])
