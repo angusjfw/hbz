@@ -25,7 +25,8 @@ REGISTRY = STATE / "sessions.md"
 LOCK = STATE / "sessions.md.lock"
 LAST_WRITER = STATE / ".last-writer"
 AGENT_STATUS = Path(os.environ.get("CM_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
-INPUT_BOX = Path.home() / ".claude/skills/tmux-interaction/scripts/read-input-box.py"
+# sibling skill in the same skills dir, wherever that is installed
+INPUT_BOX = Path(__file__).resolve().parents[2] / "tmux-interaction/scripts/read-input-box.py"
 
 LOCK_TIMEOUT = 10.0
 FIELD_RE = re.compile(r"^([a-z_][a-z0-9_]*):(?: (.*))?$")
@@ -536,10 +537,13 @@ def inspect_panes(session, reg=None):
                 workers[parts[0]] = kv
     claimed = set()
     out = []
+    tty_of = {pid: tty for pid, _, tty, _ in procs}
     for r in rows:
         fg = ""
+        # compare ps with ps: macOS ps abbreviates ttys (s003 for /dev/ttys003)
+        pane_tty = tty_of.get(r["pane_pid"], r["tty"])
         for pid, ppid, tty, args in procs:
-            if ppid == r["pane_pid"] and tty == r["tty"]:
+            if ppid == r["pane_pid"] and tty == pane_tty:
                 fg = args
                 break
         if not fg:
