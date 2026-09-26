@@ -81,7 +81,7 @@ user's server. Unverified items are marked.
 | Model on resume | restored | restored (verified) |
 | Effort on resume | not restored; replay `--effort` | thinking level restored (verified); don't replay |
 | Effort flag | `--effort low…max` | `--thinking off\|minimal\|low\|medium\|high\|xhigh\|max`, clamped to the model |
-| Display name | `-n/--name` | `-n/--name`; sets pane title `π - <name> - <cwd basename>` (verified) and is stored as a `session_info` entry. With `--session-control`, the name is also a **global** alias: `control.ts` `createAliasSymlink` replaces any existing `~/.pi/session-control/<name>.alias`. Whether `--session-id` alone restores the name on resume is unverified (Phase 2 check). |
+| Display name | `-n/--name` | `-n/--name`; sets pane title `π - <name> - <cwd basename>` (verified) and is stored as a `session_info` entry. With `--session-control`, the name is also a **global** alias: `control.ts` `createAliasSymlink` replaces any existing `~/.pi/session-control/<name>.alias`. `pi --session-id <id>` restores the name and its alias on resume (verified), so resume lines don't pass `--name`. A pi killed with its tmux session leaves its socket and alias behind (verified), so an alias only means "in use" if its socket accepts a connection. |
 | Session control | n/a | `--session-control` (mitsuhiko/agent-stuff `control.ts`) enables the per-session socket pane-team uses. Currently on only via `alias pi="pi --session-control"` in `zsh/.zshrc`, which doesn't apply to lines tmux types into a non-interactive context or to scripts. |
 | Process argv | full argv visible in `ps` | **overwritten to `pi`**: `/proc/<pid>/cmdline` and `ps` show only `pi`, and tmux-resurrect saves only `pi` (verified) |
 | `pane_current_command` | version string, e.g. `2.1.150` | `pi` |
@@ -223,9 +223,8 @@ to the shell alias.
 Resume lines built by `cm rebuild`:
 
 - Claude: `claude --effort <e> --resume <id>` (as now)
-- pi: `pi --session-control --session-id <id> [--name <name>]`, typed in
-  the pane whose cwd is the recorded one. `--name` is passed if the Phase 2
-  check finds the name isn't restored on its own.
+- pi: `pi --session-control --session-id <id>`, typed in the pane whose
+  cwd is the recorded one. pi restores the model, thinking level and name.
 
 Because `pi --session-id` creates a missing session instead of failing,
 `cm rebuild` checks each pi pane before building anything: resolve the
@@ -353,13 +352,14 @@ keep their own mechanics. For pane-team (Phase 3 hand-off points):
   --brief-file …` and use the printed pane id and name. Otherwise keep the
   raw `tmux split-window` it has now.
 - **Names.** pi aliases are global, so `cm spawn --into` always names a pi
-  worker `<registry-id>-<label>` and rejects the spawn if
-  `~/.pi/session-control/<that name>.alias` already exists. pane-team
+  worker `<registry-id>-<label>` and rejects the spawn if a running
+  session holds that alias (its socket answers). Stale aliases from
+  killed sessions don't count. pane-team
   addresses workers by the name `cm` prints.
 - **Finish.** Before `tmux kill-pane`, run `cm reg worker drop <entry>
   <session-id>`. A worker pane left open keeps its line.
 - **Resume.** `cm rebuild` relaunches every pi pane with
-  `--session-control` (and the name, per the Phase 2 check), so pane-team
+  `--session-control`; pi restores the name, so pane-team
   can talk to its workers again after a cold resume or crash recovery.
 
 ### Manager's own tmux session
