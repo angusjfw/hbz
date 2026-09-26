@@ -40,6 +40,20 @@ tmux split-window -d -P -F '#{pane_id}' -c "$cwd" \
   that worker. Tell the user the name and pane id.
 - Add `--model <provider/id>` for a cheaper or stronger worker. Default: yours.
 
+**Inside a managed session**, spawn through `cm` instead so the worker is
+registered and comes back when the session is shut down and resumed. Check
+with `cm whoami`: a non-empty `entry=` means managed.
+
+```bash
+cm spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
+  [--model <provider/id>] [--window <name>]
+```
+
+It splits beside the active pane (or opens a window with `--window`) and
+prints `pane=`, `name=` and `session_id=`. Use the printed `name`
+(`<entry>-<label>`) to address the worker, and keep the `session_id` for
+Finish.
+
 ## Brief
 
 Include: the user's own words for the goal, what done looks like, where the
@@ -69,3 +83,6 @@ Messages scroll away; the file is what you and the user come back to.
 
 When a worker is done and the user has seen its result, close its pane
 (`tmux kill-pane -t <id>`), or leave it open if the user may want to look.
+In a managed session, unregister it first with
+`cm reg worker drop <entry> <session_id>`; a worker left open stays
+registered.
