@@ -132,6 +132,11 @@ ai: ## Symlink Claude config (instructions, settings, hooks, skills, agents)
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
 	@# personal skills (each subdir under claude/skills/ becomes ~/.claude/skills/<name>)
 	for d in ${DIR}/claude/skills/*/; do ln -sfn "$${d%/}" ~/.claude/skills/; done
+	@# drop links to skills that were renamed or removed here
+	find ~/.claude/skills -maxdepth 1 -xtype l -lname '${DIR}/*' -delete
+	@# claude-manager's CLI, on PATH for the manager, its workers and coordination skills
+	mkdir -p ~/.local/bin
+	ln -sf ${DIR}/claude/skills/claude-manager/scripts/cm ~/.local/bin/cm
 	@# personal agents (each .md under claude/agents/ becomes ~/.claude/agents/<name>.md)
 	for f in ${DIR}/claude/agents/*.md; do ln -sf "$$f" ~/.claude/agents/; done
 	@# external skills + tools
