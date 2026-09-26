@@ -13,6 +13,8 @@
   "theme": "light",
   "skills": [
     "~/.claude/skills/tmux-interaction",
+    "~/.claude/skills/claude-manager",
+    "~/.claude/skills/claude-manager-worker",
     "~/.claude/skills/review-pr",
     "~/.claude/skills/run",
     "~/.claude/skills/prune-worktrees",
