@@ -31,12 +31,12 @@ Anyone may message anyone. Say who a worker should report to in its brief.
 Every worker gets a short unique name (e.g. `api-tests`). It is how everyone
 addresses that worker. Write the brief to a file.
 
-**Inside a managed session** (`cm whoami` prints a non-empty `entry=`), spawn
-through `cm` so the worker is registered and comes back when the session is
+**Inside a managed session** (`amx whoami` prints a non-empty `entry=`), spawn
+through `amx` so the worker is registered and comes back when the session is
 shut down and resumed:
 
 ```bash
-cm spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
+amx spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
   [--model <model>] [--window <name>]
 ```
 
@@ -89,5 +89,5 @@ Messages scroll away; the file is what you and the user come back to.
 When a worker is done and the user has seen its result, close its pane
 (`tmux kill-pane -t <id>`), or leave it open if the user may want to look.
 In a managed session, unregister it first with
-`cm reg worker drop <entry> <session_id>`; a worker left open stays
+`amx reg worker drop <entry> <session_id>`; a worker left open stays
 registered.

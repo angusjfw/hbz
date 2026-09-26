@@ -16,7 +16,7 @@ rebuild.
 
 ```bash
 cp -R ~/.local/state/agent-status \
-  ~/.local/state/claude-manager/agent-status.crash-$(date +%Y%m%dT%H%M%S)
+  ~/.local/state/amx/agent-status.crash-$(date +%Y%m%dT%H%M%S)
 ```
 
 It maps every agent session id (Claude and pi) to its pane, per tmux
@@ -49,7 +49,7 @@ must stay down, and the registry is reconciled in the same pass.
 
 ## 3. Read the registry
 
-`cm reg show`. It is the authority on what *should* exist: which
+`amx reg show`. It is the authority on what *should* exist: which
 entries were shut down (leave them), paused, or wrap-requested. The save
 file only says what was running.
 
@@ -65,23 +65,26 @@ Per agent pane, take the session id from the first route that has it:
    pi: the saved full command is just `pi`. Use the pane title instead,
    `π - <name> - <dir>`: `<name>` is the entry id for the primary, or
    `<id>-<label>` for a worker, which a `worker:` line's `label=` maps to
-   an id. Failing that, `cm transcripts pi <cwd> --name <name>`.
-3. The copied agent-status store.
-4. A transcript content hunt: `cm transcripts <harness> <cwd> --grep …`.
+   an id. Failing that, `amx transcripts pi <cwd> --name <name>`.
+3. The session log: the last `start` line for that tmux session and pane
+   (`grep '"pane": "%<id>"' ~/.local/state/amx/session-log.jsonl`, or by
+   tmux session and cwd, since pane ids don't survive the restart).
+4. The copied agent-status store.
+5. A transcript content hunt: `amx transcripts <harness> <cwd> --grep …`.
 
 Then per entry, write a resume_state from the save file (format in
 `REFERENCE.md`), set it with
-`cm reg set <id> resume_state=<path> shutdown=now` and
-`cm reg unset <id> tmux_session`, and run `cm rebuild <id>`.
+`amx reg set <id> resume_state=<path> shutdown=now` and
+`amx reg unset <id> tmux_session`, and run `amx rebuild <id>`.
 
 A pane whose id can't be established comes back as a fresh agent. Say
 so, per pane; a fresh agent in a rebuilt session looks resumed.
 
 ## 5. Record what happened
 
-Per entry: `cm reg set <id> notes="…"` saying it was rebuilt after a
+Per entry: `amx reg set <id> notes="…"` saying it was rebuilt after a
 crash and which ids came back by which route. Re-add `worker:` lines for
-every non-primary pane brought back (`cm reconcile` lists them).
+every non-primary pane brought back (`amx reconcile` lists them).
 
 ## An agent pane with no registry entry
 

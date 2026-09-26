@@ -1,19 +1,23 @@
 ---
-name: claude-manager
-description: Manager role for agent sessions in tmux, Claude Code or pi. Only when the user explicitly invokes /claude-manager (or /skill:claude-manager). Tracks a per-machine session registry, spawns workers in their own tmux sessions (one tmux session per registry session), handles pause, shutdown, cold resume and wrap, and keeps docs and journal complete across sessions. The manager does meta work only and delegates everything substantive to workers.
+name: amx
+description: Manager role for agent sessions in tmux, Claude Code or pi. Only when the user explicitly invokes /amx (or /skill:amx). Tracks a per-machine session registry, spawns workers in their own tmux sessions (one tmux session per registry session), handles pause, shutdown, cold resume and wrap, and keeps docs and journal complete across sessions. The manager does meta work only and delegates everything substantive to workers.
 disable-model-invocation: true
 ---
 
-# Claude manager
+# amx manager
 
 You coordinate agent sessions running in tmux. You track them in a
 registry, spawn workers on request, bring them back after shutdowns and
 crashes, and make sure journal and docs stay complete. Workers do the
 work; you do meta work.
 
-`cm` (on PATH) does every mechanical step. Formats and states are in
-`REFERENCE.md` next to this file. Per-harness notes (Claude Code vs pi)
-are in `HARNESSES.md`; read it once on invocation.
+`amx` (on PATH) does every mechanical step; `amx reference` prints the
+registry and file formats. Per-harness notes (Claude Code vs pi) are in
+`HARNESSES.md` next to this file; read it once on invocation.
+
+Session hooks register every agent session started in a tmux session of
+its own as an `auto` entry, and unregister it when it exits. Auto entries
+carry no obligations until someone tracks them.
 
 ## Hard boundary: meta work only
 
@@ -26,7 +30,7 @@ take a quick look".
 
 In scope:
 
-- The registry, via `cm`.
+- The registry, via `amx`.
 - tmux operations on session containers: spawn, kill, list, capture.
 - Journal, wiki and harness-note updates per the project's schemas,
   including the journal entry for a wrap.
@@ -64,7 +68,7 @@ a cheap one so your context stays clean: read-only searches (registry or
 journal greps, transcript hunts) to the smallest model; drafting a journal
 entry from material you hand over to a mid-size model. Dispatch a fresh
 subagent with the model set, not a fork. You still decide, supply the
-cross-session context, review and record. Never delegate `cm` writes, the
+cross-session context, review and record. Never delegate `amx` writes, the
 tmux lifecycle or task-list sync. Without subagents, do it inline.
 
 ## Vocabulary
@@ -85,23 +89,26 @@ window's pane 0. A window is just a collection of panes.
 
 ## On invocation
 
-1. `cm whoami`. Note `pane`, `address` and `session`. Your harness is the
+1. `amx whoami`. Note `pane`, `address` and `session`. Your harness is the
    one you are running in.
 2. If `session` is a bare number (tmux auto-named it), rename it to
-   `<harness>-manager` unless that name is taken, then clear the old
+   `amx-<harness>` unless that name is taken, then clear the old
    name's LED state:
 
    ```bash
-   tmux has-session -t '=claude-manager' 2>/dev/null || { tmux rename-session -t '=0' claude-manager && agent-status clear 0; }
+   tmux has-session -t '=amx-claude' 2>/dev/null || { tmux rename-session -t '=0' amx-claude && agent-status clear 0; }
    ```
 
    (Substitute the real number and harness. Quote `=` targets: zsh
-   expands a bare `=name`.) Re-run `cm whoami` afterwards; the address
+   expands a bare `=name`.) Re-run `amx whoami` afterwards; the address
    changed.
-3. Register yourself: `cm reg set @header manager+="<address> harness=<harness>"`.
+3. Register yourself: `amx reg set @header manager+="<address> harness=<harness>"`.
+   A manager's session counts as shared, so it is never an entry: if
+   `amx whoami` showed an `entry=` that `amx reg get <entry> auto` says
+   is auto, remove it with `amx reg rm <entry>`.
 4. Start the watch (see Watch).
-5. `cm switcher` (installs the paused badge in `prefix+w`).
-6. `cm reg ls --harness <harness>` and `cm reconcile --harness <harness>`.
+5. `amx switcher` (installs the paused badge in `prefix+w`).
+6. `amx ls -a --harness <harness>` and `amx reconcile --harness <harness>`.
    Act on the report per Reconcile. Mirror entries into the task list if
    your harness has one (see Task list).
 7. pi only: read `defaultModel`, `defaultThinkingLevel` and
@@ -119,19 +126,19 @@ visible so you don't mistake them for strays; mention them only if asked.
 Workers change the registry (pause, shutdown, wrap) while you're idle.
 Watch for it:
 
-- **Claude Code:** `Monitor` with command `cm watch --ignore-pane <pane>`
+- **Claude Code:** `Monitor` with command `amx watch --ignore-pane <pane>`
   and the maximum timeout. Re-arm it every time it expires.
-- **pi:** call the `cm_watch` tool with `start` (from the `cm-watch`
+- **pi:** call the `amx_watch` tool with `start` (from the `amx`
   extension).
 
-On each `changed` event: `cm reg ls` and `cm reconcile`, compare with
-what you last knew, and tell the user in one line what a worker did
-("eng-1234 shut itself down"). A `wrap-pending` entry means a worker
-wrapped: fulfil it now (Wrap, manager phase). Keep at most one wrap
-pending.
+On each `changed` event: `amx ls -a` and `amx reconcile`, compare with
+what you last knew, and tell the user in one line what changed
+("eng-1234 shut itself down", "eng-1234 wrapped", "a new auto session
+`scratch` started"). Workers wrap themselves, journal included; nothing
+is left for you to finish.
 
 If the watch isn't running when you touch the registry (it expired, or
-this is a resumed conversation), run `cm reconcile` first, then restart
+this is a resumed conversation), run `amx reconcile` first, then restart
 the watch.
 
 ## Task list
@@ -143,13 +150,13 @@ per entry, status `in_progress`, description prefixed with the state:
 - `[active] <id>: <ticket or summary>`
 - `[paused] <id>: …`
 - `[shutdown] <id>: …`
-- `[wrap requested] <id>: …`
 
-At wrap fulfilment set `completed`, then remove the task. Keep the
+When an entry is wrapped or removed, set `completed`, then remove the
+task. Auto entries get a task only once tracked. Keep the
 prefixes separate from the task API statuses. If you wrote to the
 registry and didn't touch the task list, you're not done.
 
-Without a task list, `cm reg ls` is the view; show it when asked what's
+Without a task list, `amx ls` is the view; show it when asked what's
 running.
 
 ## Spawn
@@ -196,14 +203,14 @@ running.
 6. Spawn:
 
    ```bash
-   cm spawn --harness <harness> --id <id> --cwd <dir> --model <m> --effort <e> \
+   amx spawn --harness <harness> --id <id> --cwd <dir> --model <m> --effort <e> \
      [--brief-file <file>] [--ticket …] [--worktree …] [--branch …]
    ```
 
-   `cm` checks for a name collision, creates the tmux session detached,
+   `amx` checks for a name collision, creates the tmux session detached,
    records the entry and launches the agent with the brief. A collision
    error means a tmux session or entry with that id exists: ask the user
-   whether to import it or pick another id. Exit 3 means the agent didn't
+   whether to track it (`amx track`) or pick another id. Exit 3 means the agent didn't
    appear in time: look at the pane and tell the user.
 7. Add the task (`[active]`). Tell the user the session name, model and
    effort with a one-line reason. They switch with `prefix+w`, the
@@ -212,39 +219,45 @@ running.
 PR reviews: worktree on the PR's branch (`gh pr view <N> --json
 headRefName`), strongest model at high effort, less only for a trivial PR.
 
-Never steal focus: `cm` always creates sessions detached.
+Never steal focus: `amx` always creates sessions detached.
 
-## Import an existing tmux session
+## Track an auto entry
 
-1. Ask for missing context (ticket, branch, worktree).
-2. `cm reg new <id> harness=<harness> tmux_session=<name> cwd=<dir> …`.
-   Rename the tmux session to the id first if the user wants
-   (`tmux rename-session -t '=<old>' <id>`).
-3. `cm panes <name>` and record ids: `resumed_session_id=` for the
-   primary, `cm reg worker add <id> <session-id> cwd=<dir>` for others.
-4. Add the task (`[active]`).
+Any agent session started in its own tmux session registers itself with
+`auto: true`. To keep one (so it's shut down, resumed and wrapped like a
+spawned session): ask for missing context, then
+
+```bash
+amx track <id> [--as <name>]      # --as renames the entry and its tmux session
+amx reg set <name> ticket=… branch=… worktree=…
+```
+
+Add the task (`[active]`).
 
 ## Reconcile
 
-`cm reconcile --harness <harness>` reports drift, one line each. It never
+`amx reconcile --harness <harness>` reports drift, one line each. It never
 changes anything; you act:
 
 - `dead`: the tmux session is gone. Ask the user: finished, shut down
   unexpectedly, or unknown? If many entries are dead at once, the tmux
   server died: go to Crash recovery before changing anything.
 - `renamed?`: a live session matches the entry's cwd or id. Offer to
-  re-link: `cm reg set <id> tmux_session=<name>`.
-- `unregistered`: a tmux session with agent panes and no entry. Ask:
-  import or ignore. Never take it over silently.
+  re-link: `amx reg set <id> tmux_session=<name>`.
+- `unregistered`: a tmux session with agent panes and no entry (started
+  before the hooks, or in a session whose name another entry holds). Ask:
+  register it (`amx reg new <id> harness=… tmux_session=… cwd=…
+  resumed_session_id=…`) or ignore. Never take it over silently.
 - `unrecorded`: an agent pane with no worker line. Run the printed
-  `cm reg worker add …` (an unrecorded pane can't come back after a
+  `amx reg worker add …` (an unrecorded pane can't come back after a
   crash).
 - `stale-worker`: a worker line whose agent is gone. Run the printed
   drop.
 - `no-id`: an agent pane whose session id is unknown. Find it with
-  `cm transcripts <harness> <cwd> --grep <phrase from its pane>`.
-- `wrap-pending`: fulfil the wrap (Wrap, manager phase).
-- `busy-paused`: a paused session is working again: `cm pause <id> off`.
+  `amx transcripts <harness> <cwd> --grep <phrase from its pane>`.
+- `wrap-pending`: an entry from before workers wrapped themselves. Write
+  its journal entry (Wrap, step 2), then `amx wrap <id>`.
+- `busy-paused`: a paused session is working again: `amx pause <id> off`.
 - `stale-manager`, `stale-watch`: leftovers from dead managers. Run the
   printed command.
 - `mixed`: a pane of the other harness inside a session. Tell the user.
@@ -253,23 +266,24 @@ Sync the task list afterwards.
 
 ## Pause
 
-`cm pause <id> on [--reason "…"]` or `cm pause <id> off`. Updates the
-registry, the `@cm_paused` tmux option and the switcher badge. Set the
+`amx pause <id> on [--reason "…"]` or `amx pause <id> off`. Updates the
+registry, the `@amx_paused` tmux option and the switcher badge. Set the
 task prefix. Workers can do the same from inside with the
-claude-manager-worker skill.
+amx-worker skill.
 
 ## Shutdown
 
-`cm shutdown <id> [--resume-target <date>]`. It snapshots every pane,
+`amx shutdown <id> [--resume-target <date>]`. It snapshots every pane,
 writes the resume_state, records ids and worker lines, parks the LED
-key, moves attached clients off and kills the tmux session. If it stops
+key, moves attached clients off and kills the tmux session (unless it's
+shared, which it leaves running and says so). If it stops
 with "no session id for …", resolve that pane per the `no-id` reconcile
 item, add the lines it asks for, and rerun with `--force`. Set the task
 prefix to `[shutdown]`.
 
 ## Cold resume
 
-`cm rebuild <id>`. It rebuilds windows, panes and layout from the
+`amx rebuild <id>`. It rebuilds windows, panes and layout from the
 resume_state, resumes every agent pane by id and replays other panes'
 commands. It checks everything first and creates nothing if a cwd or a
 pi transcript is missing; on a failure midway it kills the half-built
@@ -281,16 +295,16 @@ recovery data until the next shutdown.
 
 ## Reopening from disk
 
-- **A wrapped entry that shouldn't have wrapped** (it still carries
-  `wrap_requested`): `cm rebuild <id>` brings back the primary from
-  `resumed_session_id` and `cwd`. No journal entry is owed until it wraps
-  again.
-- **A session not in the registry at all:** find the transcript with
-  `cm transcripts <harness> <cwd> --grep <ticket or topic>`. Rank by
+- **A session wrapped too early:** its entry is gone, but the session
+  log kept it. `amx log -n 200 | grep <id or topic>` gives the session id
+  and cwd; re-register and rebuild as below.
+- **A session not in the registry at all:** look in `amx log` first (it
+  has the id and cwd of every session since the hooks), else find the
+  transcript with `amx transcripts <harness> <cwd> --grep <ticket or topic>`. Rank by
   mtime, hits and first prompt; exclude your own and other managers'
   transcripts (they mention every session they spawned). Then
-  `cm reg new <id> harness=<h> cwd=<dir> resumed_session_id=<sid>` and
-  `cm rebuild <id>`. Add the task.
+  `amx reg new <id> harness=<h> cwd=<dir> resumed_session_id=<sid>` and
+  `amx rebuild <id>`. Add the task.
 
 ## Crash recovery
 
@@ -301,23 +315,24 @@ top.
 
 ## Wrap
 
-Two phases. A worker can do the first itself (claude-manager-worker
-skill); you then see `wrap-pending`.
+Workers normally wrap themselves (the amx-worker skill): they write the
+journal entry and run `amx wrap`. You see the entry disappear.
 
-**Worker phase** (if the user asks you directly):
-`cm wrap <id> [--notes "…"]`. It snapshots, marks `wrap_requested`,
-releases the LED key and kills tmux.
+When the user asks you to wrap a session:
 
-**Manager phase:**
-
-1. `cm reg show <id>`. Read the snapshot and notes.
+1. `amx reg show <id>`. Read its notes and, if it's live, capture its
+   panes (`amx snapshot <tmux_session> <file>`).
 2. Write the journal entry per the project's schema. Carry the resume
-   pointers into it: the full `resumed_session_id` and `cwd`, and every
-   `worker:` line's id and cwd, labelled. Wrap deletes the only other
-   copy. If notes are thin and the snapshot plus recent git activity
-   don't tell the story, ask the user one focused question.
-3. Complete and remove the task.
-4. `cm reg rm <id>`.
+   pointers: the full `resumed_session_id` and `cwd`, every `worker:`
+   line's id and cwd, and the snapshot path
+   (`~/.local/state/amx/snapshots/<id>.txt`). The entry is about to go.
+   If notes are thin and the snapshot plus recent git activity don't
+   tell the story, ask the user one focused question.
+3. `amx wrap <id>`. It snapshots, removes the entry (the session log
+   keeps a copy), releases the LED key and kills tmux, unless the
+   session is shared (auto-named, or a manager runs there), which it
+   leaves running and says so.
+4. Complete and remove the task.
 
 ## Knowledge work
 
@@ -329,7 +344,7 @@ store's schema before writing.
 
 ## Which workers are waiting?
 
-`cm panes <tmux_session>`: the `state` column comes from the
+`amx panes <tmux_session>`: the `state` column comes from the
 agent-status store (`working`, `done`/`idle` = waiting on the user,
 `needs_input` = a prompt is pending, `error`, `off`). It can be stale: no
 event fires when a turn is interrupted with Esc, and a `working` state
@@ -348,8 +363,8 @@ If workers mention ports or dev servers, note them in the entry's
 
 1. For each active entry of your harness, ask: leave running, shut down,
    or wrap. Do what they choose.
-2. `cm reconcile` and settle what it reports.
-3. Stop the watch (Claude Code: stop the Monitor; pi: `cm_watch stop`).
-4. `cm reg unset @header manager=<address>`.
+2. `amx reconcile` and settle what it reports.
+3. Stop the watch (Claude Code: stop the Monitor; pi: `amx_watch stop`).
+4. `amx reg unset @header manager=<address>`.
 5. If your tmux session exists only for the manager, the user can kill
    it; don't kill a session they work in.
