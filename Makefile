@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai worktrunk pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude worktrunk pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -15,7 +15,7 @@ wsl: common ## WSL setup (common + Windows Terminal settings)
 	ln -sf ${DIR}/WindowsTerminal/settings.json \
 	  /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/AppData/Local/Packages/Microsoft.WindowsTerminal_8wekyb3d8bbwe/LocalState/settings.json
 
-common: zsh vim nvim tmux ai pi worktrunk git vscode session-leds ## Cross-platform configs (shell, editor, tmux, ai, git)
+common: zsh vim nvim tmux ai worktrunk git vscode session-leds ## Cross-platform configs (shell, editor, tmux, ai, git)
 
 brew: ## Install Homebrew bundle (+ work overlay if present)
 	brew bundle --file=${DIR}/brew/Brewfile
@@ -129,7 +129,9 @@ define link-skills
 	ln -sf ${DIR}/agents/skills/claude-manager/scripts/cm ~/.local/bin/cm
 endef
 
-ai: ## Symlink Claude config (instructions, settings, hooks, skills, agents)
+ai: claude pi ## Set up both coding agents: Claude Code and pi
+
+claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, agents)
 	@# instructions
 	mkdir -p ~/.claude/hooks ~/.claude/skills ~/.claude/agents
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md

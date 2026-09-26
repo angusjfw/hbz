@@ -64,7 +64,7 @@ error).
   slot you can't reach. Survives keyboard disconnects.
 
 ##### 📋 Requirements
-- Hooks wired in Claude settings (`make ai`) and the status CLI
+- Hooks wired in Claude settings (`make claude`) and the status CLI
   symlinked (`make session-leds`, included in `make common`)
 - A rust toolchain (Brewfile) to build `agent-deck`
 - Keymapp (Brewfile) only to flash firmware, and only while the daemon
