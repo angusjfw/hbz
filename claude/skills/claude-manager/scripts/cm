@@ -396,14 +396,12 @@ def launch_line(harness, sid, model=None, effort=None, name=None, brief=None):
     return line
 
 
-def resume_line(harness, sid, effort=None, name=None):
+def resume_line(harness, sid, effort=None):
     if harness == "claude":
         parts = ["claude"] + (["--effort", effort] if effort else []) + ["--resume", sid]
     elif harness == "pi":
-        # pi restores model and thinking level itself
+        # pi restores model, thinking level and --name itself
         parts = ["pi", "--session-control", "--session-id", sid]
-        if name:
-            parts += ["--name", name]
     else:
         die(f"unknown harness '{harness}'")
     return " ".join(shlex.quote(p) for p in parts)
@@ -464,6 +462,26 @@ def pi_transcript(cwd, sid):
         if s == sid:
             return p
     return None
+
+
+def pi_alias_live(name):
+    """True if a running pi session holds this --name. pi leaves aliases and
+    sockets behind when killed, so an alias only counts if its socket answers."""
+    import socket
+    alias = Path.home() / ".pi/session-control" / f"{name}.alias"
+    try:
+        target = alias.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(1)
+    try:
+        s.connect(str(target))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
 
 
 def pi_session_names(path):
@@ -723,10 +741,7 @@ def write_resume_state(session, out, reg=None):
                     lines.append("command: ")
                 else:
                     e = effort if (p["primary"] and p["kind"] == "claude") else None
-                    nm = None
-                    if p["kind"] == "pi":
-                        nm = name if p["primary"] else (p["label"] and f"{name}-{p['label']}")
-                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm)}")
+                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e)}")
                     lines.append(f"harness: {p['kind']}")
                     lines.append(f"session_id: {p['session_id']}")
                     if p["label"]:
@@ -861,8 +876,8 @@ def spawn_into(a):
         die("--into needs --label (letters, digits, . _ -)")
     cwd = str(Path(a.cwd or entry.get("cwd") or ".").expanduser())
     name = f"{entry.name}-{a.label}"
-    if harness == "pi" and (Path.home() / ".pi/session-control" / f"{name}.alias").exists():
-        die(f"pi session name '{name}' is already in use (~/.pi/session-control/{name}.alias)")
+    if harness == "pi" and pi_alias_live(name):
+        die(f"pi session name '{name}' is in use by a running session (~/.pi/session-control/{name}.alias)")
     if any(f"label={a.label}" in w.split() for w in entry.get_all("worker")):
         die(f"label '{a.label}' is already used by a worker in {entry.name}")
     sid = mint_id()
@@ -925,8 +940,7 @@ def cmd_rebuild(a):
                     if not pi_transcript(cwd, sid):
                         problems.append(f"pi session {sid} not found under {pi_session_root() / pi_slug(cwd)} "
                                         f"with header cwd {cwd}; `pi --session-id` would start a blank session")
-                    nm = entry.name if primary else (f"{entry.name}-{p['label']}" if p.get("label") else None)
-                    cmd = resume_line("pi", sid, name=nm)
+                    cmd = resume_line("pi", sid)
                 elif h == "claude":
                     cmd = resume_line("claude", sid, effort if primary else None)
             panes.append((p, cwd, cmd))
