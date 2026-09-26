@@ -1,6 +1,7 @@
 ---
 name: tmux-interaction
-description: Use when sending input to or reading output from a tmux pane other than the one in focus: running a command, dev server, REPL, or long-running process in a pane and waiting for it to print a prompt, port, or result; reading or scrolling pane output; or driving a shell, vim/neovim, or another agent via send-keys and capture-pane. Also when input appears to land but doesn't submit, when keystrokes get dropped, or when another agent's prompt box looks like it holds something the user typed.
+description: >-
+  Use when sending input to or reading output from a tmux pane other than the one in focus: running a command, dev server, REPL, or long-running process in a pane and waiting for it to print a prompt, port, or result; reading or scrolling pane output; or driving a shell, vim/neovim, or another agent via send-keys and capture-pane. Also when input appears to land but doesn't submit, when keystrokes get dropped, or when another agent's prompt box looks like it holds something the user typed.
 ---
 
 # tmux-interaction
