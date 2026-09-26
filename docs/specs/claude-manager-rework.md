@@ -77,7 +77,7 @@ user's server. Unverified items are marked.
 |---|---|---|
 | Mint id at spawn | `--session-id <uuid>` | `--session-id <id>`: opens that id in the current project, **creating it if absent** (so a wrong cwd or session dir silently gives a blank session). Letters, digits, `.`, `_`, `-`. |
 | Resume | `claude --resume <id>` | `pi --session-id <id>` from the **same cwd** (lookup is per project). `--session <id>` also works but offers a fork prompt for a cross-project match. |
-| Initial prompt | positional `claude "<text>"` (documented; verify with `--session-id` in Phase 1) | positional `pi "<text>"`: submits on start (verified) |
+| Initial prompt | positional `claude "<text>"`, submits on start with `--session-id` (verified) | positional `pi "<text>"`: submits on start (verified) |
 | Model on resume | restored | restored (verified) |
 | Effort on resume | not restored; replay `--effort` | thinking level restored (verified); don't replay |
 | Effort flag | `--effort low…max` | `--thinking off\|minimal\|low\|medium\|high\|xhigh\|max`, clamped to the model |
@@ -180,7 +180,9 @@ JSON, and exits non-zero with a message on failure.
 | `cm resume-state <tmux-session> <out>` | building resume_state by hand |
 | `cm spawn --harness <h> --id <id> --cwd <dir> …` | tmux session creation, id minting, launch line, registry entry |
 | `cm spawn --into <tmux-session> --label <name> --cwd <dir> [--window <name>\|--split <pane>] [--brief-file <f>] …` | new agent pane inside an existing managed session: mints the id, launches, adds the `worker:` line (with `label=`) to the owning entry, prints the pane id and the final name. The harness comes from the entry. The client interface for coordination skills (see Coordination clients). |
-| `cm rebuild <id>` | Cold resume steps 2–6, with the kill-on-partial-failure rollback. For pi, first checks every pane's transcript exists (see Harness adapter) and aborts before creating anything if one doesn't. |
+| `cm pause <id> [on\|off]`, `cm shutdown <id>`, `cm wrap <id> [--notes …]` | the whole mechanical side of each transition, shared by worker and manager; a replay on a finished entry stops without touching anything |
+| `cm switcher` | the `prefix+w` paused-badge binding |
+| `cm rebuild <id>` | Cold resume steps 2–6 (without a resume_state: one pane from `resumed_session_id` + `cwd`, which covers reopening a wrapped entry and untracked resume), with the kill-on-partial-failure rollback. For pi, first checks every pane's transcript exists (see Harness adapter) and aborts before creating anything if one doesn't. |
 | `cm kill <tmux-session>` | Killing a session (move clients via `agent-deck switch`, fall back to `switch-client`) |
 | `cm transcripts <harness> <cwd> [--grep <text>] [--name <n>]` | the two JSONL hunts; lists candidates with mtime and hit count. For pi, keeps only files whose header `cwd` equals `<cwd>`, and `--name` matches `session_info` names. |
 | `cm reconcile` | read-only drift report: dead entries, renamed sessions, unregistered agent panes, missing `worker:` lines |
@@ -273,8 +275,8 @@ copied agent-status store.
 
 ### Watch
 
-- Claude: unchanged in behaviour. `cm watch` run in the background with a
-  `Monitor` on its output.
+- Claude: `Monitor` runs `cm watch --ignore-pane <own pane>` directly and
+  is re-armed on expiry. No background process or PID file.
 - pi: a pi extension `cm-watch` registers a tool the manager calls
   (`cm_watch start|stop`). It does nothing unless started, so ordinary pi
   sessions are unaffected. When started it `fs.watch`es the registry's
@@ -288,8 +290,7 @@ copied agent-status store.
 - Fallback for both: re-check the registry on any registry-touching action
   when the watch isn't running (as now).
 
-The PID-file rules apply only to Claude's watch. pi's watch lives and
-dies with the pi process.
+Both watches live and die with their manager, so there are no PID files.
 
 ### Task list
 
