@@ -17,7 +17,6 @@
   "theme": "light",
   "skills": [
     "~/.claude/skills/tmux-interaction",
-    "~/.claude/skills/coordinator-worker",
     "~/.claude/skills/review-pr",
     "~/.claude/skills/run",
     "~/.claude/skills/prune-worktrees"

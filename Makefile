@@ -150,6 +150,9 @@ pi: ## Install pi coding agent + symlink its config (instructions, settings, mod
 	ln -sf ${DIR}/pi/models.json ~/.pi/agent/models.json
 	@# extensions: single files, or directories with an index.ts
 	for f in ${DIR}/pi/extensions/*; do ln -sfn "$$f" ~/.pi/agent/extensions/; done
+	@# pi-only skills (each subdir under pi/skills/ becomes ~/.pi/agent/skills/<name>)
+	mkdir -p ~/.pi/agent/skills
+	for d in ${DIR}/pi/skills/*/; do ln -sfn "$${d%/}" ~/.pi/agent/skills/; done
 	@# subagent definitions for the subagent extension
 	mkdir -p ~/.pi/agent/agents
 	for f in ${DIR}/pi/agents/*.md; do ln -sf "$$f" ~/.pi/agent/agents/; done
