@@ -1,0 +1,1199 @@
+#!/usr/bin/env python3
+"""cm: mechanics for the claude-manager skill family.
+
+Registry, tmux and transcript operations for managed agent sessions
+(Claude Code or pi). Judgement stays with the calling agent; cm only
+reads, reports and executes. Stdlib only.
+
+Run `cm -h` or `cm <command> -h` for usage.
+"""
+
+import argparse
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+STATE = Path(os.environ.get("CM_STATE_DIR", Path.home() / ".local/state/claude-manager"))
+REGISTRY = STATE / "sessions.md"
+LOCK = STATE / "sessions.md.lock"
+LAST_WRITER = STATE / ".last-writer"
+AGENT_STATUS = Path(os.environ.get("CM_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
+INPUT_BOX = Path.home() / ".claude/skills/tmux-interaction/scripts/read-input-box.py"
+
+LOCK_TIMEOUT = 10.0
+FIELD_RE = re.compile(r"^([a-z_][a-z0-9_]*):(?: (.*))?$")
+REPEATABLE = {"worker", "manager"}
+
+
+class CmError(Exception):
+    pass
+
+
+def die(msg):
+    raise CmError(msg)
+
+
+# ---------------------------------------------------------------- registry
+
+class Block:
+    """A run of registry lines: the header (before the first `## `) or one entry."""
+
+    def __init__(self, name, lines):
+        self.name = name  # None for the header
+        self.lines = lines  # includes the `## name` line for entries
+
+    def body_start(self):
+        return 0 if self.name is None else 1
+
+    def fields(self):
+        """Yield (index, key, value) for field lines."""
+        for i in range(self.body_start(), len(self.lines)):
+            m = FIELD_RE.match(self.lines[i])
+            if m:
+                yield i, m.group(1), m.group(2) or ""
+
+    def get(self, key):
+        for _, k, v in self.fields():
+            if k == key:
+                return v
+        return None
+
+    def get_all(self, key):
+        return [v for _, k, v in self.fields() if k == key]
+
+    def as_dict(self):
+        d = {}
+        for _, k, v in self.fields():
+            if k in REPEATABLE:
+                d.setdefault(k, []).append(v)
+            elif k not in d:
+                d[k] = v
+        return d
+
+    def _insert_at(self):
+        idx = [i for i, _, _ in self.fields()]
+        if idx:
+            return idx[-1] + 1
+        if self.name is None:
+            # header: after the `# ...` title and one blank line
+            for i, line in enumerate(self.lines):
+                if line.startswith("# "):
+                    j = i + 1
+                    if j < len(self.lines) and self.lines[j].strip() == "":
+                        j += 1
+                    if j == len(self.lines) or self.lines[j].strip() != "":
+                        self.lines.insert(j, "")
+                    return j
+            return len(self.lines)
+        return 1
+
+    def set(self, key, value):
+        for i, k, _ in self.fields():
+            if k == key:
+                self.lines[i] = f"{key}: {value}"
+                return
+        self.lines.insert(self._insert_at(), f"{key}: {value}")
+
+    def append(self, key, value):
+        idx = [i for i, k, _ in self.fields() if k == key]
+        at = idx[-1] + 1 if idx else self._insert_at()
+        self.lines.insert(at, f"{key}: {value}")
+
+    def unset(self, key, match=None):
+        """Remove lines for key. With match, only lines whose value equals it
+        or whose first word equals it. Returns the number removed."""
+        drop = []
+        for i, k, v in self.fields():
+            if k != key:
+                continue
+            if match is None or v == match or (v.split() or [""])[0] == match:
+                drop.append(i)
+        for i in reversed(drop):
+            del self.lines[i]
+        return len(drop)
+
+
+class Registry:
+    def __init__(self, text):
+        lines = text.split("\n")
+        trailing_newline = text.endswith("\n")
+        if trailing_newline:
+            lines = lines[:-1]
+        self.trailing_newline = trailing_newline or not text
+        self.blocks = []
+        cur = Block(None, [])
+        for line in lines:
+            if line.startswith("## "):
+                self.blocks.append(cur)
+                cur = Block(line[3:].strip(), [line])
+            else:
+                cur.lines.append(line)
+        self.blocks.append(cur)
+
+    @classmethod
+    def load(cls, path=None):
+        path = path or REGISTRY
+        if not path.exists():
+            return cls("# Sessions\n")
+        return cls(path.read_text())
+
+    def text(self):
+        out = "\n".join(line for b in self.blocks for line in b.lines)
+        return out + ("\n" if self.trailing_newline else "")
+
+    @property
+    def header(self):
+        return self.blocks[0]
+
+    def entries(self):
+        return [b for b in self.blocks[1:]]
+
+    def entry(self, name):
+        for b in self.blocks[1:]:
+            if b.name == name:
+                return b
+        return None
+
+    def block(self, name):
+        if name == "@header":
+            return self.header
+        b = self.entry(name)
+        if b is None:
+            die(f"no registry entry '{name}' (have: {', '.join(e.name for e in self.entries()) or 'none'})")
+        return b
+
+    def new(self, name):
+        if self.entry(name):
+            die(f"registry entry '{name}' already exists")
+        last = self.blocks[-1]
+        if last.lines and last.lines[-1].strip() != "":
+            last.lines.append("")
+        b = Block(name, [f"## {name}"])
+        self.blocks.append(b)
+        return b
+
+    def remove(self, name):
+        b = self.block(name)
+        self.blocks.remove(b)
+        prev = self.blocks[-1]
+        while len(prev.lines) > 1 and prev.lines[-1].strip() == "" and prev is not self.header:
+            prev.lines.pop()
+
+    def by_tmux_session(self, session):
+        return [e for e in self.entries() if e.get("tmux_session") == session]
+
+
+def harness_of(entry):
+    return (entry.get("harness") or "claude").strip()
+
+
+def acquire_lock(timeout=LOCK_TIMEOUT):
+    STATE.mkdir(parents=True, exist_ok=True)
+    start = time.time()
+    while True:
+        try:
+            os.mkdir(LOCK)
+            return
+        except FileExistsError:
+            if time.time() - start > timeout:
+                try:
+                    age = int(time.time() - LOCK.stat().st_mtime)
+                except OSError:
+                    age = -1
+                die(f"registry lock {LOCK} held for >{timeout:.0f}s (lock age {age}s). "
+                    f"If no cm or agent is writing, remove it with: rmdir {LOCK}")
+            time.sleep(0.1)
+
+
+def release_lock():
+    try:
+        os.rmdir(LOCK)
+    except FileNotFoundError:
+        pass
+
+
+def write_registry(reg):
+    tmp = REGISTRY.with_name(REGISTRY.name + ".tmp")
+    tmp.write_text(reg.text())
+    os.replace(tmp, REGISTRY)
+    try:
+        LAST_WRITER.write_text((os.environ.get("TMUX_PANE") or my_pane_quiet() or "") + "\n")
+    except OSError:
+        pass
+
+
+def mutate(fn):
+    """Run fn(reg) under the lock on a fresh read, then write."""
+    acquire_lock()
+    try:
+        reg = Registry.load()
+        result = fn(reg)
+        write_registry(reg)
+        return result
+    finally:
+        release_lock()
+
+
+def now_str():
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
+
+
+def expand_value(v):
+    if v == "now":
+        return now_str()
+    if v == "today":
+        return datetime.now().strftime("%Y-%m-%d")
+    return v
+
+
+def parse_assignment(a):
+    m = re.match(r"^([a-z_][a-z0-9_]*)(\+?=)(.*)$", a, re.S)
+    if not m:
+        die(f"bad assignment '{a}': expected key=value or key+=value")
+    key, op, val = m.groups()
+    if "\n" in val:
+        die(f"value for {key} contains a newline; registry values are single lines")
+    return key, op, expand_value(val)
+
+
+# ---------------------------------------------------------------- tmux / processes
+
+def run(cmd, check=True, **kw):
+    r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    if check and r.returncode != 0:
+        die(f"{' '.join(shlex.quote(c) for c in cmd)} failed: {r.stderr.strip() or r.stdout.strip()}")
+    return r
+
+
+def tmux(*args, check=True):
+    return run(["tmux", *args], check=check)
+
+
+def has_session(name):
+    return tmux("has-session", "-t", f"={name}", check=False).returncode == 0
+
+
+def list_sessions():
+    r = tmux("list-sessions", "-F", "#{session_name}", check=False)
+    return r.stdout.split() if r.returncode == 0 else []
+
+
+def ps_table():
+    r = run(["ps", "-ax", "-o", "pid=,ppid=,tty=,args="], check=False)
+    rows = []
+    for line in r.stdout.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) < 3:
+            continue
+        pid, ppid, tty = parts[0], parts[1], parts[2]
+        args = parts[3].strip() if len(parts) > 3 else ""
+        rows.append((int(pid), int(ppid), tty, args))
+    return rows
+
+
+def pane_rows(target=None):
+    fmt = "\t".join(["#{session_name}", "#{window_index}", "#{window_name}", "#{window_layout}",
+                     "#{pane_index}", "#{pane_id}", "#{pane_pid}", "#{pane_tty}",
+                     "#{pane_current_path}", "#{pane_title}"])
+    args = ["list-panes", "-F", fmt]
+    args += ["-s", "-t", f"={target}"] if target else ["-a"]
+    r = tmux(*args, check=False)
+    if r.returncode != 0:
+        if target:
+            die(f"no tmux session '{target}'")
+        return []
+    rows = []
+    for line in r.stdout.splitlines():
+        f = line.split("\t")
+        rows.append(dict(session=f[0], window=int(f[1]), window_name=f[2], layout=f[3],
+                         pane=int(f[4]), pane_id=f[5], pane_pid=int(f[6]),
+                         tty=f[7].replace("/dev/", ""), cwd=f[8], title=f[9]))
+    return rows
+
+
+def my_pane_quiet():
+    try:
+        return whoami_pane()
+    except CmError:
+        return None
+
+
+def whoami_pane():
+    """Own pane id: $TMUX_PANE if it resolves, else walk process ancestry."""
+    tp = os.environ.get("TMUX_PANE")
+    panes = pane_rows()
+    if tp and any(p["pane_id"] == tp for p in panes):
+        return tp
+    by_pid = {p["pane_pid"]: p["pane_id"] for p in panes}
+    parents = {pid: ppid for pid, ppid, _, _ in ps_table()}
+    pid = os.getpid()
+    for _ in range(20):
+        if pid in by_pid:
+            return by_pid[pid]
+        pid = parents.get(pid)
+        if not pid or pid == 1:
+            break
+    die("can't resolve own tmux pane ($TMUX_PANE empty or stale, and no pane in process ancestry)")
+
+
+# ---------------------------------------------------------------- harness adapter
+
+CLAUDE_RE = re.compile(r"(^|/)claude(-code)?( |$)|node\b.*\bclaude")
+PI_RE = re.compile(r"^pi\s*$|^pi |(^|/)bin/pi( |$)|node\b.*pi-coding-agent")
+
+
+def classify(args):
+    if not args:
+        return "idle"
+    if CLAUDE_RE.search(args):
+        return "claude"
+    if PI_RE.search(args):
+        return "pi"
+    return "cmd"
+
+
+SHELLS = {"sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh", "nu"}
+
+
+def is_shell(args):
+    if not args:
+        return True
+    first = args.split()[0]
+    return os.path.basename(first.lstrip("-")) in SHELLS
+
+
+def argv_session_id(args):
+    m = re.search(r"--(?:session-id|resume)[ =]([A-Za-z0-9._-]+)", args)
+    return m.group(1) if m else None
+
+
+def launch_line(harness, sid, model=None, effort=None, name=None, brief=None):
+    if harness == "claude":
+        parts = ["claude", "--session-id", sid]
+        if model:
+            parts += ["--model", model]
+        if effort:
+            parts += ["--effort", effort]
+        if name:
+            parts += ["--name", name]
+    elif harness == "pi":
+        parts = ["pi", "--session-control", "--session-id", sid]
+        if model:
+            parts += ["--model", model]
+        if effort:
+            parts += ["--thinking", effort]
+        if name:
+            parts += ["--name", name]
+    else:
+        die(f"unknown harness '{harness}'")
+    line = " ".join(shlex.quote(p) for p in parts)
+    if brief:
+        line += f' "$(cat {shlex.quote(str(brief))})"'
+    return line
+
+
+def resume_line(harness, sid, effort=None, name=None):
+    if harness == "claude":
+        parts = ["claude"] + (["--effort", effort] if effort else []) + ["--resume", sid]
+    elif harness == "pi":
+        # pi restores model and thinking level itself
+        parts = ["pi", "--session-control", "--session-id", sid]
+        if name:
+            parts += ["--name", name]
+    else:
+        die(f"unknown harness '{harness}'")
+    return " ".join(shlex.quote(p) for p in parts)
+
+
+def claude_project_dir(cwd):
+    return Path.home() / ".claude/projects" / re.sub(r"[/._]", "-", cwd)
+
+
+def pi_settings():
+    p = Path.home() / ".pi/agent/settings.json"
+    try:
+        return json.loads(p.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def pi_session_root():
+    if os.environ.get("PI_CODING_AGENT_SESSION_DIR"):
+        return Path(os.environ["PI_CODING_AGENT_SESSION_DIR"]).expanduser()
+    sd = pi_settings().get("sessionDir")
+    if sd:
+        return Path(sd).expanduser()
+    return Path.home() / ".pi/agent/sessions"
+
+
+def pi_slug(cwd):
+    return "--" + re.sub(r"[/\\:]", "-", cwd.lstrip("/")) + "--"
+
+
+def pi_header(path):
+    try:
+        with open(path) as f:
+            return json.loads(f.readline())
+    except (OSError, ValueError):
+        return {}
+
+
+def transcript_files(harness, cwd):
+    """(path, session_id) pairs for transcripts recorded in cwd."""
+    cwd = str(Path(cwd).expanduser())
+    out = []
+    if harness == "claude":
+        d = claude_project_dir(cwd)
+        for p in d.glob("*.jsonl") if d.is_dir() else []:
+            out.append((p, p.stem))
+    elif harness == "pi":
+        d = pi_session_root() / pi_slug(cwd)
+        for p in d.glob("*.jsonl") if d.is_dir() else []:
+            h = pi_header(p)
+            if h.get("cwd") == cwd:
+                out.append((p, h.get("id") or p.stem.split("_", 1)[-1]))
+    return out
+
+
+def pi_transcript(cwd, sid):
+    for p, s in transcript_files("pi", cwd):
+        if s == sid:
+            return p
+    return None
+
+
+def pi_session_names(path):
+    names = []
+    try:
+        with open(path) as f:
+            for line in f:
+                if '"session_info"' in line:
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    if e.get("type") == "session_info" and e.get("name"):
+                        names.append(e["name"])
+    except OSError:
+        pass
+    return names
+
+
+# ---------------------------------------------------------------- agent-status store
+
+def store(session):
+    try:
+        return json.loads((AGENT_STATUS / f"{session}.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def store_by_pane(session):
+    return {v.get("pane_id"): (sid, v.get("state")) for sid, v in store(session).get("claudes", {}).items()}
+
+
+# ---------------------------------------------------------------- panes
+
+def inspect_panes(session, reg=None):
+    reg = reg or Registry.load()
+    rows = pane_rows(session)
+    procs = ps_table()
+    entries = reg.by_tmux_session(session)
+    entry = entries[0] if len(entries) == 1 else None
+    st = store_by_pane(session)
+    first_window = min((r["window"] for r in rows), default=None)
+    workers = {}
+    if entry:
+        for w in entry.get_all("worker"):
+            parts = w.split()
+            if parts:
+                kv = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
+                workers[parts[0]] = kv
+    claimed = set()
+    out = []
+    for r in rows:
+        fg = ""
+        for pid, ppid, tty, args in procs:
+            if ppid == r["pane_pid"] and tty == r["tty"]:
+                fg = args
+                break
+        if not fg:
+            # no child on the pane tty: the pane runs a shell (idle) or tmux
+            # started a command directly and pane_pid is that command
+            own = next((a for pid, _, _, a in procs if pid == r["pane_pid"]), "")
+            if not is_shell(own):
+                fg = own
+        kind = classify(fg)
+        sid, src = None, None
+        primary = r["window"] == first_window and r["pane"] == 0
+        if kind in ("claude", "pi"):
+            store_sid = st.get(r["pane_id"], (None, None))[0]
+            if primary and entry and entry.get("resumed_session_id"):
+                sid, src = entry.get("resumed_session_id"), "registry"
+            elif store_sid and store_sid in workers:
+                sid, src = store_sid, "registry"
+            elif store_sid:
+                sid, src = store_sid, "store"
+            elif kind == "claude" and argv_session_id(fg):
+                sid = argv_session_id(fg)
+                src = "registry" if sid in workers else "argv"
+            else:
+                cands = [w for w, kv in workers.items()
+                         if w not in claimed and str(Path(kv.get("cwd", "")).expanduser()) == r["cwd"]]
+                if len(cands) == 1:
+                    sid, src = cands[0], "registry-cwd"
+        if sid:
+            claimed.add(sid)
+        out.append(dict(r, kind=kind, command=fg, session_id=sid, id_source=src,
+                        primary=primary, state=st.get(r["pane_id"], (None, None))[1],
+                        label=workers.get(sid, {}).get("label") if sid else None))
+    return out
+
+
+# ---------------------------------------------------------------- commands: reg
+
+def cmd_reg(a):
+    op = a.op
+    if op == "show":
+        reg = Registry.load()
+        if a.json:
+            data = {"header": reg.header.as_dict(),
+                    "entries": {e.name: dict(e.as_dict(), harness=harness_of(e)) for e in reg.entries()}}
+            if a.id:
+                data = data["header"] if a.id == "@header" else data["entries"].get(a.id) or die(f"no entry '{a.id}'")
+            print(json.dumps(data, indent=2))
+        elif a.id:
+            print("\n".join(reg.block(a.id).lines).rstrip())
+        else:
+            print(reg.text().rstrip())
+        return
+    if op == "get":
+        v = Registry.load().block(a.id).get(a.key)
+        if v is None:
+            sys.exit(1)
+        print(v)
+        return
+    if op == "ls":
+        for e in Registry.load().entries():
+            d = e.as_dict()
+            state = ("paused" if d.get("paused") else "active") if d.get("tmux_session") else \
+                "wrap_requested" if d.get("wrap_requested") else "shutdown" if d.get("shutdown") else "unknown"
+            if a.harness and harness_of(e) != a.harness:
+                continue
+            print(f"{e.name}\t{harness_of(e)}\t{state}\t{d.get('ticket', '')}")
+        return
+
+    def fn(reg):
+        if op == "new":
+            b = reg.new(a.id)
+            if not any(x.startswith("started=") for x in a.assign):
+                a.assign.insert(0, "started=now")
+            if not any(x.startswith("last_touched=") for x in a.assign):
+                a.assign.append("last_touched=now")
+            apply_assign(b, a.assign)
+        elif op == "set":
+            apply_assign(reg.block(a.id), a.assign)
+        elif op == "unset":
+            b = reg.block(a.id)
+            for k in a.keys:
+                if "=" in k:
+                    key, match = k.split("=", 1)
+                    if not b.unset(key, match):
+                        die(f"no '{key}' line matching '{match}' in {a.id}")
+                else:
+                    b.unset(k)
+        elif op == "rm":
+            reg.remove(a.id)
+        elif op == "worker":
+            b = reg.block(a.id)
+            if a.action == "add":
+                if any((v.split() or [""])[0] == a.session_id for v in b.get_all("worker")):
+                    return
+                extra = " ".join(a.extra)
+                b.append("worker", f"{a.session_id}{' ' + extra if extra else ''}")
+            else:
+                if not b.unset("worker", a.session_id):
+                    die(f"no worker line for {a.session_id} in {a.id}")
+            if a.id != "@header":
+                b.set("last_touched", now_str())
+    mutate(fn)
+
+
+def apply_assign(block, assigns):
+    for x in assigns:
+        key, op, val = parse_assignment(x)
+        if op == "+=":
+            block.append(key, val)
+        else:
+            block.set(key, val)
+
+
+# ---------------------------------------------------------------- commands: whoami, panes
+
+def cmd_whoami(a):
+    pane = whoami_pane()
+    row = next(p for p in pane_rows() if p["pane_id"] == pane)
+    entries = Registry.load().by_tmux_session(row["session"])
+    info = dict(pane=pane, address=f"{row['session']}:{row['window']}.{row['pane']}",
+                session=row["session"], cwd=row["cwd"],
+                entry=entries[0].name if len(entries) == 1 else "",
+                harness=harness_of(entries[0]) if len(entries) == 1 else "")
+    if len(entries) > 1:
+        info["error"] = f"several entries have tmux_session {row['session']}: " + ", ".join(e.name for e in entries)
+    if a.json:
+        print(json.dumps(info))
+    else:
+        for k, v in info.items():
+            print(f"{k}={v}")
+
+
+def cmd_panes(a):
+    panes = inspect_panes(a.session)
+    if a.json:
+        print(json.dumps(panes, indent=2))
+        return
+    print("window\tpane\tpane_id\tkind\tsession_id\tid_source\tstate\tcwd\tcommand")
+    for p in panes:
+        print("\t".join(str(x if x is not None else "-") for x in (
+            p["window"], p["pane"], p["pane_id"], p["kind"], p["session_id"], p["id_source"],
+            p["state"], p["cwd"], (p["command"] or "-")[:80])))
+
+
+# ---------------------------------------------------------------- commands: snapshot, resume-state
+
+def cmd_snapshot(a):
+    out = Path(a.out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    chunks = []
+    for p in inspect_panes(a.session):
+        t = p["pane_id"]
+        cap = tmux("capture-pane", "-p", "-J", "-t", t, "-S", f"-{a.lines}", check=False).stdout
+        chunks.append(f"--- window {p['window']} pane {p['pane']} ({p['kind']}"
+                      f"{' ' + p['session_id'] if p['session_id'] else ''}) ---\n{cap.rstrip()}")
+        if p["kind"] == "claude" and INPUT_BOX.exists():
+            box = run([str(INPUT_BOX), t], check=False).stdout.strip() or "unknown"
+            chunks.append(f"--- input box: {box} ---")
+        chunks.append("")
+    out.write_text("\n".join(chunks) + "\n")
+    print(out)
+
+
+def cmd_resume_state(a):
+    reg = Registry.load()
+    entries = reg.by_tmux_session(a.session)
+    entry = entries[0] if len(entries) == 1 else None
+    name = entry.name if entry else a.session
+    harness = harness_of(entry) if entry else "claude"
+    effort = entry.get("effort") if entry else None
+    panes = inspect_panes(a.session, reg)
+    lines = [f"# Resume state: {name}", "", f"shutdown: {now_str()}", f"harness: {harness}", ""]
+    missing = []
+    wins = {}
+    for p in panes:
+        wins.setdefault((p["window"], p["window_name"], p["layout"]), []).append(p)
+    for (w, wname, layout), ps in wins.items():
+        lines += [f"## window {w}: {wname}", f"layout: {layout}", ""]
+        for p in ps:
+            lines += [f"### pane {p['pane']}", f"cwd: {p['cwd']}"]
+            if p["kind"] in ("claude", "pi"):
+                if not p["session_id"]:
+                    missing.append(f"window {w} pane {p['pane']} ({p['kind']}, {p['cwd']})")
+                    lines.append("command: ")
+                else:
+                    e = effort if (p["primary"] and p["kind"] == "claude") else None
+                    nm = None
+                    if p["kind"] == "pi":
+                        nm = name if p["primary"] else (p["label"] and f"{name}-{p['label']}")
+                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm)}")
+                    lines.append(f"harness: {p['kind']}")
+                    lines.append(f"session_id: {p['session_id']}")
+                    if p["label"]:
+                        lines.append(f"label: {p['label']}")
+            elif p["kind"] == "cmd":
+                lines.append(f"command: {p['command']}")
+            else:
+                lines.append("command:")
+            lines.append("")
+    out = Path(a.out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines).rstrip() + "\n")
+    print(out)
+    if missing:
+        print("WARNING: no session id for: " + "; ".join(missing) +
+              ". Resolve with `cm transcripts` and edit the file, or they come back as plain shells.",
+              file=sys.stderr)
+        sys.exit(3)
+
+
+def parse_resume_state(text):
+    """-> {"fields": {...}, "windows": [{"index", "name", "layout", "panes": [{...}]}]}"""
+    res = {"fields": {}, "windows": []}
+    win = pane = None
+    for line in text.splitlines():
+        m = re.match(r"^## window (\d+):\s*(.*)$", line)
+        if m:
+            win = {"index": int(m.group(1)), "name": m.group(2).strip(), "layout": None, "panes": []}
+            res["windows"].append(win)
+            pane = None
+            continue
+        if line.startswith("## "):
+            win = pane = None  # prose section
+            continue
+        m = re.match(r"^### pane (\d+)\s*$", line)
+        if m and win is not None:
+            pane = {"index": int(m.group(1))}
+            win["panes"].append(pane)
+            continue
+        m = FIELD_RE.match(line)
+        if not m:
+            continue
+        k, v = m.group(1), (m.group(2) or "").strip()
+        if pane is not None:
+            if k == "claude_session_id":
+                k = "session_id"
+                pane.setdefault("harness", "claude")
+            pane[k] = v
+        elif win is not None:
+            win[k] = v
+        elif not res["windows"]:
+            res["fields"][k] = v
+    return res
+
+
+# ---------------------------------------------------------------- commands: spawn, rebuild, kill
+
+def mint_id():
+    try:
+        return Path("/proc/sys/kernel/random/uuid").read_text().strip()
+    except OSError:
+        import uuid
+        return str(uuid.uuid4())
+
+
+def wait_for_agent(session, pane_id, sid, timeout):
+    end = time.time() + timeout
+    while time.time() < end:
+        if store_by_pane(session).get(pane_id, (None,))[0] == sid:
+            return "store"
+        for p in inspect_panes(session):
+            if p["pane_id"] == pane_id and p["kind"] in ("claude", "pi"):
+                return "process"
+        time.sleep(0.5)
+    return None
+
+
+def write_brief(name, text_or_file):
+    if not text_or_file:
+        return None
+    src = Path(text_or_file).expanduser()
+    d = STATE / "briefs"
+    d.mkdir(parents=True, exist_ok=True)
+    dst = d / f"{name}.md"
+    if src.resolve() != dst.resolve():
+        shutil.copyfile(src, dst)
+    return dst
+
+
+def cmd_spawn(a):
+    if a.into:
+        return spawn_into(a)
+    if not (a.id and a.cwd and a.harness):
+        die("spawn needs --harness, --id and --cwd (or --into)")
+    cwd = str(Path(a.cwd).expanduser())
+    if not Path(cwd).is_dir():
+        die(f"cwd {cwd} doesn't exist (create the worktree first)")
+    if has_session(a.id):
+        die(f"tmux session '{a.id}' already exists: import it or pick another id")
+    if Registry.load().entry(a.id):
+        die(f"registry entry '{a.id}' already exists")
+    sid = mint_id()
+    brief = write_brief(a.id, a.brief_file)
+    name = a.id if a.harness == "pi" else None
+    line = launch_line(a.harness, sid, a.model, a.effort, name, brief)
+    tmux("new-session", "-d", "-s", a.id, "-n", a.id, "-c", cwd)
+    pane_id = tmux("list-panes", "-t", f"={a.id}", "-F", "#{pane_id}").stdout.split()[0]
+
+    fields = [f"harness={a.harness}", f"tmux_session={a.id}", f"cwd={cwd}", f"resumed_session_id={sid}"]
+    for k in ("ticket", "worktree", "branch", "model", "effort"):
+        v = getattr(a, k)
+        if v:
+            fields.append(f"{k}={v}")
+
+    def fn(reg):
+        b = reg.new(a.id)
+        apply_assign(b, ["started=now"] + fields + ["last_touched=now"])
+    mutate(fn)
+    tmux("send-keys", "-t", pane_id, line, "Enter")
+    how = wait_for_agent(a.id, pane_id, sid, a.timeout)
+    print(f"session={a.id}\npane={pane_id}\nsession_id={sid}\nharness={a.harness}")
+    if not how:
+        print(f"WARNING: agent not seen in {pane_id} after {a.timeout}s; inspect the pane", file=sys.stderr)
+        sys.exit(3)
+
+
+def spawn_into(a):
+    reg = Registry.load()
+    entries = reg.by_tmux_session(a.into)
+    if len(entries) != 1:
+        die(f"no single registry entry with tmux_session={a.into}")
+    entry = entries[0]
+    if not has_session(a.into):
+        die(f"tmux session '{a.into}' isn't running")
+    harness = harness_of(entry)
+    if not a.label or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", a.label):
+        die("--into needs --label (letters, digits, . _ -)")
+    cwd = str(Path(a.cwd or entry.get("cwd") or ".").expanduser())
+    name = f"{entry.name}-{a.label}"
+    if harness == "pi" and (Path.home() / ".pi/session-control" / f"{name}.alias").exists():
+        die(f"pi session name '{name}' is already in use (~/.pi/session-control/{name}.alias)")
+    if any(f"label={a.label}" in w.split() for w in entry.get_all("worker")):
+        die(f"label '{a.label}' is already used by a worker in {entry.name}")
+    sid = mint_id()
+    brief = write_brief(f"{entry.name}-{a.label}", a.brief_file)
+    line = launch_line(harness, sid, a.model, a.effort, name if harness == "pi" else None, brief)
+    if a.window:
+        r = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={a.into}:", "-n", a.window, "-c", cwd)
+    else:
+        target = a.split or tmux("display-message", "-p", "-t", f"={a.into}:", "#{pane_id}").stdout.strip()
+        r = tmux("split-window", "-d", "-P", "-F", "#{pane_id}", "-t", target, "-c", cwd)
+    pane_id = r.stdout.strip()
+
+    def fn(reg):
+        b = reg.block(entry.name)
+        b.append("worker", f"{sid} cwd={cwd} label={a.label}")
+        b.set("last_touched", now_str())
+    mutate(fn)
+    tmux("send-keys", "-t", pane_id, line, "Enter")
+    how = wait_for_agent(a.into, pane_id, sid, a.timeout)
+    print(f"pane={pane_id}\nname={name}\nsession_id={sid}\nharness={harness}")
+    if not how:
+        print(f"WARNING: agent not seen in {pane_id} after {a.timeout}s; inspect the pane", file=sys.stderr)
+        sys.exit(3)
+
+
+def cmd_rebuild(a):
+    reg = Registry.load()
+    entry = reg.block(a.id)
+    rs_path = entry.get("resume_state")
+    if not rs_path:
+        die(f"{a.id} has no resume_state")
+    rs = parse_resume_state(Path(rs_path).expanduser().read_text())
+    if not rs["windows"]:
+        die(f"{rs_path} has no window blocks")
+    session = a.id
+    if has_session(session):
+        die(f"tmux session '{session}' already exists; not overwriting")
+    default_h = rs["fields"].get("harness") or harness_of(entry)
+    effort = entry.get("effort")
+
+    plan = []  # (window, [(pane, cwd, command)])
+    problems = []
+    for wi, w in enumerate(rs["windows"]):
+        panes = []
+        for p in w["panes"]:
+            cwd = str(Path(p.get("cwd") or entry.get("cwd") or "~").expanduser())
+            if not Path(cwd).is_dir():
+                problems.append(f"window {w['index']} pane {p['index']}: cwd {cwd} missing")
+            sid = p.get("session_id")
+            h = p.get("harness") or default_h
+            cmd = p.get("command", "")
+            primary = wi == 0 and p is w["panes"][0]
+            if sid:
+                if h == "pi":
+                    if not pi_transcript(cwd, sid):
+                        problems.append(f"pi session {sid} not found under {pi_session_root() / pi_slug(cwd)} "
+                                        f"with header cwd {cwd}; `pi --session-id` would start a blank session")
+                    nm = entry.name if primary else (f"{entry.name}-{p['label']}" if p.get("label") else None)
+                    cmd = resume_line("pi", sid, name=nm)
+                elif h == "claude":
+                    cmd = resume_line("claude", sid, effort if primary else None)
+            panes.append((p, cwd, cmd))
+        plan.append((w, panes))
+    if problems:
+        die("not rebuilding; fix these first:\n  " + "\n  ".join(problems))
+
+    try:
+        for wi, (w, panes) in enumerate(plan):
+            first_cwd = panes[0][1] if panes else os.getcwd()
+            if wi == 0:
+                size = re.match(r"^[0-9a-f]+,(\d+)x(\d+),", w.get("layout") or "")
+                dims = ["-x", size.group(1), "-y", size.group(2)] if size else []
+                tmux("new-session", "-d", "-s", session, "-n", w["name"] or session, *dims, "-c", first_cwd)
+                widx = tmux("list-windows", "-t", f"={session}", "-F", "#{window_index}").stdout.split()[-1]
+            else:
+                widx = tmux("new-window", "-d", "-P", "-F", "#{window_index}", "-t", f"={session}:",
+                            "-n", w["name"] or "", "-c", first_cwd).stdout.strip()
+            for _, cwd, _ in panes[1:]:
+                tmux("split-window", "-d", "-t", f"={session}:{widx}", "-c", cwd)
+            if w.get("layout") and len(panes) > 1:
+                tmux("select-layout", "-t", f"={session}:{widx}", w["layout"])
+            ids = tmux("list-panes", "-t", f"={session}:{widx}", "-F", "#{pane_id}").stdout.split()
+            for pid, (_, _, cmd) in zip(ids, panes):
+                if cmd:
+                    tmux("send-keys", "-t", pid, cmd, "Enter")
+    except CmError:
+        tmux("kill-session", "-t", f"={session}", check=False)
+        raise
+
+    def fn(reg):
+        b = reg.block(a.id)
+        b.set("tmux_session", session)
+        for k in ("shutdown", "snapshot", "resume_state", "paused", "wrap_requested"):
+            b.unset(k)
+        b.set("last_touched", now_str())
+    mutate(fn)
+    print(f"rebuilt {session}: {len(plan)} window(s)")
+
+
+def cmd_kill(a):
+    if not has_session(a.session):
+        die(f"no tmux session '{a.session}'")
+    others = [s for s in list_sessions() if s != a.session]
+    prefer = []
+    for m in Registry.load().header.get_all("manager"):
+        s = m.split()[0].split(":")[0]
+        if s in others:
+            prefer.append(s)
+    dest = (prefer or others or [None])[0]
+    clients = tmux("list-clients", "-t", f"={a.session}", "-F", "#{client_name}", check=False).stdout.split()
+    if dest:
+        for c in clients:
+            if shutil.which("agent-deck"):
+                r = run(["agent-deck", "switch", dest, c], check=False)
+                if r.returncode != 0:
+                    die(f"couldn't move client {c} off {a.session}: {r.stderr.strip()}; not killing")
+            else:
+                tmux("switch-client", "-c", c, "-t", f"={dest}", check=False)
+    tmux("kill-session", "-t", f"={a.session}")
+    print(f"killed {a.session}" + (f" (clients moved to {dest})" if dest and clients else ""))
+
+
+# ---------------------------------------------------------------- commands: transcripts, reconcile, watch
+
+def cmd_transcripts(a):
+    rows = []
+    for p, sid in transcript_files(a.harness, a.cwd):
+        hits = 0
+        if a.grep:
+            try:
+                hits = p.read_text(errors="replace").count(a.grep)
+            except OSError:
+                pass
+            if not hits:
+                continue
+        names = pi_session_names(p) if a.harness == "pi" else []
+        if a.name and a.name not in names:
+            continue
+        rows.append((p.stat().st_mtime, sid, hits, ",".join(names), p))
+    rows.sort(reverse=True)
+    for mt, sid, hits, names, p in rows:
+        print(f"{datetime.fromtimestamp(mt):%Y-%m-%d %H:%M}\t{sid}\thits={hits}\tnames={names or '-'}\t{p}")
+    if not rows:
+        print(f"no transcripts for {a.harness} in {a.cwd}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_reconcile(a):
+    reg = Registry.load()
+    live = set(list_sessions())
+    all_panes = pane_rows()
+    pane_ids = {p["pane_id"] for p in all_panes}
+    addrs = {f"{p['session']}:{p['window']}.{p['pane']}" for p in all_panes}
+    known = set()
+    out = []
+    for e in reg.entries():
+        d = e.as_dict()
+        h = harness_of(e)
+        ts = d.get("tmux_session")
+        if ts:
+            known.add(ts)
+        if a.harness and h != a.harness:
+            continue
+        if ts and ts not in live:
+            cwd = str(Path(d.get("worktree") or d.get("cwd") or "/nonexistent").expanduser())
+            cand = sorted({p["session"] for p in all_panes if p["cwd"] == cwd or p["session"] == e.name}
+                          - {x for x in live if reg.by_tmux_session(x)})
+            if cand:
+                out.append(("renamed?", e.name, f"tmux_session {ts} gone; live candidate(s): {', '.join(cand)}"))
+            else:
+                out.append(("dead", e.name, f"tmux_session {ts} not running"))
+        elif ts:
+            panes = inspect_panes(ts, reg)
+            running = {p["session_id"] for p in panes if p["session_id"]}
+            for p in panes:
+                if p["kind"] in ("claude", "pi") and p["kind"] != h:
+                    out.append(("mixed", e.name, f"{p['kind']} pane {p['pane_id']} in a {h} session"))
+                if p["kind"] in ("claude", "pi") and not p["session_id"]:
+                    out.append(("no-id", e.name, f"{p['kind']} pane {p['pane_id']} ({p['cwd']}): id unknown; "
+                                "resolve with cm transcripts"))
+                elif p["kind"] in ("claude", "pi") and p["id_source"] == "store" and not p["primary"]:
+                    out.append(("unrecorded", e.name, f"pane {p['pane_id']} runs {p['session_id']} (cwd {p['cwd']}) "
+                                f"with no worker line: cm reg worker add {e.name} {p['session_id']} cwd={p['cwd']}"))
+            for w in e.get_all("worker"):
+                wid = (w.split() or [""])[0]
+                if wid and wid not in running:
+                    out.append(("stale-worker", e.name, f"{wid} not running: cm reg worker drop {e.name} {wid}"))
+            if d.get("paused"):
+                prim = next((p for p in panes if p["primary"]), None)
+                if prim and prim["state"] == "working":
+                    out.append(("busy-paused", e.name, "paused but primary pane is working"))
+        elif d.get("wrap_requested"):
+            out.append(("wrap-pending", e.name, "worker requested wrap; journal + remove entry"))
+        elif not d.get("shutdown"):
+            out.append(("unknown", e.name, "no tmux_session, not shutdown, no wrap_requested"))
+    mgr_sessions = set()
+    for m in reg.header.get_all("manager"):
+        addr = m.split()[0]
+        mgr_sessions.add(addr.split(":")[0])
+        if addr not in addrs and addr not in pane_ids:
+            out.append(("stale-manager", addr, f"no such pane: cm reg unset @header manager={addr}"))
+    for s in sorted(live - known - mgr_sessions):
+        agents = [p for p in inspect_panes(s, reg) if p["kind"] in ("claude", "pi")]
+        if agents:
+            kinds = ",".join(sorted({p["kind"] for p in agents}))
+            out.append(("unregistered", s, f"{len(agents)} agent pane(s) ({kinds}); import or ignore"))
+    for pf in STATE.glob("watch.*.pid"):
+        try:
+            pid = int(pf.read_text().strip())
+            os.kill(pid, 0)
+        except (ValueError, OSError):
+            out.append(("stale-watch", str(pf), f"dead pid file: rm {pf}"))
+    for kind, who, msg in out:
+        print(f"{kind}\t{who}\t{msg}")
+    if not out:
+        print("ok")
+
+
+def cmd_watch(a):
+    def mtime():
+        try:
+            return REGISTRY.stat().st_mtime_ns
+        except OSError:
+            return None
+    last = mtime()
+    while True:
+        time.sleep(a.interval)
+        cur = mtime()
+        if cur != last:
+            last = cur
+            try:
+                writer = LAST_WRITER.read_text().strip()
+            except OSError:
+                writer = ""
+            if a.ignore_pane and writer == a.ignore_pane:
+                continue
+            print(f"changed writer={writer or '?'}", flush=True)
+
+
+# ---------------------------------------------------------------- main
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="cm", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("whoami", help="own pane, tmux address and registry entry")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_whoami)
+
+    p = sub.add_parser("reg", help="read or change the registry (writes are locked)")
+    rs = p.add_subparsers(dest="op", required=True)
+    q = rs.add_parser("show", help="print the registry or one entry (@header for the header)")
+    q.add_argument("id", nargs="?")
+    q.add_argument("--json", action="store_true")
+    q = rs.add_parser("get", help="print one field (exit 1 if absent)")
+    q.add_argument("id")
+    q.add_argument("key")
+    q = rs.add_parser("ls", help="one line per entry: id harness state ticket")
+    q.add_argument("--harness")
+    q = rs.add_parser("new", help="add an entry: cm reg new <id> k=v ...")
+    q.add_argument("id")
+    q.add_argument("assign", nargs="*")
+    q = rs.add_parser("set", help="k=v sets, k+=v appends a line; values 'now'/'today' use the clock")
+    q.add_argument("id")
+    q.add_argument("assign", nargs="+")
+    q = rs.add_parser("unset", help="k removes all k lines; k=v removes the line whose value (or first word) is v")
+    q.add_argument("id")
+    q.add_argument("keys", nargs="+")
+    q = rs.add_parser("rm", help="remove an entry")
+    q.add_argument("id")
+    q = rs.add_parser("worker", help="add or drop a worker line")
+    q.add_argument("action", choices=["add", "drop"])
+    q.add_argument("id")
+    q.add_argument("session_id")
+    q.add_argument("extra", nargs="*", help="cwd=... label=...")
+    p.set_defaults(fn=cmd_reg)
+
+    p = sub.add_parser("panes", help="classify every pane of a tmux session")
+    p.add_argument("session")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_panes)
+
+    p = sub.add_parser("snapshot", help="capture every pane of a session into one file")
+    p.add_argument("session")
+    p.add_argument("out")
+    p.add_argument("--lines", type=int, default=500)
+    p.set_defaults(fn=cmd_snapshot)
+
+    p = sub.add_parser("resume-state", help="write the resume_state file for a live session")
+    p.add_argument("session")
+    p.add_argument("out")
+    p.set_defaults(fn=cmd_resume_state)
+
+    p = sub.add_parser("spawn", help="new managed session, or with --into a new agent pane in one")
+    p.add_argument("--harness", choices=["claude", "pi"])
+    p.add_argument("--id")
+    p.add_argument("--cwd")
+    p.add_argument("--model")
+    p.add_argument("--effort", help="Claude --effort, or pi --thinking")
+    p.add_argument("--brief-file")
+    p.add_argument("--ticket")
+    p.add_argument("--worktree")
+    p.add_argument("--branch")
+    p.add_argument("--into", metavar="TMUX_SESSION")
+    p.add_argument("--label")
+    p.add_argument("--window", metavar="NAME", help="--into: new window instead of a split")
+    p.add_argument("--split", metavar="PANE", help="--into: pane to split (default: active pane)")
+    p.add_argument("--timeout", type=float, default=30)
+    p.set_defaults(fn=cmd_spawn)
+
+    p = sub.add_parser("rebuild", help="cold-resume a shutdown entry from its resume_state")
+    p.add_argument("id")
+    p.set_defaults(fn=cmd_rebuild)
+
+    p = sub.add_parser("kill", help="move attached clients off a session, then kill it")
+    p.add_argument("session")
+    p.set_defaults(fn=cmd_kill)
+
+    p = sub.add_parser("transcripts", help="list a harness's transcripts for a cwd")
+    p.add_argument("harness", choices=["claude", "pi"])
+    p.add_argument("cwd")
+    p.add_argument("--grep")
+    p.add_argument("--name", help="pi: session name")
+    p.set_defaults(fn=cmd_transcripts)
+
+    p = sub.add_parser("reconcile", help="read-only drift report")
+    p.add_argument("--harness")
+    p.set_defaults(fn=cmd_reconcile)
+
+    p = sub.add_parser("watch", help="print a line whenever the registry changes (run under Monitor)")
+    p.add_argument("--interval", type=float, default=1.0)
+    p.add_argument("--ignore-pane", help="skip changes written from this pane (your own)")
+    p.set_defaults(fn=cmd_watch)
+
+    a = ap.parse_args(argv)
+    try:
+        a.fn(a)
+    except CmError as e:
+        print(f"cm: {e}", file=sys.stderr)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
