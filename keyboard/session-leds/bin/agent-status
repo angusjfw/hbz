@@ -111,8 +111,9 @@ def current_tmux_session():
 
 
 # Claude Code panes report the CLI's version string (e.g. "2.1.220")
-# as pane_current_command; accept claude/node as fallbacks
-_CLAUDE_CMD = re.compile(r"^(\d+\.\d+\.\d+|claude|node)$")
+# as pane_current_command; accept claude/node as fallbacks, and pi,
+# whose agent-status extension reports through the same events
+_CLAUDE_CMD = re.compile(r"^(\d+\.\d+\.\d+|claude|node|pi)$")
 
 
 def claude_panes(tmux_session):
