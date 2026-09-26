@@ -3,9 +3,8 @@ export KEYTIMEOUT=1
 export LC_ALL=en_GB.UTF-8
 export LANG=en_GB.UTF-8
 
-# On WSL find Windows IP for local X-server
-# Requires VcXsrc (https://sourceforge.net/projects/vcxsrv/) or alternative
-export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0
+# WSLg supplies the display through its X socket; no need to find the Windows host.
+[ -S /tmp/.X11-unix/X0 ] && export DISPLAY=:0
 
 export PATH=/home/linuxbrew/.linuxbrew/bin/:$PATH:$HOME/.local/bin/:$HOME/bin/:$HOME/bin/$(hostname)/:$HOME/scripts/
 
