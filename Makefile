@@ -138,7 +138,7 @@ ai: ## Symlink Claude config (instructions, settings, hooks, skills, agents)
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
 
-pi: ## Install pi coding agent + symlink its config (instructions, settings, models, extensions)
+pi: ## Install pi coding agent + symlink its config (instructions, settings, models, extensions, agents)
 	npm ls -g @earendil-works/pi-coding-agent >/dev/null 2>&1 || npm install -g @earendil-works/pi-coding-agent
 	mkdir -p ~/.pi/agent/extensions
 	ln -sf ${DIR}/agents/AGENTS.md ~/.pi/agent/AGENTS.md
@@ -148,7 +148,11 @@ pi: ## Install pi coding agent + symlink its config (instructions, settings, mod
 	@jq -s '.[1] * .[0]' ${DIR}/pi/settings.json.example ${DIR}/pi/settings.json > ${DIR}/pi/settings.json.tmp && mv ${DIR}/pi/settings.json.tmp ${DIR}/pi/settings.json
 	ln -sf ${DIR}/pi/settings.json ~/.pi/agent/settings.json
 	ln -sf ${DIR}/pi/models.json ~/.pi/agent/models.json
-	for f in ${DIR}/pi/extensions/*.ts; do ln -sf "$$f" ~/.pi/agent/extensions/; done
+	@# extensions: single files, or directories with an index.ts
+	for f in ${DIR}/pi/extensions/*; do ln -sfn "$$f" ~/.pi/agent/extensions/; done
+	@# subagent definitions for the subagent extension
+	mkdir -p ~/.pi/agent/agents
+	for f in ${DIR}/pi/agents/*.md; do ln -sf "$$f" ~/.pi/agent/agents/; done
 	mkdir -p ~/.pi/agent/extensions/pi-automode
 	ln -sf ${DIR}/pi/automode.json ~/.pi/agent/extensions/pi-automode/config.json
 

@@ -21,6 +21,8 @@ export default function (pi: ExtensionAPI) {
 	let lastHeartbeat = 0;
 
 	const report = (event: string, ctx: ExtensionContext) => {
+		// headless children (subagents) inherit TMUX_PANE; only the interactive session owns the pane
+		if (ctx.mode !== "tui") return;
 		const payload = JSON.stringify({
 			hook_event_name: event,
 			session_id: ctx.sessionManager.getSessionId(),

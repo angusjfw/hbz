@@ -30,8 +30,7 @@
         "extensions/btw.ts",
         "extensions/continue.ts",
         "extensions/control.ts",
-        "extensions/review.ts",
-        "extensions/subagent.ts"
+        "extensions/review.ts"
       ],
       "skills": [],
       "prompts": [],

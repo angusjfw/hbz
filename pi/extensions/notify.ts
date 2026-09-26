@@ -39,7 +39,9 @@ export default function (pi: ExtensionAPI) {
 		lastText = lastAssistantText(e.messages ?? []);
 	});
 
-	pi.on("agent_settled", async () => {
+	pi.on("agent_settled", async (_e, ctx) => {
+		// headless children (subagents) share the parent's pane; the parent reports
+		if (ctx.mode !== "tui") return;
 		const [active, windowActive, attached, where] = (
 			await tmux(["display-message", "-t", pane, "-p", "#{pane_active}\t#{window_active}\t#{session_attached}\t#{window_index}:#{window_name}"])
 		).split("\t");
