@@ -400,9 +400,12 @@ def launch_line(harness, sid, model=None, effort=None, name=None, brief=None):
     return line
 
 
-def resume_line(harness, sid, effort=None):
+def resume_line(harness, sid, effort=None, name=None):
     if harness == "claude":
+        # Claude doesn't restore --name on resume, and the name is its address
         parts = ["claude"] + (["--effort", effort] if effort else []) + ["--resume", sid]
+        if name:
+            parts += ["--name", name]
     elif harness == "pi":
         # pi restores model, thinking level and --name itself
         parts = ["pi", "--session-control", "--session-id", sid]
@@ -748,7 +751,8 @@ def write_resume_state(session, out, reg=None):
                     lines.append("command: ")
                 else:
                     e = effort if (p["primary"] and p["kind"] == "claude") else None
-                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e)}")
+                    nm = name if p["primary"] else (f"{name}-{p['label']}" if p["label"] else None)
+                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm)}")
                     lines.append(f"harness: {p['kind']}")
                     lines.append(f"session_id: {p['session_id']}")
                     if p["label"]:
@@ -847,8 +851,7 @@ def cmd_spawn(a):
         die(f"registry entry '{a.id}' already exists")
     sid = mint_id()
     brief = write_brief(a.id, a.brief_file)
-    name = a.id if a.harness == "pi" else None
-    line = launch_line(a.harness, sid, a.model, a.effort, name, brief)
+    line = launch_line(a.harness, sid, a.model, a.effort, a.id, brief)
     tmux("new-session", "-d", "-s", a.id, "-n", a.id, "-c", cwd)
     pane_id = tmux("list-panes", "-t", f"={a.id}", "-F", "#{pane_id}").stdout.split()[0]
 
@@ -889,7 +892,7 @@ def spawn_into(a):
         die(f"label '{a.label}' is already used by a worker in {entry.name}")
     sid = mint_id()
     brief = write_brief(f"{entry.name}-{a.label}", a.brief_file)
-    line = launch_line(harness, sid, a.model, a.effort, name if harness == "pi" else None, brief)
+    line = launch_line(harness, sid, a.model, a.effort, name, brief)
     if a.window:
         r = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={a.into}:", "-n", a.window, "-c", cwd)
     else:
@@ -949,7 +952,8 @@ def cmd_rebuild(a):
                                         f"with header cwd {cwd}; `pi --session-id` would start a blank session")
                     cmd = resume_line("pi", sid)
                 elif h == "claude":
-                    cmd = resume_line("claude", sid, effort if primary else None)
+                    nm = entry.name if primary else (f"{entry.name}-{p['label']}" if p.get("label") else None)
+                    cmd = resume_line("claude", sid, effort if primary else None, nm)
             panes.append((p, cwd, cmd))
         plan.append((w, panes))
     if problems:

@@ -333,6 +333,9 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(self.cm.launch_line("pi", "u1", None, "low", "e-w", "/b f.md"),
                          "pi --session-control --session-id u1 --thinking low --name e-w \"$(cat '/b f.md')\"")
         self.assertEqual(self.cm.resume_line("claude", "u1", "high"), "claude --effort high --resume u1")
+        self.assertEqual(self.cm.resume_line("claude", "u1", None, "e-w"), "claude --resume u1 --name e-w")
+        self.assertEqual(self.cm.launch_line("claude", "u1", "opus", "low", "e"),
+                         "claude --session-id u1 --model opus --effort low --name e")
         self.assertEqual(self.cm.resume_line("pi", "u1", "high"), "pi --session-control --session-id u1")
 
 
