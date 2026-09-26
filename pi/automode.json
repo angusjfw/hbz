@@ -1,8 +1,17 @@
 {
   "autoMode": {
+    "enabled": false,
     "classifierModel": "ollama/ornith-agent",
     "allowInsideWorkingDirectory": true,
-    "deniedPaths": ["~/.ssh/*", "~/.pi/agent/auth.json", "~/.aws/*", "~/.config/gh/hosts.yml"],
-    "log": { "enabled": true, "classifierIo": false }
+    "deniedPaths": [
+      "~/.ssh/*",
+      "~/.pi/agent/auth.json",
+      "~/.aws/*",
+      "~/.config/gh/hosts.yml"
+    ],
+    "log": {
+      "enabled": true,
+      "classifierIo": false
+    }
   }
 }
