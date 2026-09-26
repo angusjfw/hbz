@@ -17,6 +17,7 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `zsh/`, `vim/`, `tmux/` — core config (shared across platforms)
 - `ghostty/` — terminal emulator (macOS)
 - `agents/` — global AI agent instructions, symlinked as `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`
+- `agents/skills/` — skills shared by Claude Code and pi, each linked into `~/.claude/skills/` and `~/.pi/agent/skills/`; `claude-manager`'s `cm` CLI is linked to `~/.local/bin`
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
 - `pi/` — pi coding agent settings, models, extensions (symlinked to `~/.pi/agent/`); local model Modelfiles
 - `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)

@@ -80,4 +80,5 @@ entry afterwards.
   message; don't remove the lock yourself.
 - Anything else: show the error verbatim and stop.
 
-Formats and states: `~/.claude/skills/claude-manager/REFERENCE.md`.
+Formats and states: `REFERENCE.md` in the claude-manager skill's directory
+(next to this skill's own directory).

@@ -119,6 +119,16 @@ ghostty: ## Symlink Ghostty config + acme-hbz theme
 	ln -sf ${DIR}/ghostty/config ~/.config/ghostty/config
 	ln -sf ${DIR}/ghostty/acme-hbz ~/.config/ghostty/themes/acme-hbz
 
+# Shared agent skills, for Claude Code and pi alike: each subdir under agents/skills/
+# becomes <dir>/<name>, links to skills since removed here are dropped, and
+# claude-manager's cm goes on PATH for the manager, its workers and pane-team.
+define link-skills
+	mkdir -p $(1) ~/.local/bin
+	for d in ${DIR}/agents/skills/*/; do ln -sfn "$${d%/}" $(1)/; done
+	for l in $(1)/*; do if [ -L "$$l" ] && [ ! -e "$$l" ]; then case "$$(readlink "$$l")" in ${DIR}/*) rm "$$l";; esac; fi; done
+	ln -sf ${DIR}/agents/skills/claude-manager/scripts/cm ~/.local/bin/cm
+endef
+
 ai: ## Symlink Claude config (instructions, settings, hooks, skills, agents)
 	@# instructions
 	mkdir -p ~/.claude/hooks ~/.claude/skills ~/.claude/agents
@@ -130,13 +140,7 @@ ai: ## Symlink Claude config (instructions, settings, hooks, skills, agents)
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
 	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
-	@# personal skills (each subdir under claude/skills/ becomes ~/.claude/skills/<name>)
-	for d in ${DIR}/claude/skills/*/; do ln -sfn "$${d%/}" ~/.claude/skills/; done
-	@# drop links to skills that were renamed or removed here
-	find ~/.claude/skills -maxdepth 1 -xtype l -lname '${DIR}/*' -delete
-	@# claude-manager's CLI, on PATH for the manager, its workers and coordination skills
-	mkdir -p ~/.local/bin
-	ln -sf ${DIR}/claude/skills/claude-manager/scripts/cm ~/.local/bin/cm
+	$(call link-skills,~/.claude/skills)
 	@# personal agents (each .md under claude/agents/ becomes ~/.claude/agents/<name>.md)
 	for f in ${DIR}/claude/agents/*.md; do ln -sf "$$f" ~/.claude/agents/; done
 	@# external skills + tools
@@ -155,9 +159,7 @@ pi: ## Install pi coding agent + symlink its config (instructions, settings, mod
 	ln -sf ${DIR}/pi/models.json ~/.pi/agent/models.json
 	@# extensions: single files, or directories with an index.ts
 	for f in ${DIR}/pi/extensions/*; do ln -sfn "$$f" ~/.pi/agent/extensions/; done
-	@# pi-only skills (each subdir under pi/skills/ becomes ~/.pi/agent/skills/<name>)
-	mkdir -p ~/.pi/agent/skills
-	for d in ${DIR}/pi/skills/*/; do ln -sfn "$${d%/}" ~/.pi/agent/skills/; done
+	$(call link-skills,~/.pi/agent/skills)
 	@# subagent definitions for the subagent extension
 	mkdir -p ~/.pi/agent/agents
 	for f in ${DIR}/pi/agents/*.md; do ln -sf "$$f" ~/.pi/agent/agents/; done
