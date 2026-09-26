@@ -1,18 +1,19 @@
 ---
 name: pane-team
 description: >-
-  Work alongside other pi agents running in visible tmux panes: spawn a worker
+  Work alongside other agents running in visible tmux panes: spawn a worker
   into a pane, brief it, and message it (and let it message you or other
-  workers) over pi's session-control sockets. Use for multi-part or long-running
-  work the user wants to watch and steer, or when asked to coordinate, spawn a
-  worker, split work across panes, or get another agent's eyes on something.
-  For a short self-contained lookup or task, use the subagent tool instead.
+  workers). Use for multi-part or long-running work the user wants to watch and
+  steer, or when asked to coordinate, spawn a worker, run tasks in parallel,
+  split work across panes, or get another agent's eyes on something. For a
+  short self-contained lookup or task, use a subagent instead.
 ---
 
 # pane-team
 
-Workers are full pi sessions in panes of the user's tmux server, visible and
-steerable by the user. A pane is the unit; a window just holds panes.
+Workers are full agent sessions in panes of the user's tmux server, visible
+and steerable by the user. A pane is the unit; a window just holds panes.
+Workers run the same agent CLI you do (`claude` or `pi`).
 
 ## Pick a shape
 
@@ -27,51 +28,55 @@ Anyone may message anyone. Say who a worker should report to in its brief.
 
 ## Spawn a worker
 
-Write the brief to a file, then:
+Every worker gets a short unique name (e.g. `api-tests`). It is how everyone
+addresses that worker. Write the brief to a file.
 
-```bash
-tmux split-window -d -P -F '#{pane_id}' -c "$cwd" \
-  "pi --session-control --name $name \"\$(cat $brief_file)\""
-```
-
-- Split beside your own pane, or use `new-window -d` when the window is full.
-  Check the layout first (`tmux list-panes -F '#{pane_id} #{pane_current_command}'`).
-- `$name` is short and unique (e.g. `api-tests`). It is how everyone addresses
-  that worker. Tell the user the name and pane id.
-- Add `--model <provider/id>` for a cheaper or stronger worker. Default: yours.
-
-**Inside a managed session**, spawn through `cm` instead so the worker is
-registered and comes back when the session is shut down and resumed. Check
-with `cm whoami`: a non-empty `entry=` means managed.
+**Inside a managed session** (`cm whoami` prints a non-empty `entry=`), spawn
+through `cm` so the worker is registered and comes back when the session is
+shut down and resumed:
 
 ```bash
 cm spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
-  [--model <provider/id>] [--window <name>]
+  [--model <model>] [--window <name>]
 ```
 
 It splits beside the active pane (or opens a window with `--window`) and
-prints `pane=`, `name=` and `session_id=`. Use the printed `name`
-(`<entry>-<label>`) to address the worker, and keep the `session_id` for
+prints `pane=`, `name=` and `session_id=`. The printed name
+(`<entry>-<label>`) is the worker's address; keep the `session_id` for
 Finish.
+
+**Otherwise**, start it yourself:
+
+```bash
+tmux split-window -d -P -F '#{pane_id}' -c "$cwd" \
+  "<agent> --name $name \"\$(cat $brief_file)\""
+```
+
+where `<agent>` is `claude`, or `pi --session-control` (pi needs it to be
+messageable).
+
+- Split beside your own pane, or use `new-window -d` when the window is full.
+  Check the layout first (`tmux list-panes -F '#{pane_id} #{pane_current_command}'`).
+- Add `--model <model>` for a cheaper or stronger worker. Default: yours.
+- Tell the user the name and pane id.
 
 ## Brief
 
 Include: the user's own words for the goal, what done looks like, where the
-work happens (cwd, branch), who to report to (your name: `$PI_SESSION_ID` or
-your `--name`), and anything the worker must not touch.
+work happens (cwd, branch), who to report to (your own name), and anything the
+worker must not touch.
 
 ## Talk
 
-- Use the `send_to_session` tool with `sessionName`. `mode: follow_up` waits
-  for the worker to finish its current step; `steer` interrupts it.
-- Don't use `wait_until: turn_end` to wait for a whole task. A turn ends after
-  the worker's first tool step, not when the task is done. Ask workers to
-  message you back when they finish or get stuck.
-- `list_sessions` shows who is running.
-- You can only use these tools if you were started with `--session-control`.
-  Without it, fall back to `tmux send-keys` and `tmux capture-pane`.
-- From a shell or script:
-  `pi -p --session-control --control-session <name> --send-session-message "..." --send-session-wait turn_end`
+- Message workers by name with your harness's cross-session messaging tool
+  (Claude Code: `SendMessage`, with `ListAgents` to see names; pi:
+  `send_to_session`, with `list_sessions`). Prefer it over typing into panes.
+- Ask workers to message you when they finish or get stuck. Don't wait on a
+  turn ending: a turn can end long before the task does.
+- Claude Code holds messages to a session in a different permission mode for
+  the user's approval, so start workers in the mode you run in.
+- If no messaging tool reaches the worker, fall back to `tmux send-keys` to
+  type into its pane and `tmux capture-pane -p` to read it.
 
 ## Keep track
 
