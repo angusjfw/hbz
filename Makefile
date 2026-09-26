@@ -143,12 +143,14 @@ pi: ## Install pi coding agent + symlink its config (instructions, settings, mod
 	mkdir -p ~/.pi/agent/extensions
 	ln -sf ${DIR}/agents/AGENTS.md ~/.pi/agent/AGENTS.md
 	@# settings — live file is gitignored (pi writes to it); merge the committed baseline
-	@# under any existing local fields (local wins), same as the Claude settings
+	@# over it (baseline wins, so its list changes land), keeping keys only pi has set
 	@test -f ${DIR}/pi/settings.json || echo '{}' > ${DIR}/pi/settings.json
-	@jq -s '.[0] * .[1]' ${DIR}/pi/settings.json.example ${DIR}/pi/settings.json > ${DIR}/pi/settings.json.tmp && mv ${DIR}/pi/settings.json.tmp ${DIR}/pi/settings.json
+	@jq -s '.[1] * .[0]' ${DIR}/pi/settings.json.example ${DIR}/pi/settings.json > ${DIR}/pi/settings.json.tmp && mv ${DIR}/pi/settings.json.tmp ${DIR}/pi/settings.json
 	ln -sf ${DIR}/pi/settings.json ~/.pi/agent/settings.json
 	ln -sf ${DIR}/pi/models.json ~/.pi/agent/models.json
 	for f in ${DIR}/pi/extensions/*.ts; do ln -sf "$$f" ~/.pi/agent/extensions/; done
+	mkdir -p ~/.pi/agent/extensions/pi-automode
+	ln -sf ${DIR}/pi/automode.json ~/.pi/agent/extensions/pi-automode/config.json
 
 pi-local: ## Pull the local fallback models for pi and build their agent variants (needs ollama serve)
 	ollama pull ornith:9b

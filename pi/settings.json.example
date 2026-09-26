@@ -36,6 +36,7 @@
       "skills": [],
       "prompts": [],
       "themes": []
-    }
+    },
+    "npm:@czottmann/pi-automode@1.17.0"
   ]
 }
