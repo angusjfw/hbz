@@ -109,3 +109,6 @@ command -v pyenv >/dev/null 2>&1 || export PATH="$PYENV_ROOT/bin:$PATH"
 command -v pyenv >/dev/null 2>&1 && eval "$(pyenv init -)"
 
 alias ag="ag --hidden"
+
+# pi sessions open a control socket, so other pi sessions can message them
+alias pi="pi --session-control"
