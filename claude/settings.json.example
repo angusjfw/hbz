@@ -24,6 +24,10 @@
           {
             "type": "command",
             "command": "~/.local/bin/agent-status event"
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/amx hook --harness claude"
           }
         ]
       }
@@ -54,6 +58,10 @@
           {
             "type": "command",
             "command": "~/.local/bin/agent-status event"
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/amx hook --harness claude"
           }
         ]
       }
