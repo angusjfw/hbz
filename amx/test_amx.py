@@ -1,4 +1,4 @@
-"""Tests for cm's registry and file handling. Run: python3 -m unittest (from scripts/)."""
+"""Tests for amx. Run: python3 -m unittest (from amx/)."""
 
 import importlib.machinery
 import importlib.util
@@ -12,13 +12,15 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-LIVE_STATE = Path.home() / ".local/state/claude-manager"
+LIVE_STATE = next((p for p in (Path.home() / ".local/state/amx", Path.home() / ".local/state/claude-manager")
+                   if (p / "sessions.md").exists()), Path.home() / ".local/state/amx")
 
 
-def load_cm(state_dir):
-    os.environ["CM_STATE_DIR"] = str(state_dir)
-    loader = importlib.machinery.SourceFileLoader("cm", str(HERE / "cm"))
-    spec = importlib.util.spec_from_loader("cm", loader)
+def load_cm(state_dir, old_state=None):
+    os.environ["AMX_STATE_DIR"] = str(state_dir)
+    os.environ["AMX_OLD_STATE_DIR"] = str(old_state or Path(state_dir).parent / "no-old-state")
+    loader = importlib.machinery.SourceFileLoader("amx", str(HERE / "amx"))
+    spec = importlib.util.spec_from_loader("amx", loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
     return mod
@@ -341,3 +343,175 @@ class AdapterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuardTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.cm = load_cm(self.tmp)
+        (self.tmp / "sessions.md").write_text(SAMPLE)
+        self.killed = []
+        self.cm.kill_session = lambda s: self.killed.append(s)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_shared(self):
+        self.assertTrue(self.cm.is_shared("0"))
+        self.assertTrue(self.cm.is_shared("0"))
+        self.assertFalse(self.cm.is_shared("alpha"))
+        (self.tmp / "sessions.md").write_text(SAMPLE.replace("manager: 0:1.0", "manager: mgr:1.0"))
+        self.assertTrue(self.cm.is_shared("mgr"))
+
+    def test_guarded_kill(self):
+        self.assertIsNotNone(self.cm.guarded_kill("alpha", "other"))
+        self.assertIsNotNone(self.cm.guarded_kill("3", "3"))
+        self.assertIsNone(self.cm.guarded_kill("alpha", "alpha"))
+        self.assertEqual(self.killed, ["alpha"])
+
+
+class HookTests(unittest.TestCase):
+    """handle_hook with tmux and ps stubbed out."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.cm = load_cm(self.tmp)
+        (self.tmp / "sessions.md").write_text("# Sessions\n")
+        self.rows = [
+            {"session": "work", "window": 1, "pane": 0, "pane_id": "%1", "pane_pid": 10},
+            {"session": "work", "window": 1, "pane": 1, "pane_id": "%2", "pane_pid": 11},
+            {"session": "0", "window": 1, "pane": 0, "pane_id": "%3", "pane_pid": 12},
+        ]
+        self.cm.pane_rows = lambda target=None: self.rows
+        self.cm.sole_agent = lambda pid: True
+        self.cm.git_branch = lambda cwd: "main"
+        os.environ["TMUX"] = "x"
+
+    def tearDown(self):
+        os.environ.pop("TMUX", None)
+        os.environ.pop("TMUX_PANE", None)
+        shutil.rmtree(self.tmp)
+
+    def fire(self, pane, event, sid, **kw):
+        os.environ["TMUX_PANE"] = pane
+        ev = {"hook_event_name": event, "session_id": sid, "cwd": "/w", **kw}
+        self.cm.handle_hook("claude", ev)
+
+    def entry(self, name="work"):
+        return self.cm.Registry.load().entry(name)
+
+    def test_auto_register_and_worker(self):
+        self.fire("%1", "SessionStart", "p1")
+        e = self.entry()
+        self.assertEqual(e.get("auto"), "true")
+        self.assertEqual(e.get("resumed_session_id"), "p1")
+        self.fire("%2", "SessionStart", "w1")
+        self.assertEqual(self.entry().get_all("worker"), ["w1 cwd=/w"])
+        self.fire("%2", "SessionEnd", "w1", reason="prompt_input_exit")
+        self.assertEqual(self.entry().get_all("worker"), [])
+        self.fire("%1", "SessionEnd", "p1", reason="prompt_input_exit")
+        self.assertIsNone(self.entry())
+        recs = [json.loads(x) for x in (self.tmp / "session-log.jsonl").read_text().splitlines()]
+        self.assertIn("removed", [r["event"] for r in recs])
+
+    def test_clear_replaces_primary_id(self):
+        self.fire("%1", "SessionStart", "p1")
+        self.fire("%1", "SessionEnd", "p1", reason="clear")
+        self.assertIsNotNone(self.entry())
+        self.fire("%1", "SessionStart", "p2", source="clear")
+        self.assertEqual(self.entry().get("resumed_session_id"), "p2")
+
+    def test_tracked_entry_survives_primary_exit(self):
+        self.fire("%1", "SessionStart", "p1")
+        self.cm.main(["reg", "unset", "work", "auto"])
+        self.fire("%1", "SessionEnd", "p1", reason="prompt_input_exit")
+        self.assertIsNotNone(self.entry())
+
+    def test_shared_and_nested_only_log(self):
+        self.fire("%3", "SessionStart", "s1")
+        self.cm.sole_agent = lambda pid: False
+        self.fire("%1", "SessionStart", "n1")
+        self.assertEqual(self.cm.Registry.load().entries(), [])
+        recs = [json.loads(x) for x in (self.tmp / "session-log.jsonl").read_text().splitlines()]
+        self.assertEqual([r["session_id"] for r in recs], ["s1", "n1"])
+        self.assertTrue(recs[1]["nested"])
+
+    def test_existing_shutdown_entry_of_that_name_untouched(self):
+        (self.tmp / "sessions.md").write_text("# Sessions\n\n## work\nshutdown: 2026-01-01\n")
+        self.fire("%1", "SessionStart", "p1")
+        self.assertIsNone(self.entry().get("tmux_session"))
+
+    def test_spawned_entry_not_duplicated(self):
+        self.cm.main(["reg", "new", "work", "harness=claude", "tmux_session=work", "resumed_session_id=p1"])
+        self.fire("%1", "SessionStart", "p1")
+        e = self.entry()
+        self.assertIsNone(e.get("auto"))
+        self.assertEqual(len(self.cm.Registry.load().entries()), 1)
+
+    def test_hook_never_raises(self):
+        import io, sys as _sys
+        old = _sys.stdin
+        _sys.stdin = io.StringIO("not json")
+        try:
+            with self.assertRaises(SystemExit) as cm:
+                self.cm.main(["hook", "--harness", "claude"])
+            self.assertEqual(cm.exception.code, 0)
+        finally:
+            _sys.stdin = old
+        self.assertIn("JSONDecodeError", (self.tmp / "hook-errors.log").read_text())
+
+    def test_track_and_untracked_log(self):
+        self.fire("%1", "SessionStart", "p1")
+        self.cm.has_session = lambda n: False
+        self.cm.main(["track", "work", "--as", "feature-x"])
+        e = self.cm.Registry.load().entry("feature-x")
+        self.assertIsNone(e.get("auto"))
+        # a throwaway auto session that ended shows as untracked; the tracked one doesn't
+        self.rows.append({"session": "scratch", "window": 1, "pane": 0, "pane_id": "%9", "pane_pid": 19})
+        self.fire("%9", "SessionStart", "t1")
+        self.fire("%9", "SessionEnd", "t1", reason="prompt_input_exit")
+        import io, contextlib
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.cm.main(["log", "--untracked"])
+        self.assertIn("t1", out.getvalue())
+        self.assertNotIn("p1", out.getvalue())
+
+
+class MigrateTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.old = self.tmp / "claude-manager"
+        self.new = self.tmp / "amx"
+        self.cm = load_cm(self.new, self.old)
+        self.cm.has_session = lambda n: False
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_migrate_sample(self):
+        (self.old / "resume").mkdir(parents=True)
+        (self.old / "resume" / "a.md").write_text("x")
+        (self.old / "watch.m-1-0.pid").write_text("1")
+        (self.old / "sessions.md").write_text(
+            "# Sessions\n\nmanager: 1:1.0\n\n## a\nresume_state: ~/.local/state/claude-manager/resume/a.md\n"
+            f"snapshot: {self.old}/snapshots/a.txt\n")
+        self.cm.main(["migrate"])
+        text = (self.new / "sessions.md").read_text()
+        self.assertIn("resume_state: ~/.local/state/amx/resume/a.md", text)
+        self.assertIn(f"snapshot: {self.new}/snapshots/a.txt", text)
+        self.assertNotIn("manager:", text)
+        self.assertTrue((self.new / "resume" / "a.md").exists())
+        self.assertFalse(self.old.exists())
+        self.cm.main(["migrate"])  # idempotent
+
+    def test_migrate_live_copy(self):
+        live = Path.home() / ".local/state/claude-manager"
+        if not (live / "sessions.md").exists():
+            self.skipTest("no old live state")
+        shutil.copytree(live, self.old, ignore=shutil.ignore_patterns("*.lock"))
+        before = (self.old / "sessions.md").read_text()
+        self.cm.main(["migrate"])
+        after = (self.new / "sessions.md").read_text()
+        self.assertNotIn("claude-manager", after)
+        self.assertEqual(len(self.cm.Registry(before).entries()), len(self.cm.Registry(after).entries()))

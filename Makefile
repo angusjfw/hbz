@@ -120,13 +120,16 @@ ghostty: ## Symlink Ghostty config + acme-hbz theme
 	ln -sf ${DIR}/ghostty/acme-hbz ~/.config/ghostty/themes/acme-hbz
 
 # Shared agent skills, for Claude Code and pi alike: each subdir under agents/skills/
-# becomes <dir>/<name>, links to skills since removed here are dropped, and
-# claude-manager's cm goes on PATH for the manager, its workers and pane-team.
+# becomes <dir>/<name>, and links to skills since removed here are dropped. amx goes
+# on PATH for its skills, pane-team and the session hooks, and moves any state left
+# from its claude-manager days.
 define link-skills
 	mkdir -p $(1) ~/.local/bin
 	for d in ${DIR}/agents/skills/*/; do ln -sfn "$${d%/}" $(1)/; done
 	for l in $(1)/*; do if [ -L "$$l" ] && [ ! -e "$$l" ]; then case "$$(readlink "$$l")" in ${DIR}/*) rm "$$l";; esac; fi; done
-	ln -sf ${DIR}/agents/skills/claude-manager/scripts/cm ~/.local/bin/cm
+	ln -sf ${DIR}/amx/amx ~/.local/bin/amx
+	rm -f ~/.local/bin/cm
+	~/.local/bin/amx migrate
 endef
 
 ai: claude pi ## Set up both coding agents: Claude Code and pi

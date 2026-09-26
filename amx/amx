@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""cm: mechanics for the claude-manager skill family.
+"""amx: mechanics for agent sessions in tmux.
 
 Registry, tmux and transcript operations for managed agent sessions
-(Claude Code or pi). Judgement stays with the calling agent; cm only
+(Claude Code or pi). Judgement stays with the calling agent; amx only
 reads, reports and executes. Stdlib only.
 
-Run `cm -h` or `cm <command> -h` for usage.
+Run `amx -h` or `amx <command> -h` for usage.
 """
 
 import argparse
@@ -20,13 +20,16 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-STATE = Path(os.environ.get("CM_STATE_DIR", Path.home() / ".local/state/claude-manager"))
+STATE = Path(os.environ.get("AMX_STATE_DIR", Path.home() / ".local/state/amx"))
+OLD_STATE = Path(os.environ.get("AMX_OLD_STATE_DIR", Path.home() / ".local/state/claude-manager"))
+LOG = STATE / "session-log.jsonl"
+HOOK_ERRORS = STATE / "hook-errors.log"
 REGISTRY = STATE / "sessions.md"
 LOCK = STATE / "sessions.md.lock"
 LAST_WRITER = STATE / ".last-writer"
-AGENT_STATUS = Path(os.environ.get("CM_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
-# sibling skill in the same skills dir, wherever that is installed
-INPUT_BOX = Path(__file__).resolve().parents[2] / "tmux-interaction/scripts/read-input-box.py"
+AGENT_STATUS = Path(os.environ.get("AMX_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
+# the tmux-interaction skill, in this repo's shared skills dir
+INPUT_BOX = Path(__file__).resolve().parents[1] / "agents/skills/tmux-interaction/scripts/read-input-box.py"
 
 LOCK_TIMEOUT = 10.0
 FIELD_RE = re.compile(r"^([a-z_][a-z0-9_]*):(?: (.*))?$")
@@ -206,7 +209,7 @@ def acquire_lock(timeout=LOCK_TIMEOUT):
                 except OSError:
                     age = -1
                 die(f"registry lock {LOCK} held for >{timeout:.0f}s (lock age {age}s). "
-                    f"If no cm or agent is writing, remove it with: rmdir {LOCK}")
+                    f"If no amx or agent is writing, remove it with: rmdir {LOCK}")
             time.sleep(0.1)
 
 
@@ -605,16 +608,6 @@ def cmd_reg(a):
             sys.exit(1)
         print(v)
         return
-    if op == "ls":
-        for e in Registry.load().entries():
-            d = e.as_dict()
-            state = ("paused" if d.get("paused") else "active") if d.get("tmux_session") else \
-                "wrap_requested" if d.get("wrap_requested") else "shutdown" if d.get("shutdown") else "unknown"
-            if a.harness and harness_of(e) != a.harness:
-                continue
-            print(f"{e.name}\t{harness_of(e)}\t{state}\t{d.get('ticket', '')}")
-        return
-
     def fn(reg):
         if op == "new":
             b = reg.new(a.id)
@@ -635,6 +628,7 @@ def cmd_reg(a):
                 else:
                     b.unset(k)
         elif op == "rm":
+            log_removed(reg.block(a.id), "rm")
             reg.remove(a.id)
         elif op == "worker":
             b = reg.block(a.id)
@@ -643,9 +637,9 @@ def cmd_reg(a):
                     return
                 extra = " ".join(a.extra)
                 b.append("worker", f"{a.session_id}{' ' + extra if extra else ''}")
-            else:
-                if not b.unset("worker", a.session_id):
-                    die(f"no worker line for {a.session_id} in {a.id}")
+            elif not b.unset("worker", a.session_id):
+                print(f"no worker line for {a.session_id} in {a.id}; nothing to drop", file=sys.stderr)
+                return
             if a.id != "@header":
                 b.set("last_touched", now_str())
     mutate(fn)
@@ -722,7 +716,7 @@ def cmd_resume_state(a):
     print(out)
     if missing:
         print("WARNING: no session id for: " + "; ".join(missing) +
-              ". Resolve with `cm transcripts` and edit the file, or they come back as plain shells.",
+              ". Resolve with `amx transcripts` and edit the file, or they come back as plain shells.",
               file=sys.stderr)
         sys.exit(3)
 
@@ -993,6 +987,8 @@ def cmd_rebuild(a):
 
 
 def cmd_kill(a):
+    if is_shared(a.session):
+        die(f"{a.session} is shared (auto-named, or a manager runs there); not killing it")
     kill_session(a.session)
 
 
@@ -1022,7 +1018,7 @@ def kill_session(session):
 
 # ---------------------------------------------------------------- commands: lifecycle
 
-SWITCHER = ("choose-tree -Zw -F '#{?session_format,#{?#{@cm_paused},⏸ paused · ,}#{session_windows}w"
+SWITCHER = ("choose-tree -Zw -F '#{?session_format,#{?#{@amx_paused},⏸ paused · ,}#{session_windows}w"
             "#{?session_attached, (attached),},#{?window_format,#{window_name}#{window_flags},"
             "#{pane_current_command}}}'")
 
@@ -1039,7 +1035,7 @@ def live_entry(reg, name):
         state = "wrap requested" if e.get("wrap_requested") else "shut down" if e.get("shutdown") else "not active"
         die(f"{name} is already {state} (no tmux_session); nothing to do")
     if not has_session(ts):
-        die(f"{name}: tmux session {ts} isn't running; run cm reconcile")
+        die(f"{name}: tmux session {ts} isn't running; run amx reconcile")
     return e, ts
 
 
@@ -1060,6 +1056,41 @@ def agent_status(action, session):
         run(["agent-status", action, session], check=False)
 
 
+def is_shared(session, reg=None):
+    """A session the user works in: tmux auto-named it, or a manager runs there."""
+    if re.fullmatch(r"\d+", session or ""):
+        return True
+    reg = reg or Registry.load()
+    return any((m.split() or [""])[0].split(":")[0] == session for m in reg.header.get_all("manager"))
+
+
+def guarded_kill(entry_name, ts, reg=None):
+    """Kill ts only if it is this entry's own session. Returns what happened."""
+    if ts != entry_name:
+        return f"left tmux session {ts} running: its name isn't the entry id {entry_name}"
+    if is_shared(ts, reg):
+        return f"left tmux session {ts} running: it's shared (auto-named, or a manager runs there)"
+    kill_session(ts)
+    return None
+
+
+def append_log(rec):
+    rec = {"ts": datetime.now().isoformat(timespec="seconds"), **rec}
+    STATE.mkdir(parents=True, exist_ok=True)
+    with open(LOG, "a") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
+def entry_ids(block):
+    ids = [block.get("resumed_session_id")] if block.get("resumed_session_id") else []
+    return ids + [(w.split() or [""])[0] for w in block.get_all("worker")]
+
+
+def log_removed(block, how):
+    append_log({"event": "removed", "how": how, "entry": block.name, "tracked": not block.get("auto"),
+                "session_ids": entry_ids(block), "fields": block.as_dict()})
+
+
 def cmd_pause(a):
     reg = Registry.load()
     e, ts = live_entry(reg, a.id)
@@ -1068,6 +1099,7 @@ def cmd_pause(a):
     def fn(reg):
         b = reg.block(a.id)
         if on:
+            b.unset("auto")  # pausing it means keeping it
             b.set("paused", datetime.now().strftime("%Y-%m-%d"))
             if a.reason:
                 b.set("notes", (b.get("notes") + " " if b.get("notes") else "") + f"Paused: {a.reason}")
@@ -1076,10 +1108,10 @@ def cmd_pause(a):
         b.set("last_touched", now_str())
     mutate(fn)
     if on:
-        tmux("set-option", "-t", f"={ts}:", "@cm_paused", "1")
+        tmux("set-option", "-t", f"={ts}:", "@amx_paused", "1")
         install_switcher()
     else:
-        tmux("set-option", "-u", "-t", f"={ts}:", "@cm_paused", check=False)
+        tmux("set-option", "-u", "-t", f"={ts}:", "@amx_paused", check=False)
     print(f"{a.id} {'paused' if on else 'unpaused'}")
 
 
@@ -1090,11 +1122,12 @@ def cmd_shutdown(a):
     snapshot_session(ts, snap, 500)
     rs, missing, panes = write_resume_state(ts, STATE / "resume" / f"{a.id}.md", reg)
     if missing and not a.force:
-        die("no session id for: " + "; ".join(missing) + f". Find it with `cm transcripts`, add it to {rs} "
+        die("no session id for: " + "; ".join(missing) + f". Find it with `amx transcripts`, add it to {rs} "
             "(session_id: and harness: lines), then rerun with --force. Nothing killed.")
 
     def fn(reg):
         b = reg.block(a.id)
+        b.unset("auto")  # shutting it down for later means keeping it
         sync_workers(b, panes)
         b.set("snapshot", str(snap))
         b.set("resume_state", str(rs))
@@ -1107,35 +1140,286 @@ def cmd_shutdown(a):
     mutate(fn)
     agent_status("park", ts)
     print(f"{a.id} shut down; snapshot {snap}; resume_state {rs}", flush=True)
-    kill_session(ts)
+    note = guarded_kill(a.id, ts, reg)
+    if note:
+        print(note)
 
 
 def cmd_wrap(a):
+    """Final: snapshot, remove the entry (kept in the session log), release
+    the LED key, kill tmux. The journal entry is the caller's job, before this."""
     reg = Registry.load()
-    e, ts = live_entry(reg, a.id)
-    snap = STATE / "snapshots" / f"{a.id}.txt"
-    panes = snapshot_session(ts, snap, 500)
+    e = reg.block(a.id)
+    ts = e.get("tmux_session")
+    live = bool(ts) and has_session(ts)
+    snap = None
+    if live:
+        snap = STATE / "snapshots" / f"{a.id}.txt"
+        panes = snapshot_session(ts, snap, 500)
 
     def fn(reg):
         b = reg.block(a.id)
-        sync_workers(b, panes)
-        b.set("snapshot", str(snap))
+        if live:
+            sync_workers(b, panes)
+            b.set("snapshot", str(snap))
         if a.notes:
-            n = b.get("notes")
-            p = Path(n).expanduser() if n else None
-            if p and p.is_file():
-                with open(p, "a") as f:
-                    f.write(f"\n{a.notes}\n")
-            else:
-                b.set("notes", f"{n} {a.notes}" if n else a.notes)
-        b.set("wrap_requested", "true")
-        b.set("last_touched", now_str())
-        b.unset("tmux_session")
-        b.unset("paused")
+            b.set("notes", f"{b.get('notes')} {a.notes}" if b.get("notes") else a.notes)
+        log_removed(b, "wrap")
+        reg.remove(a.id)
     mutate(fn)
-    agent_status("clear", ts)
-    print(f"{a.id} wrap requested; snapshot {snap}", flush=True)
-    kill_session(ts)
+    if ts:
+        agent_status("clear", ts)
+    print(f"{a.id} wrapped" + (f"; snapshot {snap}" if snap else ""), flush=True)
+    if live:
+        note = guarded_kill(a.id, ts, reg)
+        if note:
+            print(note)
+
+
+# ---------------------------------------------------------------- commands: ls, log, track, hook, migrate
+
+def entry_state(d):
+    if d.get("tmux_session"):
+        return "paused" if d.get("paused") else "active"
+    return "wrap_requested" if d.get("wrap_requested") else "shutdown" if d.get("shutdown") else "unknown"
+
+
+def cmd_ls(a):
+    for e in Registry.load().entries():
+        d = e.as_dict()
+        if (a.harness and harness_of(e) != a.harness) or (d.get("auto") and not a.all):
+            continue
+        busy = store(d["tmux_session"]).get("state", "") if d.get("tmux_session") else ""
+        print("\t".join([e.name, harness_of(e), entry_state(d) + (" auto" if d.get("auto") else ""),
+                         busy or "-", d.get("ticket") or "-", d.get("cwd") or "-"]))
+
+
+def read_log():
+    try:
+        lines = LOG.read_text().splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            pass
+    return out
+
+
+def cmd_log(a):
+    recs = read_log()
+    tracked = set()
+    for r in recs:
+        if r.get("event") == "removed" and r.get("tracked"):
+            tracked.update(r.get("session_ids") or [])
+        elif r.get("tracked"):
+            tracked.add(r.get("session_id"))
+    reg = Registry.load()
+    current = {sid for e in reg.entries() for sid in entry_ids(e)}
+    for e in reg.entries():
+        if not e.get("auto"):
+            tracked.update(entry_ids(e))
+    last = {}
+    for r in recs:
+        if r.get("session_id") and r.get("event") in ("start", "end"):
+            last[r["session_id"]] = r
+    rows = sorted(last.values(), key=lambda r: r["ts"], reverse=True)
+    if a.untracked:
+        rows = [r for r in rows if r["session_id"] not in tracked and r["session_id"] not in current
+                and r.get("tmux_session") and not r.get("nested") and not is_shared(r["tmux_session"], reg)]
+    for r in rows[:a.limit]:
+        print("\t".join(str(r.get(k) or "-") for k in
+                        ("ts", "event", "harness", "session_id", "tmux_session", "branch", "cwd")))
+
+
+def cmd_track(a):
+    reg = Registry.load()
+    b = reg.block(a.id)
+    if not b.get("auto"):
+        die(f"{a.id} is already tracked")
+    new = a.as_ or a.id
+    ts = b.get("tmux_session")
+    renamed = False
+    if new != a.id:
+        if reg.entry(new) or has_session(new):
+            die(f"'{new}' is already an entry or a tmux session")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", new):
+            die("name: letters, digits, . _ -")
+        if ts and ts == a.id and has_session(ts) and not is_shared(ts, reg):
+            tmux("rename-session", "-t", f"={ts}", new)
+            agent_status("clear", ts)
+            renamed = True
+
+    def fn(reg):
+        blk = reg.block(a.id)
+        blk.unset("auto")
+        if new != a.id:
+            blk.name = new
+            blk.lines[0] = f"## {new}"
+            if renamed:
+                blk.set("tmux_session", new)
+        blk.set("last_touched", now_str())
+    try:
+        mutate(fn)
+    except CmError:
+        if renamed:
+            tmux("rename-session", "-t", f"={new}", ts, check=False)
+        raise
+    print(f"tracking {new}" + (f" (tmux session renamed from {ts})" if renamed else ""))
+
+
+def git_branch(cwd):
+    try:
+        r = subprocess.run(["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+                           capture_output=True, text=True, timeout=2)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def sole_agent(pane_pid):
+    """True if exactly one agent process sits between this process and the
+    pane's shell. A nested agent (a `claude -p` run from a tool shell, a pi
+    subagent) inherits TMUX_PANE but has its parent agent in the chain too."""
+    procs = {pid: (ppid, args) for pid, ppid, _, args in ps_table()}
+    pid, agents = os.getppid(), 0
+    for _ in range(40):
+        if pid == pane_pid:
+            return agents == 1
+        if pid not in procs:
+            return False
+        ppid, args = procs[pid]
+        if classify(args) in ("claude", "pi"):
+            agents += 1
+        pid = ppid
+    return False
+
+
+def cmd_hook(a):
+    """Session hook: log the event and keep the registry in step. Never fails."""
+    try:
+        raw = sys.stdin.read()
+        handle_hook(a.harness, json.loads(raw) if raw.strip() else {})
+    except Exception as e:  # noqa: BLE001 - a hook must never break the agent
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)
+            with open(HOOK_ERRORS, "a") as f:
+                f.write(f"{now_str()} {a.harness} {type(e).__name__}: {e}\n")
+        except OSError:
+            pass
+    sys.exit(0)
+
+
+def handle_hook(harness, ev):
+    event = {"SessionStart": "start", "SessionEnd": "end"}.get(ev.get("hook_event_name"))
+    if not event:
+        return
+    sid = ev.get("session_id")
+    cwd = ev.get("cwd") or os.getcwd()
+    pane = os.environ.get("TMUX_PANE") if os.environ.get("TMUX") else None
+    rows = pane_rows() if pane else []
+    row = next((r for r in rows if r["pane_id"] == pane), None)
+    session = row["session"] if row else None
+    nested = bool(row) and not sole_agent(row["pane_pid"])
+    rec = {"event": event, "harness": harness, "session_id": sid, "cwd": cwd, "tmux_session": session,
+           "pane": pane, "branch": git_branch(cwd), "source": ev.get("source") or ev.get("reason")}
+    if nested:
+        rec["nested"] = True
+    if not row or not sid or nested or is_shared(session):
+        append_log(rec)
+        return
+    first = min(r["window"] for r in rows if r["session"] == session)
+    primary = row["window"] == first and row["pane"] == 0
+    reason = ev.get("reason") or ""
+
+    def fn(reg):
+        entries = reg.by_tmux_session(session)
+        if len(entries) > 1:
+            return None
+        b = entries[0] if entries else None
+        if b and harness_of(b) != harness:
+            return b.name
+        if event == "start":
+            if b is None:
+                if reg.entry(session):
+                    return None  # a shut-down entry of that name; reconcile reports it
+                b = reg.new(session)
+                apply_assign(b, ["started=now", "auto=true", f"harness={harness}", f"tmux_session={session}",
+                                 f"cwd={cwd}"])
+            if primary:
+                if b.get("resumed_session_id") != sid:
+                    b.set("resumed_session_id", sid)
+            elif sid not in entry_ids(b):
+                b.append("worker", f"{sid} cwd={cwd}")
+            b.set("last_touched", now_str())
+        elif b and reason != "clear":
+            if primary and b.get("auto") and b.get("resumed_session_id") == sid:
+                log_removed(b, "auto-end")
+                reg.remove(b.name)
+                return b.name
+            if not primary:
+                b.unset("worker", sid)
+                b.set("last_touched", now_str())
+        return b.name if b else None
+    name = mutate(fn)
+    rec["entry"] = name
+    if name:
+        e = Registry.load().entry(name)
+        rec["tracked"] = bool(e) and not e.get("auto")
+    append_log(rec)
+
+
+def cmd_migrate(a):
+    """Move ~/.local/state/claude-manager to the amx state dir. Idempotent."""
+    old_reg = OLD_STATE / "sessions.md"
+    if not OLD_STATE.exists():
+        print("nothing to migrate")
+        return
+    if REGISTRY.exists() and old_reg.exists():
+        die(f"both {old_reg} and {REGISTRY} exist; merge them by hand")
+    old_lock = OLD_STATE / "sessions.md.lock"
+    start = time.time()
+    while True:
+        try:
+            os.mkdir(old_lock)
+            break
+        except FileExistsError:
+            if time.time() - start > LOCK_TIMEOUT:
+                die(f"old registry lock {old_lock} is held")
+            time.sleep(0.1)
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        for child in OLD_STATE.iterdir():
+            if child.name == "sessions.md.lock" or child.name.startswith("watch."):
+                continue
+            dst = STATE / child.name
+            if dst.exists():
+                die(f"{dst} already exists; not overwriting")
+            os.rename(child, dst)
+        if REGISTRY.exists():
+            text = REGISTRY.read_text()
+            for old, new in ((str(OLD_STATE), str(STATE)),
+                             ("~/.local/state/claude-manager", "~/.local/state/amx")):
+                text = text.replace(old, new)
+            reg = Registry(text)
+            reg.header.unset("manager")
+            REGISTRY.write_text(reg.text())
+    finally:
+        os.rmdir(old_lock)
+    for pf in OLD_STATE.glob("watch.*.pid"):
+        pf.unlink()
+    try:
+        OLD_STATE.rmdir()
+    except OSError:
+        print(f"left {OLD_STATE} in place: not empty", file=sys.stderr)
+    for e in Registry.load().entries():
+        ts = e.get("tmux_session")
+        if ts and e.get("paused") and has_session(ts):
+            tmux("set-option", "-t", f"={ts}:", "@amx_paused", "1", check=False)
+            tmux("set-option", "-u", "-t", f"={ts}:", "@cm_paused", check=False)
+    print(f"migrated {OLD_STATE} to {STATE}")
 
 
 # ---------------------------------------------------------------- commands: transcripts, reconcile, watch
@@ -1195,14 +1479,14 @@ def cmd_reconcile(a):
                     out.append(("mixed", e.name, f"{p['kind']} pane {p['pane_id']} in a {h} session"))
                 if p["kind"] in ("claude", "pi") and not p["session_id"]:
                     out.append(("no-id", e.name, f"{p['kind']} pane {p['pane_id']} ({p['cwd']}): id unknown; "
-                                "resolve with cm transcripts"))
+                                "resolve with amx transcripts"))
                 elif p["kind"] in ("claude", "pi") and p["id_source"] == "store" and not p["primary"]:
                     out.append(("unrecorded", e.name, f"pane {p['pane_id']} runs {p['session_id']} (cwd {p['cwd']}) "
-                                f"with no worker line: cm reg worker add {e.name} {p['session_id']} cwd={p['cwd']}"))
+                                f"with no worker line: amx reg worker add {e.name} {p['session_id']} cwd={p['cwd']}"))
             for w in e.get_all("worker"):
                 wid = (w.split() or [""])[0]
                 if wid and wid not in running:
-                    out.append(("stale-worker", e.name, f"{wid} not running: cm reg worker drop {e.name} {wid}"))
+                    out.append(("stale-worker", e.name, f"{wid} not running: amx reg worker drop {e.name} {wid}"))
             if d.get("paused"):
                 prim = next((p for p in panes if p["primary"]), None)
                 if prim and prim["state"] == "working":
@@ -1216,7 +1500,7 @@ def cmd_reconcile(a):
         addr = m.split()[0]
         mgr_sessions.add(addr.split(":")[0])
         if addr not in addrs and addr not in pane_ids:
-            out.append(("stale-manager", addr, f"no such pane: cm reg unset @header manager={addr}"))
+            out.append(("stale-manager", addr, f"no such pane: amx reg unset @header manager={addr}"))
     for s in sorted(live - known - mgr_sessions):
         agents = [p for p in inspect_panes(s, reg) if p["kind"] in ("claude", "pi")]
         if agents:
@@ -1267,7 +1551,7 @@ def cmd_watch(a):
 # ---------------------------------------------------------------- main
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="cm", description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(prog="amx", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("whoami", help="own pane, tmux address and registry entry")
@@ -1282,9 +1566,7 @@ def main(argv=None):
     q = rs.add_parser("get", help="print one field (exit 1 if absent)")
     q.add_argument("id")
     q.add_argument("key")
-    q = rs.add_parser("ls", help="one line per entry: id harness state ticket")
-    q.add_argument("--harness")
-    q = rs.add_parser("new", help="add an entry: cm reg new <id> k=v ...")
+    q = rs.add_parser("new", help="add an entry: amx reg new <id> k=v ...")
     q.add_argument("id")
     q.add_argument("assign", nargs="*")
     q = rs.add_parser("set", help="k=v sets, k+=v appends a line; values 'now'/'today' use the clock")
@@ -1343,7 +1625,7 @@ def main(argv=None):
     p.add_argument("session")
     p.set_defaults(fn=cmd_kill)
 
-    p = sub.add_parser("pause", help="pause/unpause an active entry (registry, @cm_paused, switcher badge)")
+    p = sub.add_parser("pause", help="pause/unpause an active entry (registry, @amx_paused, switcher badge)")
     p.add_argument("id")
     p.add_argument("mode", nargs="?", choices=["on", "off", "toggle"], default="toggle")
     p.add_argument("--reason")
@@ -1355,10 +1637,36 @@ def main(argv=None):
     p.add_argument("--force", action="store_true", help="proceed even if some agent pane has no session id")
     p.set_defaults(fn=cmd_shutdown)
 
-    p = sub.add_parser("wrap", help="worker phase of wrap: snapshot, notes, wrap_requested, release LED key, kill tmux")
+    p = sub.add_parser("wrap", help="final: snapshot, remove the entry (logged), release LED key, kill tmux (guarded)")
     p.add_argument("id")
-    p.add_argument("--notes", help="context for the manager's journal entry (one line)")
+    p.add_argument("--notes", help="one line kept with the entry in the session log")
     p.set_defaults(fn=cmd_wrap)
+
+    p = sub.add_parser("ls", help="entries: id harness state busy ticket cwd (auto ones with -a)")
+    p.add_argument("-a", "--all", action="store_true")
+    p.add_argument("--harness")
+    p.set_defaults(fn=cmd_ls)
+
+    p = sub.add_parser("log", help="agent sessions from the session log, newest first")
+    p.add_argument("--untracked", action="store_true",
+                   help="only ended tmux sessions that never belonged to a tracked entry")
+    p.add_argument("-n", "--limit", type=int, default=50)
+    p.set_defaults(fn=cmd_log)
+
+    p = sub.add_parser("track", help="keep an auto-registered entry, optionally renaming it and its tmux session")
+    p.add_argument("id")
+    p.add_argument("--as", dest="as_", metavar="NAME")
+    p.set_defaults(fn=cmd_track)
+
+    p = sub.add_parser("hook", help="session hook: read one event as JSON on stdin (always exits 0)")
+    p.add_argument("--harness", required=True, choices=["claude", "pi"])
+    p.set_defaults(fn=cmd_hook)
+
+    p = sub.add_parser("migrate", help="move the old claude-manager state here (idempotent)")
+    p.set_defaults(fn=cmd_migrate)
+
+    p = sub.add_parser("reference", help="print the registry, state and file formats")
+    p.set_defaults(fn=lambda a: print((Path(__file__).resolve().parent / "REFERENCE.md").read_text(), end=""))
 
     p = sub.add_parser("switcher", help="install the prefix+w binding that badges paused sessions")
     p.set_defaults(fn=lambda a: (install_switcher(), print("installed")))
@@ -1383,7 +1691,7 @@ def main(argv=None):
     try:
         a.fn(a)
     except CmError as e:
-        print(f"cm: {e}", file=sys.stderr)
+        print(f"amx: {e}", file=sys.stderr)
         sys.exit(2)
 
 
