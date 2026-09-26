@@ -1502,10 +1502,12 @@ def cmd_reconcile(a):
         if addr not in addrs and addr not in pane_ids:
             out.append(("stale-manager", addr, f"no such pane: amx reg unset @header manager={addr}"))
     for s in sorted(live - known - mgr_sessions):
+        if is_shared(s, reg):
+            continue  # the user's own session; never an entry
         agents = [p for p in inspect_panes(s, reg) if p["kind"] in ("claude", "pi")]
         if agents:
             kinds = ",".join(sorted({p["kind"] for p in agents}))
-            out.append(("unregistered", s, f"{len(agents)} agent pane(s) ({kinds}); import or ignore"))
+            out.append(("unregistered", s, f"{len(agents)} agent pane(s) ({kinds}); register or ignore"))
     for pf in STATE.glob("watch.*.pid"):
         try:
             pid = int(pf.read_text().strip())
