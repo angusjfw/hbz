@@ -42,6 +42,7 @@
       "prompts": [],
       "themes": []
     },
-    "npm:@czottmann/pi-automode@1.17.0"
+    "npm:@czottmann/pi-automode@1.17.0",
+    "npm:pi-vim@0.14.2"
   ]
 }
