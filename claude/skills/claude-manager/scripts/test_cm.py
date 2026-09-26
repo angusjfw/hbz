@@ -114,7 +114,21 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(g.get("cwd"), "/z")
         self.assertIsNotNone(g.get("started"))
         self.run_cm("reg", "rm", "gamma")
-        self.assertEqual(self.text(), SAMPLE)
+        # rm leaves neighbours alone, so at most new()'s separator line remains
+        self.assertEqual(self.text(), SAMPLE + "\n")
+
+    def test_new_then_rm_keeps_trailing_blank(self):
+        text = SAMPLE + "\n"
+        (self.tmp / "sessions.md").write_text(text)
+        self.run_cm("reg", "new", "gamma", "cwd=/z")
+        self.run_cm("reg", "rm", "gamma")
+        self.assertEqual(self.text(), text)
+
+    def test_rm_middle_entry(self):
+        self.run_cm("reg", "rm", "alpha")
+        t = self.text()
+        self.assertNotIn("## alpha", t)
+        self.assertIn("Some stray prose in the header.\n\n## beta", t)
 
     def test_new_rejects_duplicate(self):
         with self.assertRaises(SystemExit):

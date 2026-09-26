@@ -173,18 +173,15 @@ class Registry:
         if self.entry(name):
             die(f"registry entry '{name}' already exists")
         last = self.blocks[-1]
+        b = Block(name, [f"## {name}"])
         if last.lines and last.lines[-1].strip() != "":
             last.lines.append("")
-        b = Block(name, [f"## {name}"])
         self.blocks.append(b)
         return b
 
     def remove(self, name):
         b = self.block(name)
         self.blocks.remove(b)
-        prev = self.blocks[-1]
-        while len(prev.lines) > 1 and prev.lines[-1].strip() == "" and prev is not self.header:
-            prev.lines.pop()
 
     def by_tmux_session(self, session):
         return [e for e in self.entries() if e.get("tmux_session") == session]
@@ -895,9 +892,14 @@ def cmd_rebuild(a):
     reg = Registry.load()
     entry = reg.block(a.id)
     rs_path = entry.get("resume_state")
-    if not rs_path:
-        die(f"{a.id} has no resume_state")
-    rs = parse_resume_state(Path(rs_path).expanduser().read_text())
+    if rs_path:
+        rs = parse_resume_state(Path(rs_path).expanduser().read_text())
+    elif entry.get("resumed_session_id") and entry.get("cwd"):
+        # no layout recorded (wrapped, or registered by hand): one pane, primary only
+        rs = {"fields": {}, "windows": [{"index": 1, "name": a.id, "layout": None, "panes": [
+            {"index": 0, "cwd": entry.get("cwd"), "session_id": entry.get("resumed_session_id")}]}]}
+    else:
+        die(f"{a.id} has neither resume_state nor resumed_session_id + cwd")
     if not rs["windows"]:
         die(f"{rs_path} has no window blocks")
     session = a.id
@@ -1299,7 +1301,7 @@ def main(argv=None):
     p.add_argument("--timeout", type=float, default=30)
     p.set_defaults(fn=cmd_spawn)
 
-    p = sub.add_parser("rebuild", help="cold-resume a shutdown entry from its resume_state")
+    p = sub.add_parser("rebuild", help="bring an entry back into tmux: from resume_state, else one pane from resumed_session_id + cwd")
     p.add_argument("id")
     p.set_defaults(fn=cmd_rebuild)
 
@@ -1323,6 +1325,9 @@ def main(argv=None):
     p.add_argument("id")
     p.add_argument("--notes", help="context for the manager's journal entry (one line)")
     p.set_defaults(fn=cmd_wrap)
+
+    p = sub.add_parser("switcher", help="install the prefix+w binding that badges paused sessions")
+    p.set_defaults(fn=lambda a: (install_switcher(), print("installed")))
 
     p = sub.add_parser("transcripts", help="list a harness's transcripts for a cwd")
     p.add_argument("harness", choices=["claude", "pi"])
