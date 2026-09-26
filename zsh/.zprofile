@@ -87,3 +87,8 @@ start-snapd() {
   sudo daemonize /usr/bin/unshare --fork --pid --mount-proc /lib/systemd/systemd --system-unit=basic.target
   exec sudo nsenter -t $(pidof systemd) -a su - $LOGNAME
 }
+
+# WSL has no systemd to keep Ollama running; start it with the first login shell
+if [[ $(uname -r) == *microsoft* ]] && command -v ollama >/dev/null && ! pgrep -x ollama >/dev/null; then
+  (ollama serve >~/.ollama/serve.log 2>&1 &)
+fi
