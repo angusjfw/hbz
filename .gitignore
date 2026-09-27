@@ -24,3 +24,7 @@ claude/settings.json
 
 # Live pi settings — pi writes to it; seeded from pi/settings.json.example by `make pi`
 pi/settings.json
+
+# Skill npm dependencies (installed at setup time)
+node_modules/
+
