@@ -5,7 +5,11 @@ description: "Search the web using the active provider's native search capabilit
 
 # Web Search
 
-Run a web search through whichever provider is currently active in Pi, falling back to the first provider with usable credentials.
+Run a web search through whichever provider is currently active in Pi,
+falling back to the first provider with usable credentials.
+
+Supported credentials are environment variables and `~/.pi/agent/auth.json`
+entries. You can force a specific backend with `--provider`.
 
 ## Supported backends
 
@@ -98,7 +102,20 @@ Add the OAuth entry from your ChatGPT/Codex session to `~/.pi/agent/auth.json`:
 }
 ```
 
+## How the provider is chosen
+
+1. `--provider` flag if given.
+2. `defaultProvider` from `~/.pi/agent/settings.json`.
+3. `PI_PROVIDER` environment variable (set by Pi for shell-tool commands).
+4. First provider with credentials available in `~/.pi/agent/auth.json` or
+   environment variables.
+
 ## Notes
 
-- This skill is independent of the model running the current Pi session. It can call Ollama Cloud search even when the active coding model is Kimi, DeepSeek, etc.
-- For browsing, screenshots, and page interaction, use the `web-browser` skill instead.
+- This skill is independent of the model running the current Pi session. It can
+  call Ollama Cloud search even when the active coding model is Kimi,
+  DeepSeek, etc.
+- Anthropic and OpenAI Codex implementations in `search.mjs` are adapted from
+  `mitsuhiko/agent-stuff` (Apache-2.0). See `NOTICE`.
+- For browsing, screenshots, and page interaction, use the `web-browser` skill
+  instead.

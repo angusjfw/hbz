@@ -6,7 +6,8 @@ symlinked into `~/.pi/agent/` by `make pi` / `make ai`.
 ## Quick start on a new machine
 
 1. Run `make ai` (or `make pi`) from the repo root.
-2. Run `/login <provider>` inside Pi for whichever providers this machine uses.
+2. Run `/login <provider>` inside Pi (Pi slash command) for whichever providers
+   this machine uses.
 3. If using Ollama Cloud web search, create a web-search API key at
    https://ollama.com/settings/keys and add it to `~/.pi/agent/auth.json`:
 
@@ -24,7 +25,8 @@ symlinked into `~/.pi/agent/` by `make pi` / `make ai`.
 ## Web search
 
 The shared `agents/skills/web-search` skill uses whichever provider is
-available. It reads `~/.pi/agent/settings.json`, `PI_PROVIDER`, and
+available. It reads `~/.pi/agent/settings.json` (the `defaultProvider` field),
+the `PI_PROVIDER` environment variable that Pi exposes to shell tools, and
 `~/.pi/agent/auth.json` to pick a backend in that order, or you can force one
 with `--provider ollama|anthropic|openai-codex`.
 
@@ -41,6 +43,12 @@ Test it:
 ```bash
 node ~/.pi/agent/skills/web-search/search.mjs "latest pi release notes"
 ```
+
+## Web browser
+
+For browsing, screenshots, form interaction, and authenticated sessions, use
+the `web-browser` skill. It needs Chrome or Chromium installed; `make ai`
+installs its npm dependencies automatically.
 
 ## Files
 

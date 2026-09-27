@@ -1,0 +1,24 @@
+web-search
+==========
+
+This skill borrows from `mitsuhiko/agent-stuff`
+(https://github.com/mitsuhiko/agent-stuff), licensed under the Apache
+License 2.0. See LICENSE-Apache-2.0 in this directory.
+
+Modifications and scope deviations from upstream
+------------------------------------------------
+
+search.mjs
+    Contains substantial logic adapted from upstream
+    `skills/native-web-search/search.mjs` (main, fetched 2026-09-27),
+    specifically the Anthropic and OpenAI Codex native web-search
+    implementations (prompt building, streaming, OAuth/API-key
+    resolution, and model selection).
+
+    The Ollama Cloud web_search backend and provider auto-detection
+    are original to this repo. Upstream's script supports only
+    Anthropic and OpenAI Codex.
+
+SKILL.md
+    Original to this repo, describing the unified provider-agnostic
+    interface and the Ollama Cloud backend.
