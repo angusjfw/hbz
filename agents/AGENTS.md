@@ -82,5 +82,3 @@ When drafting messages from me (Slack, comments, reviews, etc):
 # Screenshots
 - Use screenshots to verify visual changes. Open the image for the user when their input is needed.
 
-# Web search / browsing
-- Use standard web tools (WebFetch, WebSearch) by default. Only use the /browse skill when explicitly requested or when a capability is needed that standard tools don't support (e.g., screenshots, clicking, form interaction, authenticated sessions).
