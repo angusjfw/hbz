@@ -18,7 +18,11 @@
     "openrouter/openai/gpt-5.6-terra",
     "openrouter/openai/gpt-5.6-luna",
     "ollama/ornith-agent",
-    "ollama/gpt-oss-agent"
+    "ollama/gpt-oss-agent",
+    "openrouter/qwen/qwen3.8-max-0902",
+    "openrouter/qwen/qwen3-coder-plus",
+    "openrouter/qwen/qwen3.8-27b",
+    "openrouter/qwen/qwen3.8-flash"
   ],
   "theme": "light",
   "skills": [
