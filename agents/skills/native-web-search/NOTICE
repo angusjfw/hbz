@@ -1,0 +1,16 @@
+native-web-search
+=================
+
+This skill is vendored from `mitsuhiko/agent-stuff`
+(https://github.com/mitsuhiko/agent-stuff), licensed under the Apache
+License 2.0. See LICENSE-Apache-2.0 in this directory.
+
+Modifications and scope deviations from upstream
+------------------------------------------------
+
+SKILL.md
+    Minor formatting edits only.
+
+search.mjs
+    Vendored unmodified from upstream
+    `skills/native-web-search/search.mjs` (main, fetched 2026-09-27).
