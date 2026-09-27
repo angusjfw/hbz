@@ -6,10 +6,12 @@ import { homedir } from "os";
 import { dirname, isAbsolute, join, resolve } from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 
+const OLLAMA_API_URL = "https://ollama.com/api/web_search";
+
 function parseArgs(argv) {
 	const out = {
 		provider: undefined,
-		model: undefined,
+		maxResults: 5,
 		purpose: "general research support",
 		timeoutMs: 120000,
 		json: false,
@@ -36,12 +38,14 @@ function parseArgs(argv) {
 			out.provider = arg.slice("--provider=".length);
 			continue;
 		}
-		if (arg === "--model") {
-			out.model = argv[++i];
+		if (arg === "--max-results") {
+			const n = Number(argv[++i]);
+			out.maxResults = Number.isFinite(n) && n > 0 ? Math.min(n, 10) : 5;
 			continue;
 		}
-		if (arg.startsWith("--model=")) {
-			out.model = arg.slice("--model=".length);
+		if (arg.startsWith("--max-results=")) {
+			const n = Number(arg.slice("--max-results=".length));
+			out.maxResults = Number.isFinite(n) && n > 0 ? Math.min(n, 10) : 5;
 			continue;
 		}
 		if (arg === "--purpose") {
@@ -69,12 +73,12 @@ function parseArgs(argv) {
 
 function usage() {
 	return `Usage:
-  node search.mjs "<query>" [--purpose "<why>"] [--provider openai-codex|anthropic] [--model <id>] [--json]
+  node search.mjs "<query>" [--provider ollama|anthropic|openai-codex] [--max-results N] [--purpose "why"] [--json]
 
 Examples:
-  node search.mjs "latest python release" --purpose "update dependency notes"
-  node search.mjs "HTTP/3 browser support 2026" --provider openai-codex
-  node search.mjs "vite 7 breaking changes" --json`;
+  node search.mjs "latest python release"
+  node search.mjs "vite 7 breaking changes" --provider ollama --max-results 10
+  node search.mjs "HTTP/3 browser support" --provider anthropic`;
 }
 
 function readJson(path, fallback = {}) {
@@ -94,12 +98,11 @@ function resolveConfigValue(config) {
 	if (typeof config !== "string" || !config) return undefined;
 	if (config.startsWith("!")) {
 		try {
-			const out = execSync(config.slice(1), {
+			return execSync(config.slice(1), {
 				encoding: "utf8",
 				timeout: 10000,
 				stdio: ["ignore", "pipe", "ignore"],
-			}).trim();
-			return out || undefined;
+			}).trim() || undefined;
 		} catch {
 			return undefined;
 		}
@@ -118,35 +121,186 @@ function getAgentDir() {
 function normalizeProvider(provider) {
 	if (!provider) return undefined;
 	const p = String(provider).toLowerCase().trim();
+	if (p === "ollama") return "ollama";
 	if (p.includes("anthropic") || p.includes("claude")) return "anthropic";
 	if (p.includes("codex") || p === "openai" || p.startsWith("openai")) return "openai-codex";
 	return undefined;
 }
 
-function pickProvider(argProvider, settings, auth) {
+function readAuth() {
+	return readJson(join(getAgentDir(), "auth.json"), {});
+}
+
+function readSettings() {
+	return readJson(join(getAgentDir(), "settings.json"), {});
+}
+
+function pickProvider(argProvider) {
 	const forced = normalizeProvider(argProvider);
 	if (forced) return forced;
 
+	const settings = readSettings();
 	const fromSettings = normalizeProvider(settings?.defaultProvider);
 	if (fromSettings) return fromSettings;
 
+	const fromEnv = normalizeProvider(process.env.PI_PROVIDER);
+	if (fromEnv) return fromEnv;
+
+	const auth = readAuth();
+	if (resolveOllamaKey(auth)) return "ollama";
+	if (resolveAnthropicKey(auth)) return "anthropic";
 	if (auth?.["openai-codex"]) return "openai-codex";
-	if (auth?.anthropic) return "anthropic";
 
-	throw new Error("Could not determine provider. Pass --provider openai-codex|anthropic");
+	throw new Error(
+		"Could not determine provider. Pass --provider ollama|anthropic|openai-codex, or configure credentials in ~/.pi/agent/auth.json.",
+	);
 }
 
-function decodeJwtAccountId(jwt) {
-	if (!jwt || typeof jwt !== "string") return undefined;
-	try {
-		const parts = jwt.split(".");
-		if (parts.length !== 3) return undefined;
-		const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-		return payload?.["https://api.openai.com/auth"]?.chatgpt_account_id;
-	} catch {
-		return undefined;
+function resolveOllamaKey(auth = readAuth()) {
+	if (process.env.OLLAMA_API_KEY) return process.env.OLLAMA_API_KEY;
+	const entry = auth?.ollama;
+	if (!entry) return undefined;
+	if (entry.type === "api_key" && entry.key) return resolveConfigValue(entry.key);
+	if (entry.key) return resolveConfigValue(entry.key);
+	return undefined;
+}
+
+function resolveAnthropicKey(auth = readAuth()) {
+	if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
+	const entry = auth?.anthropic;
+	if (!entry) return undefined;
+	if (entry.type === "api_key" && entry.key) return resolveConfigValue(entry.key);
+	if (entry.key) return resolveConfigValue(entry.key);
+	return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Ollama backend
+// ---------------------------------------------------------------------------
+
+async function runOllamaSearch({ query, maxResults, timeoutMs }) {
+	const apiKey = resolveOllamaKey();
+	if (!apiKey) {
+		throw new Error(
+			"OLLAMA_API_KEY not set. Create a key at https://ollama.com/settings/keys and add it to ~/.pi/agent/auth.json under 'ollama' or export it.",
+		);
 	}
+
+	const signal = AbortSignal.timeout(timeoutMs);
+	const res = await fetch(OLLAMA_API_URL, {
+		method: "POST",
+		headers: {
+			authorization: `Bearer ${apiKey}`,
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({ query, max_results: maxResults }),
+		signal,
+	});
+
+	const text = await res.text();
+	let parsed;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		parsed = { raw: text };
+	}
+
+	if (!res.ok) {
+		throw new Error(`Ollama web search failed (${res.status}): ${parsed?.error || text || "unknown error"}`);
+	}
+	if (!Array.isArray(parsed.results)) {
+		throw new Error("Unexpected response shape from Ollama web search");
+	}
+	return { provider: "ollama", result: parsed.results };
 }
+
+// ---------------------------------------------------------------------------
+// Anthropic backend
+// ---------------------------------------------------------------------------
+
+function buildAnthropicUserPrompt(query, purpose) {
+	return `Search the internet for: ${query}\n\nPurpose: ${purpose}\n\nReturn a concise research summary with:\n- 3 to 7 key findings\n- for every finding: title, why it matters for this purpose, and a full canonical URL (https://...)\n- if multiple sources disagree, call that out\n- finish with a short recommendation on which source(s) to trust first.`;
+}
+
+function buildAnthropicSystemPrompt() {
+	return "You are a fast web research assistant. Always produce practical summaries and include full source URLs (no shortened links).";
+}
+
+function buildAnthropicHeaders(apiKey) {
+	const oauthToken = typeof apiKey === "string" && apiKey.includes("sk-ant-oat");
+	if (oauthToken) {
+		return {
+			authorization: `Bearer ${apiKey}`,
+			"anthropic-version": "2023-06-01",
+			"anthropic-beta": "claude-code-20250219,oauth-2025-04-20,web-search-2025-03-05",
+			"content-type": "application/json",
+			accept: "application/json",
+			"x-app": "cli",
+			"user-agent": "claude-cli/1.0.72 (external, cli)",
+		};
+	}
+	return {
+		"x-api-key": apiKey,
+		"anthropic-version": "2023-06-01",
+		"anthropic-beta": "web-search-2025-03-05",
+		"content-type": "application/json",
+		accept: "application/json",
+	};
+}
+
+async function runAnthropicSearch({ query, purpose, timeoutMs }) {
+	const apiKey = resolveAnthropicKey();
+	if (!apiKey) {
+		throw new Error(
+			"ANTHROPIC_API_KEY not set. Add it to ~/.pi/agent/auth.json under 'anthropic' or export it.",
+		);
+	}
+
+	const body = {
+		model: "claude-haiku-4-5",
+		max_tokens: 1800,
+		temperature: 0,
+		system: buildAnthropicSystemPrompt(),
+		tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
+		messages: [{ role: "user", content: buildAnthropicUserPrompt(query, purpose) }],
+	};
+
+	const signal = AbortSignal.timeout(timeoutMs);
+	const res = await fetch("https://api.anthropic.com/v1/messages", {
+		method: "POST",
+		headers: buildAnthropicHeaders(apiKey),
+		body: JSON.stringify(body),
+		signal,
+	});
+
+	const payload = await res.text();
+	if (!res.ok) {
+		throw new Error(`Anthropic request failed (${res.status}): ${payload}`);
+	}
+
+	let parsed;
+	try {
+		parsed = JSON.parse(payload);
+	} catch {
+		throw new Error("Anthropic returned non-JSON response");
+	}
+
+	const text = (parsed.content || [])
+		.filter((item) => item.type === "text" && typeof item.text === "string")
+		.map((item) => item.text)
+		.join("\n\n")
+		.trim();
+
+	if (!text) {
+		throw new Error("Anthropic returned no text content");
+	}
+
+	return { provider: "anthropic", result: text };
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI Codex backend
+// ---------------------------------------------------------------------------
 
 function findPiExecutable() {
 	const cmd = process.platform === "win32" ? "where" : "which";
@@ -161,11 +315,9 @@ function findPiExecutable() {
 
 function collectModuleCandidates(fileName = "index.js", envVarName = "PI_AI_MODULE_PATH") {
 	const candidates = new Set();
-
 	const add = (p) => {
 		if (!p) return;
-		const abs = isAbsolute(p) ? p : resolve(p);
-		candidates.add(abs);
+		candidates.add(isAbsolute(p) ? p : resolve(p));
 	};
 
 	if (envVarName && process.env[envVarName]) add(process.env[envVarName]);
@@ -199,13 +351,11 @@ function collectModuleCandidates(fileName = "index.js", envVarName = "PI_AI_MODU
 	}
 
 	add(join(homedir(), "Development", "pi-mono", "packages", "ai", "dist", fileName));
-
 	return Array.from(candidates);
 }
 
 async function loadPiAi() {
 	const tried = [];
-
 	try {
 		return await import("@earendil-works/pi-ai");
 	} catch (err) {
@@ -232,7 +382,6 @@ async function loadPiAiOAuth(piAi) {
 	}
 
 	const tried = [];
-
 	try {
 		const oauth = await import("@earendil-works/pi-ai/oauth");
 		if (typeof oauth.getOAuthApiKey === "function") {
@@ -267,84 +416,77 @@ function parseExpiryTimestamp(expires) {
 		if (expires <= 0) return undefined;
 		return expires < 1_000_000_000_000 ? expires * 1000 : expires;
 	}
-
 	if (typeof expires === "string") {
 		const trimmed = expires.trim();
 		if (!trimmed) return undefined;
-
 		const numeric = Number(trimmed);
-		if (Number.isFinite(numeric)) {
-			return parseExpiryTimestamp(numeric);
-		}
-
+		if (Number.isFinite(numeric)) return parseExpiryTimestamp(numeric);
 		const parsed = Date.parse(trimmed);
 		if (Number.isFinite(parsed)) return parsed;
 	}
-
 	return undefined;
 }
 
 function getCachedOAuthAccess(entry, now = Date.now()) {
 	if (!entry || typeof entry !== "object") return undefined;
-
 	const apiKey = resolveConfigValue(entry.access);
 	if (!apiKey) return undefined;
-
 	const expiresAt = parseExpiryTimestamp(entry.expires);
 	if (!expiresAt) return undefined;
-
 	if (now + 30_000 >= expiresAt) return undefined;
-
-	return {
-		apiKey,
-		accountId: entry.accountId,
-	};
+	return { apiKey, accountId: entry.accountId };
 }
 
-function pickFastModel(provider, requestedModel, piAi) {
-	const models = typeof piAi.getModels === "function" ? piAi.getModels(provider) : [];
-	if (!Array.isArray(models) || models.length === 0) {
-		if (requestedModel) return { id: requestedModel, baseUrl: undefined };
-		if (provider === "openai-codex") return { id: "gpt-5.4-mini", baseUrl: "https://chatgpt.com/backend-api" };
-		return { id: "claude-haiku-4-5", baseUrl: "https://api.anthropic.com" };
+function decodeJwtAccountId(jwt) {
+	if (!jwt || typeof jwt !== "string") return undefined;
+	try {
+		const parts = jwt.split(".");
+		if (parts.length !== 3) return undefined;
+		const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+		return payload?.["https://api.openai.com/auth"]?.chatgpt_account_id;
+	} catch {
+		return undefined;
 	}
+}
 
+function pickCodexFastModel(requestedModel, piAi) {
+	const models = typeof piAi.getModels === "function" ? piAi.getModels("openai-codex") : [];
+	if (!Array.isArray(models) || models.length === 0) {
+		if (requestedModel) return { id: requestedModel, baseUrl: "https://chatgpt.com/backend-api" };
+		return { id: "gpt-5.4-mini", baseUrl: "https://chatgpt.com/backend-api" };
+	}
 	if (requestedModel) {
 		const exact = models.find((m) => m.id === requestedModel);
 		if (exact) return exact;
 		return { ...models[0], id: requestedModel };
 	}
-
-	const preferredIds =
-		provider === "openai-codex"
-			? ["gpt-5.4-mini", "gpt-5.3-codex-spark", "gpt-5.1", "gpt-5.1-codex-mini"]
-			: ["claude-haiku-4-5", "claude-3-5-haiku-latest", "claude-3-5-haiku-20241022"];
-
+	const preferredIds = ["gpt-5.4-mini", "gpt-5.3-codex-spark", "gpt-5.1", "gpt-5.1-codex-mini"];
 	for (const id of preferredIds) {
 		const found = models.find((m) => m.id === id);
 		if (found) return found;
 	}
-
-	const heuristic = models.find((m) => /mini|haiku|spark|flash|fast/i.test(m.id));
+	const heuristic = models.find((m) => /mini|spark/i.test(m.id));
 	return heuristic || models[0];
 }
 
-async function resolveApiKey(provider, auth, authPath, piAi) {
-	const entry = auth?.[provider];
+async function resolveCodexApiKey(piAi) {
+	const authPath = join(getAgentDir(), "auth.json");
+	const auth = readAuth();
+	const entry = auth?.["openai-codex"];
 	if (!entry) {
-		throw new Error(`No credentials for provider '${provider}' in ${authPath}`);
+		throw new Error("No credentials for provider 'openai-codex' in ~/.pi/agent/auth.json");
 	}
 
 	const inferredType = entry.type || (entry.access && entry.refresh ? "oauth" : entry.key ? "api_key" : undefined);
 
 	if (inferredType === "api_key") {
 		const key = resolveConfigValue(entry.key);
-		if (!key) throw new Error(`API key for ${provider} is empty or unresolved.`);
+		if (!key) throw new Error("API key for openai-codex is empty or unresolved.");
 		return { apiKey: key, accountId: entry.accountId };
 	}
 
 	if (inferredType !== "oauth") {
-		throw new Error(`Unsupported credential type for ${provider}: ${String(entry.type || "unknown")}`);
+		throw new Error(`Unsupported credential type for openai-codex: ${String(entry.type || "unknown")}`);
 	}
 
 	const fallbackToken = getCachedOAuthAccess(entry);
@@ -364,7 +506,7 @@ async function resolveApiKey(provider, auth, authPath, piAi) {
 
 	let refreshed;
 	try {
-		refreshed = await oauth.getOAuthApiKey(provider, oauthCreds);
+		refreshed = await oauth.getOAuthApiKey("openai-codex", oauthCreds);
 	} catch (err) {
 		if (fallbackToken) return fallbackToken;
 		throw err;
@@ -372,24 +514,21 @@ async function resolveApiKey(provider, auth, authPath, piAi) {
 
 	if (!refreshed?.apiKey) {
 		if (fallbackToken) return fallbackToken;
-		throw new Error(`No OAuth credentials available for provider '${provider}'`);
+		throw new Error("No OAuth credentials available for provider 'openai-codex'");
 	}
 
 	const mergedCred = { type: "oauth", ...(entry || {}), ...(refreshed.newCredentials || {}) };
-	auth[provider] = mergedCred;
+	auth["openai-codex"] = mergedCred;
 	writeJson(authPath, auth);
 
-	return {
-		apiKey: refreshed.apiKey,
-		accountId: mergedCred.accountId,
-	};
+	return { apiKey: refreshed.apiKey, accountId: mergedCred.accountId };
 }
 
-function buildUserPrompt(query, purpose) {
+function buildCodexUserPrompt(query, purpose) {
 	return `Search the internet for: ${query}\n\nPurpose: ${purpose}\n\nReturn a concise research summary with:\n- 3 to 7 key findings\n- for every finding: title, why it matters for this purpose, and a full canonical URL (https://...)\n- if multiple sources disagree, call that out\n- finish with a short recommendation on which source(s) to trust first.`;
 }
 
-function buildSystemPrompt() {
+function buildCodexSystemPrompt() {
 	return "You are a fast web research assistant. Always produce practical summaries and include full source URLs (no shortened links).";
 }
 
@@ -400,7 +539,7 @@ function resolveCodexUrl(baseUrl = "https://chatgpt.com/backend-api") {
 	return `${normalized}/codex/responses`;
 }
 
-function extractEventData(chunk) {
+function extractCodexEventData(chunk) {
 	const payload = chunk
 		.split(/\r?\n/)
 		.filter((line) => line.startsWith("data:"))
@@ -411,24 +550,27 @@ function extractEventData(chunk) {
 	return payload;
 }
 
-async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeoutMs, baseUrl }) {
+async function runOpenAiCodexSearch({ query, purpose, timeoutMs }) {
+	const piAi = await loadPiAi();
+	const model = pickCodexFastModel(undefined, piAi);
+	const { apiKey, accountId } = await resolveCodexApiKey(piAi);
 	const tokenAccountId = accountId || decodeJwtAccountId(apiKey);
 	if (!tokenAccountId) {
 		throw new Error("Could not determine ChatGPT account ID for openai-codex token.");
 	}
 
 	const body = {
-		model,
+		model: model.id,
 		store: false,
 		stream: true,
-		instructions: buildSystemPrompt(),
-		input: [{ role: "user", content: buildUserPrompt(query, purpose) }],
+		instructions: buildCodexSystemPrompt(),
+		input: [{ role: "user", content: buildCodexUserPrompt(query, purpose) }],
 		tools: [{ type: "web_search" }],
 		tool_choice: "auto",
 	};
 
-	const endpoint = resolveCodexUrl(baseUrl);
-	const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined;
+	const endpoint = resolveCodexUrl(model.baseUrl);
+	const signal = AbortSignal.timeout(timeoutMs);
 
 	const res = await fetch(endpoint, {
 		method: "POST",
@@ -438,7 +580,7 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 			"content-type": "application/json",
 			accept: "text/event-stream",
 			"OpenAI-Beta": "responses=experimental",
-			originator: "pi-native-web-search-skill",
+			originator: "pi-web-search-skill",
 		},
 		body: JSON.stringify(body),
 		signal,
@@ -469,7 +611,7 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 			buffer = buffer.slice(idx + 2);
 			idx = buffer.indexOf("\n\n");
 
-			const data = extractEventData(chunk);
+			const data = extractCodexEventData(chunk);
 			if (!data) continue;
 
 			let event;
@@ -495,7 +637,6 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 			if (event.type === "error") {
 				throw new Error(event.message || "Codex stream failed");
 			}
-
 			if (event.type === "response.failed") {
 				throw new Error(event.response?.error?.message || "Codex response failed");
 			}
@@ -506,73 +647,32 @@ async function runCodexSearch({ model, apiKey, accountId, query, purpose, timeou
 	if (!finalText) {
 		throw new Error("Codex returned an empty response");
 	}
-	return finalText;
+	return { provider: "openai-codex", result: finalText };
 }
 
-function buildAnthropicHeaders(apiKey) {
-	const oauthToken = typeof apiKey === "string" && apiKey.includes("sk-ant-oat");
-	if (oauthToken) {
-		return {
-			authorization: `Bearer ${apiKey}`,
-			"anthropic-version": "2023-06-01",
-			"anthropic-beta": "claude-code-20250219,oauth-2025-04-20,web-search-2025-03-05",
-			"content-type": "application/json",
-			accept: "application/json",
-			"x-app": "cli",
-			"user-agent": "claude-cli/1.0.72 (external, cli)",
-		};
+// ---------------------------------------------------------------------------
+// Dispatch and output
+// ---------------------------------------------------------------------------
+
+async function runSearch(provider, args) {
+	switch (provider) {
+		case "ollama":
+			return runOllamaSearch(args);
+		case "anthropic":
+			return runAnthropicSearch(args);
+		case "openai-codex":
+			return runOpenAiCodexSearch(args);
+		default:
+			throw new Error(`Unknown provider: ${provider}`);
 	}
-	return {
-		"x-api-key": apiKey,
-		"anthropic-version": "2023-06-01",
-		"anthropic-beta": "web-search-2025-03-05",
-		"content-type": "application/json",
-		accept: "application/json",
-	};
 }
 
-async function runAnthropicSearch({ model, apiKey, query, purpose, timeoutMs }) {
-	const body = {
-		model,
-		max_tokens: 1800,
-		temperature: 0,
-		system: buildSystemPrompt(),
-		tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
-		messages: [{ role: "user", content: buildUserPrompt(query, purpose) }],
-	};
-
-	const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined;
-
-	const res = await fetch("https://api.anthropic.com/v1/messages", {
-		method: "POST",
-		headers: buildAnthropicHeaders(apiKey),
-		body: JSON.stringify(body),
-		signal,
-	});
-
-	const payload = await res.text();
-	if (!res.ok) {
-		throw new Error(`Anthropic request failed (${res.status}): ${payload}`);
+function printOllamaResults(results) {
+	for (const r of results) {
+		console.log(`\n${r.title}`);
+		console.log(r.url);
+		if (r.content) console.log(r.content);
 	}
-
-	let parsed;
-	try {
-		parsed = JSON.parse(payload);
-	} catch {
-		throw new Error("Anthropic returned non-JSON response");
-	}
-
-	const text = (parsed.content || [])
-		.filter((item) => item.type === "text" && typeof item.text === "string")
-		.map((item) => item.text)
-		.join("\n\n")
-		.trim();
-
-	if (!text) {
-		throw new Error("Anthropic returned no text content");
-	}
-
-	return text;
 }
 
 async function main() {
@@ -582,45 +682,17 @@ async function main() {
 		process.exit(args.help ? 0 : 1);
 	}
 
-	const agentDir = getAgentDir();
-	const authPath = join(agentDir, "auth.json");
-	const settingsPath = join(agentDir, "settings.json");
-	const auth = readJson(authPath, {});
-	const settings = readJson(settingsPath, {});
-
-	const provider = pickProvider(args.provider, settings, auth);
-	const piAi = await loadPiAi();
-	const model = pickFastModel(provider, args.model, piAi);
-	const { apiKey, accountId } = await resolveApiKey(provider, auth, authPath, piAi);
-
-	const text =
-		provider === "openai-codex"
-			? await runCodexSearch({
-					model: model.id,
-					apiKey,
-					accountId,
-					query: args.query,
-					purpose: args.purpose,
-					timeoutMs: args.timeoutMs,
-					baseUrl: model.baseUrl,
-				})
-			: await runAnthropicSearch({
-					model: model.id,
-					apiKey,
-					query: args.query,
-					purpose: args.purpose,
-					timeoutMs: args.timeoutMs,
-				});
+	const provider = pickProvider(args.provider);
+	const { result } = await runSearch(provider, args);
 
 	if (args.json) {
 		console.log(
 			JSON.stringify(
 				{
 					provider,
-					model: model.id,
 					query: args.query,
 					purpose: args.purpose,
-					result: text,
+					result,
 				},
 				null,
 				2,
@@ -630,9 +702,13 @@ async function main() {
 	}
 
 	console.log(`Provider: ${provider}`);
-	console.log(`Model: ${model.id}`);
+	console.log(`Query: ${args.query}`);
 	console.log("");
-	console.log(text);
+	if (provider === "ollama") {
+		printOllamaResults(result);
+	} else {
+		console.log(result);
+	}
 }
 
 main().catch((err) => {
