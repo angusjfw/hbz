@@ -142,6 +142,18 @@ class RegistryTests(unittest.TestCase):
             self.run_cm("log", "--removed")
         self.assertEqual([l.split("\t")[2] for l in out.getvalue().splitlines()], ["alpha", "gamma"])
 
+    def test_wrap_flattens_notes(self):
+        import io, contextlib
+        self.run_cm("reg", "new", "gamma")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.run_cm("wrap", "gamma", "--notes", "did x\n\njournal abc123")
+        self.assertIsNone(self.cm.Registry.load().entry("gamma"))
+        self.assertEqual(self.cm.Registry(self.text()).text(), self.text())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.run_cm("log", "--removed", "gamma")
+        self.assertEqual(out.getvalue().split("\t")[1:], ["wrap", "gamma", "did x journal abc123\n"])
+
     def test_rm_middle_entry(self):
         self.run_cm("reg", "rm", "alpha")
         t = self.text()
