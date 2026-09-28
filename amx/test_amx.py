@@ -4,6 +4,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import re
 import shutil
 import tempfile
 import threading
@@ -510,8 +511,14 @@ class MigrateTests(unittest.TestCase):
         if not (live / "sessions.md").exists():
             self.skipTest("no old live state")
         shutil.copytree(live, self.old, ignore=shutil.ignore_patterns("*.lock"))
-        before = (self.old / "sessions.md").read_text()
+        # Point the copy's absolute paths at the copy, as they are in place.
+        reg = self.old / "sessions.md"
+        reg.write_text(reg.read_text().replace(str(live), str(self.old)))
+        before = reg.read_text()
         self.cm.main(["migrate"])
         after = (self.new / "sessions.md").read_text()
-        self.assertNotIn("claude-manager", after)
+        # Only path fields are rewritten; prose in notes may still name claude-manager.
+        paths = re.findall(r"^(?:snapshot|resume_state|notes): ([~/]\S*)$", after, re.M)
+        self.assertTrue(paths)
+        self.assertEqual([p for p in paths if "claude-manager" in p], [])
         self.assertEqual(len(self.cm.Registry(before).entries()), len(self.cm.Registry(after).entries()))
