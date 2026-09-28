@@ -141,15 +141,10 @@ Workers wrap themselves, journal included; nothing is left for you to
 finish.
 
 An entry that disappeared gets its own line, confirmed from its
-`removed` record (`amx log` doesn't print these):
-
-```bash
-grep '"removed"' ~/.local/state/amx/session-log.jsonl | jq -c 'select(.entry=="<id>") | {ts, how, notes: .fields.notes}' | tail -1
-```
-
-Say how it went (`wrap`, `rm` or `auto-end`) and the journal commit if
-the notes name one: "eng-1234 wrapped, journal da405e5". No record means
-it left without `amx wrap` or `amx reg rm`; say so.
+removed record: `amx log --removed <id> -n 1`. Say how it went (`wrap`,
+`rm` or `auto-end`) and where the journal entry landed if the notes say:
+"eng-1234 wrapped, journal da405e5". No record means it left without
+`amx wrap` or `amx reg rm`; say so.
 
 If the watch isn't running when you touch the registry (it expired, or
 this is a resumed conversation), run `amx reconcile` first, then restart

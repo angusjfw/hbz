@@ -1210,6 +1210,13 @@ def read_log():
 
 def cmd_log(a):
     recs = read_log()
+    if a.removed is not None:
+        rows = [r for r in reversed(recs) if r.get("event") == "removed"
+                and (a.removed is True or r.get("entry") == a.removed)]
+        for r in rows[:a.limit]:
+            print("\t".join(str(v or "-") for v in
+                            (r.get("ts"), r.get("how"), r.get("entry"), (r.get("fields") or {}).get("notes"))))
+        return
     tracked = set()
     for r in recs:
         if r.get("event") == "removed" and r.get("tracked"):
@@ -1652,6 +1659,8 @@ def main(argv=None):
     p = sub.add_parser("log", help="agent sessions from the session log, newest first")
     p.add_argument("--untracked", action="store_true",
                    help="only ended tmux sessions that never belonged to a tracked entry")
+    p.add_argument("--removed", nargs="?", const=True, metavar="ID",
+                   help="removed entries instead (how: wrap, rm or auto-end; with notes), optionally just ID")
     p.add_argument("-n", "--limit", type=int, default=50)
     p.set_defaults(fn=cmd_log)
 

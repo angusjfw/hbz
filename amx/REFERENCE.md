@@ -81,7 +81,8 @@ Derived from which fields are present:
 
 Any state can also carry `auto`. `amx ls` prints the state per entry
 (`-a` includes auto ones). A wrapped entry is gone from the registry and
-kept in the session log.
+kept in the session log; `amx log --removed [id]` shows how it went and
+its notes.
 
 ## Who writes what
 

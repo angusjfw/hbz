@@ -127,6 +127,21 @@ class RegistryTests(unittest.TestCase):
         self.run_cm("reg", "rm", "gamma")
         self.assertEqual(self.text(), text)
 
+    def test_log_removed(self):
+        import io, contextlib
+        self.run_cm("reg", "new", "gamma", "notes=did x")
+        self.run_cm("reg", "rm", "gamma")
+        self.run_cm("reg", "rm", "alpha")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.run_cm("log", "--removed", "gamma")
+        rows = [l.split("\t") for l in out.getvalue().splitlines()]
+        self.assertEqual([r[1:] for r in rows], [["rm", "gamma", "did x"]])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.run_cm("log", "--removed")
+        self.assertEqual([l.split("\t")[2] for l in out.getvalue().splitlines()], ["alpha", "gamma"])
+
     def test_rm_middle_entry(self):
         self.run_cm("reg", "rm", "alpha")
         t = self.text()
