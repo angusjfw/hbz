@@ -127,7 +127,10 @@ Workers change the registry (pause, shutdown, wrap) while you're idle.
 Watch for it:
 
 - **Claude Code:** `Monitor` with command `amx watch --ignore-pane <pane>`
-  and the maximum timeout. Re-arm it every time it expires.
+  and the maximum timeout. Re-arm it every time it ends, expired or
+  killed, however often. After a kill, `amx reconcile` before re-arming
+  and tell the user: Claude Code stops background tasks when memory is
+  low.
 - **pi:** call the `amx_watch` tool with `start` (from the `amx`
   extension).
 
