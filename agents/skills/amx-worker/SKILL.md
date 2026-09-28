@@ -70,7 +70,7 @@ Final: the entry is removed and the tmux session killed.
 3. Run:
 
    ```bash
-   amx wrap <entry> --notes "<one line: what was done>"
+   amx wrap <entry> --notes "<what was done, and where the journal entry landed if you wrote one>"
    ```
 
    This kills your own tmux session, so it must be your last action.

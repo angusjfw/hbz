@@ -135,7 +135,7 @@ Watch for it:
   extension).
 
 On each `changed` event: `amx ls -a` and `amx reconcile`, compare with
-what you last knew, and tell the user one line per change
+what you last knew, and give the user a short mention of each change
 ("eng-1234 shut itself down", "a new auto session `scratch` started").
 Workers wrap themselves, journal included; nothing is left for you to
 finish.
