@@ -897,7 +897,7 @@ def pane_identity(pane):
                 session_id=pane["session_id"], cwd=pane["cwd"], primary=pane["primary"],
                 label=pane["label"], model=pane["model"], effort=pane["effort"],
                 agent_args=agent_arguments(pane["agent_args"]), dead=pane.get("dead", False),
-                harness_conflict=pane["harness_conflict"])
+                harness_conflict=pane["harness_conflict"], state=pane["state"])
 
 
 def resolve_target(target):
@@ -937,6 +937,50 @@ def cmd_whoami(a):
     info = resolve_target(whoami_pane())
     info.update(pane=info["pane_id"], session=info["tmux_session"])
     print_identity(info, a.json)
+
+
+# ---------------------------------------------------------------- commands: msg
+
+NATIVE = {"claude": "SendMessage", "pi": "send_to_session"}
+
+
+class Refused(CmError):
+    """amx msg declined to deliver. The reason word is for callers to branch on."""
+
+    def __init__(self, reason, detail):
+        super().__init__(f"refused {reason}: {detail}")
+        self.reason = reason
+
+
+def msg_route(sender, target, via, live):
+    """'socket' or 'pane' for this pair; Refused when neither should be used.
+    live: the target is pi and its session-control socket answers."""
+    h, name = target["harness"], target["name"]
+    if target["dead"]:
+        raise Refused("dead", f"{name} ({target['pane_id']}) has exited")
+    if h == "command":
+        raise Refused("command", f"{name} is not a chat agent; type into it with tmux-interaction if you mean to")
+    if via == "socket":
+        if h == "pi" and live:
+            return "socket"
+        raise Refused("no-socket", f"no live session-control socket for {name}")
+    if via == "auto" and sender and sender["harness"] == h and (h == "claude" or (h == "pi" and live)):
+        raise Refused("native", f"use {NATIVE[h]} to reach {name} (or --via pane)")
+    return "socket" if via == "auto" and h == "pi" and live else "pane"
+
+
+def msg_header(sender):
+    if not sender:
+        return "[from an agent outside tmux; no reply route]"
+    name = sender["name"]
+    return f'[from {name} ({sender["harness"]}, {sender["pane_id"]}); reply: amx msg {name} "..."]'
+
+
+def compose(sender, route, body):
+    """pi replies to pi through sender_info; everyone else reads the header."""
+    if route == "socket" and sender and sender["harness"] == "pi" and sender.get("session_id"):
+        return f"{body}\n\n<sender_info>{json.dumps({'sessionId': sender['session_id']})}</sender_info>"
+    return f"{msg_header(sender)}\n{body}"
 
 
 def cmd_panes(a):
@@ -2262,6 +2306,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     try:
         a.fn(a)
+    except Refused as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
     except CmError as e:
         print(f"amx: {e}", file=sys.stderr)
         sys.exit(2)
