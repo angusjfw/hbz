@@ -134,7 +134,8 @@ its notes.
 `amx resolve <entry-or-worker-name-or-%pane-id> --json` returns `name`,
 `pane_id`, `tmux_session`, `address`, `entry`, `entry_harness`, `harness`,
 `session_id`, `cwd`, `primary`, `label`, `model`, `effort`, `agent_args`
-(an array), `dead` and `harness_conflict`. It does not send input.
+(an array), `dead`, `harness_conflict` and `state` (the pane's
+agent-status state, or null). It does not send input; `amx msg` does.
 
 The primary's name is the entry id; a labelled worker's is
 `<entry>-<label>`. Unlabelled or unregistered panes use their explicit
@@ -152,6 +153,52 @@ Managed panes carry `@amx_harness`, `@amx_session_id`, `@amx_label`,
 `@amx_primary`, `@amx_model`, `@amx_effort`, `@amx_agent_args`,
 `@amx_command` and `@amx_launch_cwd`. Names are derived from the current
 registry, so a renamed entry does not leave a stale cached amx address.
+
+## Messaging
+
+Same-harness sessions use their native tools: `SendMessage` between
+Claude Code sessions, `send_to_session` between pi sessions running the
+session-control extension. `amx msg` is for everything else. It needs
+no manager and no registry entry on either side.
+
+```
+amx msg TARGET (TEXT | --file F) [--via auto|socket|pane] [--steer]
+        [--wait SECS] [--force]
+```
+
+TARGET is anything `amx resolve` accepts. The route:
+
+- pi target whose `~/.pi/session-control/<session_id>.sock` answers:
+  the socket (`follow_up`; `--steer` interrupts the current turn).
+- Any other chat agent (Claude, Codex, pi without a socket): typed into
+  the pane. A bracketed paste, Escape if the pane shows vim INSERT mode,
+  then Enter.
+- `--via socket` or `--via pane` forces a route; a forced route that
+  can't work is refused, never swapped.
+
+Typed messages start with `[from <name> (<harness>, <%pane>); reply: amx
+msg <name> "..."]`. Over the socket from pi, a `<sender_info>` tag lets
+pi reply natively.
+
+Success prints `delivered via=<socket|pane> target=<name> pane=<%id>
+verified=<yes|no>` and exits 0. `verified=no` means the box didn't read
+empty afterwards (always, for Codex); look at the pane. A refusal prints
+`refused <reason>: <detail>` to stderr and exits 1; nothing was sent.
+Other errors exit 2.
+
+| reason | meaning | what to do |
+| --- | --- | --- |
+| `native` | same harness, native tool reaches it | use the named tool; `--via pane` if it holds the message |
+| `busy` | the target is working | retry later or `--wait SECS`; `--force` only if the pane shows it idle (an interrupt leaves `working` stale) |
+| `needs-input` | a permission prompt or question is up | tell the user; never forced |
+| `draft` | unsent text in the target's box | ask the user; never forced |
+| `box-unknown` | no box on screen, or no reader (Codex) | look at the pane; `--force` only when there's no reader and nobody is typing there |
+| `state-unknown` | no busy state (no status integration) | look at the pane; `--force` if it's idle |
+| `no-socket` | `--via socket` without a live socket | drop `--via`, or start pi with `--session-control` |
+| `command` | not a chat agent | use tmux-interaction deliberately |
+| `dead`, `unresolved`, `ambiguous`, `self` | no usable target | check the name; use a `%pane` ID |
+
+Never `--force` into a pane the user may be typing in.
 
 ## resume_state
 

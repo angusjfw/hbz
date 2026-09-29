@@ -34,6 +34,8 @@ and pane/window placement; ask before changing either.
 - Task list: yes.
 - Subagents with a model choice: yes.
 - Worker skill command: `/amx-worker <mode>`.
+- Messaging: `SendMessage` between Claude sessions. From other
+  harnesses, `amx msg` types into the pane after checking its input box.
 - Busy in a capture: a spinner line with `(<elapsed> · ↓ <n> tokens)`.
   Idle: a past-tense line (`✻ Baked for 4s`) above the input box.
   Blocked: a dialog with numbered options and no input box.
@@ -61,7 +63,10 @@ and pane/window placement; ask before changing either.
   `amx spawn --agent-arg=--session-control` opts in. Only then can its
   `--name` (the entry id, or `<id>-<label>` for an additional pane) be used
   as a global socket alias. Without it, inspect or interact via tmux.
-  Extra arguments are recorded for resume.
+  Extra arguments are recorded for resume. `amx msg` uses the socket
+  whenever it answers, found by native session ID rather than `--name`,
+  so a pi started with `--session-control` outside amx works too;
+  otherwise it types into the pane.
 - Session hooks: the `amx` extension runs `amx hook --harness pi` on
   session start and on quit, for the interactive session only.
 - Watch: use `amx_watch` (`start`, `stop`) if the optional extension is
@@ -88,7 +93,8 @@ and pane/window placement; ask before changing either.
   thread solely because its cwd matches.
 - Resume uses `codex resume <full-id>`; no custom hook or skill is required.
 - No amx hook or messaging setup is assumed. Native controls and tmux
-  interaction remain available. Don't infer busy/idle from another
+  interaction remain available. `amx msg` types into Codex panes, but
+  needs `--force`: amx has no busy state or input-box reader for Codex. Don't infer busy/idle from another
   harness's spinner conventions.
 - As a manager, use the capabilities actually exposed in the session.
   Without idle notifications, reconcile on each turn.
