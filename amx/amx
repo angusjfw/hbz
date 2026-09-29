@@ -1020,6 +1020,11 @@ INSERT_MARK = re.compile(r"-- INSERT --|─ INSERT$")  # Claude's vim status, pi
 BOX_STATES = {"empty", "ghost", "draft", "no-box"}
 
 
+def in_copy_mode(pane_id):
+    """tmux copy-mode eats Escape and Enter, so a paste would be left as a draft."""
+    return tmux("display", "-p", "-t", pane_id, "#{pane_in_mode}", check=False).stdout.strip() == "1"
+
+
 def screen(pane_id):
     return tmux("capture-pane", "-p", "-J", "-t", pane_id).stdout
 
@@ -1059,6 +1064,8 @@ def ready_for_typing(target, wait, force):
                                   "or --force if the pane shows it idle (interrupts leave this state stale)")
         time.sleep(1)
         target = resolve_target(target["pane_id"])
+    if in_copy_mode(target["pane_id"]):
+        raise Refused("box-unknown", f"{name} is in tmux copy mode (someone may be scrolling it); look at the pane")
     box = box_state(target)
     # No hook fires when the user cancels a prompt, so needs_input can outlive it;
     # an empty box back on screen means the prompt is gone.

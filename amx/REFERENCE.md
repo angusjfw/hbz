@@ -192,7 +192,7 @@ Other errors exit 2.
 | `busy` | the target is working | retry later or `--wait SECS`; `--force` only if the pane shows it idle (an interrupt leaves `working` stale) |
 | `needs-input` | a permission prompt or question is up | tell the user; never forced |
 | `draft` | unsent text in the target's box | ask the user; never forced |
-| `box-unknown` | no box on screen, or no reader (Codex) | look at the pane; `--force` only when there's no reader and nobody is typing there |
+| `box-unknown` | no box on screen, the pane is in tmux copy mode, or no reader (Codex) | look at the pane; `--force` only when there's no reader and nobody is typing there |
 | `state-unknown` | no busy state (no status integration) | look at the pane; `--force` if it's idle |
 | `no-socket` | `--via socket` without a live socket | drop `--via`, or start pi with `--session-control` |
 | `command` | not a chat agent | use tmux-interaction deliberately |

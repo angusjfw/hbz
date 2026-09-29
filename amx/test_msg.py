@@ -180,6 +180,8 @@ class ReadinessTests(unittest.TestCase):
         patch.object(self.cm.time, "sleep", self.sleep).start()
         self.box = "empty"
         self.cm.box_state = lambda target: self.box
+        self.cm.in_copy_mode = lambda pane_id: self.copy_mode
+        self.copy_mode = False
         self.states = []
 
     def sleep(self, seconds):
@@ -250,6 +252,10 @@ class ReadinessTests(unittest.TestCase):
         self.refused("box-unknown", pane("codex"))
         self.ready(pane("codex"), force=True)
 
+    def test_copy_mode_is_never_forced(self):
+        self.copy_mode = True
+        self.refused("box-unknown", pane("claude"), force=True)
+
 
 class TypingTests(test_startup.IsolatedTmuxCase):
     """A stub agent in raw mode records every byte a message sends."""
@@ -278,6 +284,12 @@ class TypingTests(test_startup.IsolatedTmuxCase):
         self.assertTrue(self.cm.type_into(target, text))
         got = self.received(out, b"\r")
         self.assertEqual(got, b"\x1b[200~" + text.replace("\n", "\r").encode() + b"\x1b[201~\x1b\r")
+
+    def test_copy_mode_is_seen(self):
+        target, _ = self.stub("")
+        self.assertFalse(self.cm.in_copy_mode(target["pane_id"]))
+        self.tmux("copy-mode", "-t", target["pane_id"])
+        self.assertTrue(self.cm.in_copy_mode(target["pane_id"]))
 
     def test_no_escape_outside_insert_mode(self):
         target, out = self.stub("")
