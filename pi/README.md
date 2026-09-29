@@ -50,6 +50,15 @@ For browsing, screenshots, form interaction, and authenticated sessions, use
 the `web-browser` skill. It needs Chrome or Chromium installed; `make ai`
 installs its npm dependencies automatically.
 
+## MCP servers
+
+The `pi-mcp-adapter` package gives Pi MCP access through one `mcp` proxy tool;
+servers start lazily on first use. The server list is machine-local, in
+`~/.pi/agent/mcp-adapter.json` (not in this repo, since it holds work endpoints).
+Stdio servers inherit tokens from the shell environment. OAuth servers log in
+with `/mcp-auth <server>` and keep tokens in the OS keychain. Use
+`settings.approveTools` globs to require confirmation for write tools.
+
 ## Files
 
 - `settings.json.example` — baseline Pi settings (default provider, enabled models,
