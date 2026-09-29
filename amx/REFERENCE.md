@@ -36,7 +36,7 @@ effort: high
 started: 2026-04-29 14:00
 last_touched: 2026-04-29 16:20
 resumed_session_id: 7f1c9e02-4b6a-4d51-9f83-2ac0be7d5511
-worker: c40b8d17-9e22-4a76-bb31-6e5f0d92a418 cwd=~/code/repo/_wt/eng-1240 label=api
+worker: c40b8d17-9e22-4a76-bb31-6e5f0d92a418 harness=pi cwd=~/code/repo/_wt/eng-1240 label=api
 notes: ~/code/journal/2026-04-29-eng-1234.md
 ```
 
@@ -47,12 +47,14 @@ Header lines (before the first `## `):
 
 Entry fields (all optional; unknown fields and prose are kept):
 
-- `harness`: `claude`, `pi`, `codex` or `command`. Absent means `claude`.
+- `harness`: the primary/default harness: `claude`, `pi`, `codex` or
+  `command`. Absent means `claude`. It does not restrict other panes.
 - `command`: the shell command for a generic session. Restarted as written
   by `/bin/sh`; no agent session ID or conversation-resume semantics.
 - `auto`: `true` on an entry the session hooks created. It goes away on
-  `amx track`, pause or shutdown. An auto entry is removed when its
-  primary agent exits.
+  `amx track`, pause, shutdown or attachment of another managed pane.
+  An auto entry is removed when its primary exits only if no other panes
+  or worker records remain.
 - `tmux_session`: the tmux session, normally equal to the entry id.
   Present iff the session is alive.
 - `cwd`, `worktree`, `branch`, `ticket`.
@@ -65,13 +67,26 @@ Entry fields (all optional; unknown fields and prose are kept):
   arguments are stored as plaintext; do not put credentials in them.
 - `started`, `last_touched`, `shutdown`, `paused`: timestamps. Always set
   from the clock (`k=now` / `k=today`), never typed.
-- `resumed_session_id`: the primary agent's session id (first window,
-  pane 0), never truncated. Assigned at spawn for Claude/pi; discovered
-  from native identity for Codex. Absent for generic commands and while
+- `resumed_session_id`: the primary agent's session id, never truncated.
+  The primary starts in the first window's pane 0; managed panes retain
+  their roles across renumbering and rebuilds. Assigned at spawn for
+  Claude/pi; discovered from native identity for Codex. Absent for generic commands and while
   an agent's native identity is unknown.
 - `worker`: repeatable, one per agent pane beyond the primary:
-  `<session-id> cwd=<path> [label=<name>]`. No window or pane position;
-  those renumber.
+  `<session-id> harness=<h> cwd=<path> [label=<name>] [model=<m>]
+  [effort=<e>] [agent_args=<JSON>]`. Values use shell quoting when needed.
+  Identity is `(harness, session-id)`; the same native ID in another
+  harness is distinct. Legacy lines without `harness` inherit the entry's
+  harness and are upgraded when refreshed, not by a bulk migration.
+  Labels are unique within the entry. No window or pane position; those
+  renumber. Command panes have no worker ID; their commands and labels
+  live in pane metadata and resume_state.
+  `amx reg worker add <entry> <sid> harness=<h> ...` upserts that identity.
+  `amx reg worker drop <entry> <sid> --harness <h>` removes only that
+  harness's worker; omitting the harness is rejected if ambiguous.
+  Unresolved panes and labelled recovery shells can retain last-known
+  records. These preserve recovery data, not proof of a current ID:
+  consult `amx panes` or `amx resolve` before resuming or messaging.
 - `snapshot`, `resume_state`: paths written at shutdown or wrap.
 - `resume_target`: expected resume date, free-form.
 - `wrap_requested`: only on entries from before workers wrapped
@@ -90,21 +105,53 @@ Derived from which fields are present:
 | wrap requested (old) | no `tmux_session`; `wrap_requested: true` |
 
 Any state can also carry `auto`. `amx ls` prints the state per entry
-(`-a` includes auto ones). A wrapped entry is gone from the registry and
+(`-a` includes auto ones). Its columns are id, primary harness, state,
+busy, ticket, cwd and member harnesses. `--harness` matches any recorded
+member, including pane metadata and saved resume_state when available.
+A wrapped entry is gone from the registry and
 kept in the session log; `amx log --removed [id]` shows how it went and
 its notes.
 
 ## Who writes what
 
-- The session hooks create auto entries, record each agent's session id
-  as it starts, and remove auto entries (and worker lines) as agents
+- A primary session-start hook can create an auto entry; a secondary
+  event alone never invents its parent's harness. Hooks record each
+  agent's session id as it starts, and remove auto entries (and worker lines) as agents
   exit. They never touch a shared session: one tmux auto-named (a bare
   number) or one a manager runs in.
-- A worker writes only its own entry: `last_touched`, `notes`, `ticket`,
-  `branch`, `paused`, `worker`, the shutdown fields, and its own wrap.
+- The primary worker owns the container's lifecycle. Secondary workers
+  share its entry; finishing one does not finish the container. Pause,
+  shutdown and wrap affect the whole entry, regardless of harness.
+  Shutdown/wrap from a secondary pane require `--whole-session`, only
+  after the user explicitly agrees to affect the entire container.
+  A manager targeting another session is not subject to that caller guard.
 - The manager owns the header, spawn and cold resume.
 - Coordination skills add and drop `worker:` lines on the entry of the
   session they run in (`amx spawn --into`, `amx reg worker drop`).
+
+## Pane identity and routing
+
+`amx resolve <entry-or-worker-name-or-%pane-id> --json` returns `name`,
+`pane_id`, `tmux_session`, `address`, `entry`, `entry_harness`, `harness`,
+`session_id`, `cwd`, `primary`, `label`, `model`, `effort`, `agent_args`
+(an array), `dead` and `harness_conflict`. It does not send input.
+
+The primary's name is the entry id; a labelled worker's is
+`<entry>-<label>`. Unlabelled or unregistered panes use their explicit
+`%pane-id`. Concatenated names can collide across entries; resolution
+rejects ambiguity and lists pane IDs rather than choosing a target.
+These are amx addresses, not promises about native messaging aliases.
+
+`amx whoami --json` exposes the same pane-local identity, retaining
+`pane` and `session` as aliases for `pane_id` and `tmux_session`.
+`harness` describes this pane; `entry_harness` is the primary/default.
+Command/shell panes report `harness=command`, not a chat capability.
+Socket availability, drafts and readiness must be checked at delivery.
+
+Managed panes carry `@amx_harness`, `@amx_session_id`, `@amx_label`,
+`@amx_primary`, `@amx_model`, `@amx_effort`, `@amx_agent_args`,
+`@amx_command` and `@amx_launch_cwd`. Names are derived from the current
+registry, so a renamed entry does not leave a stale cached amx address.
 
 ## resume_state
 
@@ -129,18 +176,26 @@ command: yarn dev
 ```
 
 - One `## window <n>: <name>` block per window, in order, with `layout:`.
-- One `### pane <n>` block per pane: `cwd:`, `command:` (empty for an idle
-  shell), and on agent panes `harness:`, `session_id:`, `label:`. Managed
-  command panes retain their launch cwd even if the process changes directory.
+- One `### pane <n>` block per pane: `cwd:`, `primary:` (`true`/`false`),
+  `command:` (empty for an idle shell), and on agent panes `harness:`,
+  `session_id:`, `label:` plus recorded `model:`, `effort:` and `agent_args:`.
+  Legacy files without `primary:` use the first pane of the first window.
+  Managed command panes retain their launch cwd even if the process
+  changes directory.
 - Old files use `claude_session_id:`; it reads as `session_id:` with
   harness `claude`.
 - Any other `## ` section is prose for the reader.
 - `amx rebuild` builds agent panes' commands from `session_id`, `harness`
-  and optional `agent_args` (a JSON array), and replays other panes'
-  `command:` as written. Explicit extra arguments survive shutdown/resume.
+  and per-pane effort/extra arguments, and replays other panes' `command:`
+  as written. Native resume restores models; Claude/Codex effort and
+  explicit extra arguments are replayed for secondary agents too.
   A declared agent command without `session_id` is rejected, not silently
   treated as a generic restart. Leave its command empty for a shell if
   the native ID cannot be recovered; fresh agent starts are explicit.
+  Its label and role survive as a shell, not as a chat target.
+- Without a resume_state, the one-pane fallback is allowed only when no
+  workers are recorded. If workers exist, recover their per-pane state
+  first; rebuild refuses to discard their recovery pointers.
 
 ## Harness capabilities
 
@@ -163,8 +218,14 @@ amx spawn --into task --label logs --command 'tail -f app.log'
 amx spawn --harness codex --id review --cwd /path/to/project
 ```
 
-Agent panes in a session use one harness. Generic command panes can be
-added to any session; their labels and exact commands survive shutdown.
+A session can contain any mix of supported agents and generic commands.
+Use `--into <session> --harness <h> --label <label>` for an agent split;
+add `--window <name>` for a new window in that same session. Without an
+explicit harness, `--into` uses the entry's default. A requested split
+must belong to the requested session. Never replace a requested pane or
+window with a separate session or unmanaged launch without agreement.
+
+Generic panes' labels and exact commands survive shutdown.
 Commands run with the launch environment; amx does not snapshot secrets
 or arbitrary environment variables. Restarting a command may repeat its
 side effects. Review the recorded command before rebuilding.
@@ -218,7 +279,11 @@ agent's in-process session switch must be recorded explicitly before
 shutdown; the launch ID alone cannot follow a new conversation. Use
 `amx identify <entry> --pane <pane-id> --session-id <full-native-id>` to
 correct a pane's identity, rather than merely adding a second worker line.
-When installed, session-start hooks update the pane-bound ID on switches.
+When installed, session-start hooks update each pane's ID, harness and
+role on switches without changing a secondary's parent identity.
+Mixed membership is valid. `reconcile` reports `harness-conflict` only
+when pane metadata disagrees with an observed agent process; inspect and
+explicitly correct the pane identity before saving it.
 
 ## Snapshots
 

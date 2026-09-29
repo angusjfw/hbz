@@ -6,8 +6,8 @@ description: Pause, shut down or wrap up this agent session from inside its tmux
 # amx worker
 
 You are an agent in a tmux session that amx tracks. This skill changes
-your own session's state. `amx` does the mechanics; run the steps in
-order and stop on any error.
+the container's state, not just one worker pane. `amx` does the mechanics;
+run the steps in order and stop on any error.
 
 ## 1. Find your entry
 
@@ -17,7 +17,20 @@ amx whoami
 
 Read `entry=` and `session=`. If `entry=` is empty, stop and tell the
 user this tmux session isn't in the registry (show them the output).
-Don't guess an entry.
+Don't guess an entry. Read `primary=`, `harness=` and `entry_harness=`:
+the container can mix agents; its default does not describe every worker.
+
+If `primary=False`, do not interpret "finish this worker" as permission
+to wrap or shut down the parent. Report the outcome to its owner and
+retain any needed conversation pointers. If closing this pane was
+requested, drop only your own worker record with
+`amx reg worker drop <entry> <session-id> --harness <harness>`, then close
+only your pane as the last action. Otherwise keep its record. Stop here
+unless the user explicitly requested a whole-container operation.
+Pause also marks the whole container; ask if scope is unclear.
+Whole-container shutdown/wrap from a secondary pane requires explicit
+user agreement and `--whole-session`. Never use that flag to bypass an
+unexpected refusal.
 
 ## 2. Pick the mode
 
@@ -60,7 +73,7 @@ Keeps the entry so the session can be brought back later.
 Final: the entry is removed and the tmux session killed.
 
 1. `amx reg show <entry>` and note the resume pointers: every session id
-   (`resumed_session_id`, `worker:` lines) with its cwd.
+   (`resumed_session_id`, `worker:` lines) with its harness and cwd.
 2. If the project's rulebook describes a journal, write the entry now,
    per its schema: what was done, where it landed (branch, PR,
    commits), what's left, decisions worth keeping, the resume pointers,

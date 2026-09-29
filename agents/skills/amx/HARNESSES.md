@@ -4,12 +4,14 @@ What differs between agent harnesses and generic commands for the manager. `amx`
 mechanical differences (launch and resume lines, transcript locations,
 pane detection); this page covers what you need to decide or know.
 
-A managed session uses one agent harness for all its agent panes, or is
-a generic command session. Non-agent command panes can accompany either.
-A manager can manage and spawn any supported harness. Use the worker's section
+A managed session can mix Claude, pi, Codex and generic command panes.
+The entry's harness is its primary/default; each agent worker records its
+own harness. A manager can manage and spawn any supported harness. Use the worker's section
 for models, launch and resume; use the manager's section for watch,
 task-list and subagent capabilities. Honor an explicit worker harness
-choice, otherwise default to the manager's harness.
+choice. For a new session, default to the manager's supported harness;
+for `--into`, default to the entry's harness. Keep the requested container
+and pane/window placement; ask before changing either.
 
 ## Claude Code
 
@@ -25,7 +27,7 @@ choice, otherwise default to the manager's harness.
   Effort follows size even on a strong model; a small task at low effort
   doesn't overthink. Blank or thin signal: strongest model, `medium`.
 - Resume keeps the model but not effort; `amx` replays the recorded
-  effort for the primary worker.
+  effort for each pane, including secondary workers.
 - Watch: `Monitor` on `amx watch --ignore-pane <your pane>`.
 - Session hooks: SessionStart and SessionEnd in Claude settings run
   `amx hook --harness claude`.
@@ -101,5 +103,10 @@ choice, otherwise default to the manager's harness.
 - Pause is a registry flag, not OS process suspension. Shutdown snapshots
   and stops the session. Rebuild restarts the recorded command, including
   its side effects; it does not restore application state.
-- Hooks, auto-registration, agent busy state and messaging are optional
-  capabilities, not requirements for core lifecycle operations.
+- Generic commands are opaque: hooks from a CLI inside a command wrapper
+  do not turn it into a registered chat agent. Do not type natural-language
+  messages into arbitrary command, shell or REPL panes.
+- Other agent CLIs can gain identity/resume capabilities through a small
+  harness adapter. Running them as commands requires no adapter or plugin.
+- Hooks, auto-registration and agent busy state are optional capabilities,
+  not requirements for core lifecycle operations.

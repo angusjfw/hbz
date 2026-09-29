@@ -198,6 +198,89 @@ def harness_of(entry):
     return (entry.get("harness") or "claude").strip()
 
 
+def parse_worker(value, default_harness="claude"):
+    """Worker values use shell quoting; legacy records inherit the entry harness."""
+    try:
+        # Old writers did not quote paths: apostrophes/backslashes were literal.
+        parts = shlex.split(value) if re.search(r"(?:^|\s)harness=", value) else value.split()
+    except ValueError as error:
+        die(f"invalid worker record: {error}")
+    if not parts:
+        die("empty worker record")
+    fields = dict(part.split("=", 1) for part in parts[1:] if "=" in part)
+    return dict(fields, session_id=parts[0], harness=fields.get("harness") or default_harness)
+
+
+def worker_records(entry):
+    return [parse_worker(value, harness_of(entry)) for value in entry.get_all("worker")]
+
+
+def worker_key(worker):
+    return worker["harness"], worker["session_id"]
+
+
+def format_worker(worker):
+    fields = [worker["session_id"]]
+    keys = ["harness", "cwd", "label", "model", "effort", "agent_args"]
+    keys += sorted(set(worker) - set(keys) - {"session_id"})
+    fields += [f"{key}={worker[key]}" for key in keys if worker.get(key) is not None]
+    if any("\n" in value or "\r" in value for value in fields):
+        die("worker fields must be single lines")
+    return shlex.join(fields)
+
+
+def drop_worker(entry, sid, harness=None):
+    matches = [(i, parse_worker(value, harness_of(entry))) for i, key, value in entry.fields()
+               if key == "worker" and parse_worker(value, harness_of(entry))["session_id"] == sid]
+    matches = [(i, worker) for i, worker in matches if not harness or worker["harness"] == harness]
+    if len({worker_key(worker) for _, worker in matches}) > 1:
+        die(f"worker ID {sid} is ambiguous in {entry.name}; pass --harness")
+    for i, _ in reversed(matches):
+        del entry.lines[i]
+    return bool(matches)
+
+
+def put_worker(entry, worker):
+    """Upsert one harness-scoped identity, preserving fields the caller didn't supply."""
+    if worker["harness"] not in AGENTS:
+        die(f"no agent adapter for worker harness '{worker['harness']}'")
+    if "agent_args" in worker:
+        agent_arguments(worker["agent_args"])
+    have = worker_records(entry)
+    old = next((w for w in have if worker_key(w) == worker_key(worker)), {})
+    merged = {**old, **worker}
+    label = merged.get("label")
+    if label and any(w.get("label") == label and worker_key(w) != worker_key(worker) for w in have):
+        die(f"label '{label}' is already used in {entry.name}")
+    value = format_worker(merged)
+    for i, key, raw in entry.fields():
+        if key == "worker" and worker_key(parse_worker(raw, harness_of(entry))) == worker_key(worker):
+            entry.lines[i] = f"worker: {value}"
+            return
+    entry.append("worker", value)
+
+
+def set_primary_harness(entry, harness):
+    if harness_of(entry) != harness:
+        # Freeze inherited worker harnesses before changing their default.
+        workers = worker_records(entry)
+        for worker in workers:
+            put_worker(entry, worker)
+        for key in ("model", "effort", "agent_args", "command"):
+            entry.unset(key)
+    entry.set("harness", harness)
+
+
+def agent_arguments(value):
+    try:
+        args = json.loads(value or "[]")
+    except ValueError:
+        die("agent_args must be a JSON array of strings")
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        die("agent_args must be a JSON array of strings")
+    return args
+
+
 def acquire_lock(timeout=LOCK_TIMEOUT):
     STATE.mkdir(parents=True, exist_ok=True)
     start = time.time()
@@ -310,9 +393,10 @@ def pane_rows(target=None):
                      "#{pane_index}", "#{pane_id}", "#{pane_pid}", "#{pane_tty}",
                      "#{pane_current_path}", "#{pane_title}", "#{pane_dead}", "#{pane_dead_status}",
                      "#{@amx_harness}", "#{@amx_session_id}", "#{@amx_agent_args}",
-                     "#{@amx_command}", "#{@amx_label}", "#{@amx_launch_cwd}"])
+                     "#{@amx_command}", "#{@amx_label}", "#{@amx_launch_cwd}",
+                     "#{@amx_model}", "#{@amx_effort}", "#{@amx_primary}"])
     args = ["list-panes", "-F", fmt]
-    args += ["-s", "-t", f"={target}"] if target else ["-a"]
+    args += ["-s", "-t", f"={target}:"] if target else ["-a"]
     r = tmux(*args, check=False)
     if r.returncode != 0:
         if target:
@@ -325,7 +409,8 @@ def pane_rows(target=None):
                          pane=int(f[4]), pane_id=f[5], pane_pid=int(f[6]),
                          tty=f[7].replace("/dev/", ""), cwd=f[8], title=f[9], dead=f[10] == "1",
                          exit_status=f[11], managed_harness=f[12], managed_id=f[13], agent_args=f[14],
-                         managed_command=f[15], managed_label=f[16], launch_cwd=f[17]))
+                         managed_command=f[15], managed_label=f[16], launch_cwd=f[17],
+                         managed_model=f[18], managed_effort=f[19], managed_primary=f[20]))
     return rows
 
 
@@ -549,8 +634,9 @@ def codex_pane_id(row):
         return prefix
     ids = codex_ids(row["cwd"], prefix)
     # A known full launch/resume ID can resolve an otherwise unpersisted thread.
-    if row.get("managed_id", "").startswith(prefix) and UUID_RE.fullmatch(row["managed_id"]):
-        ids.add(row["managed_id"])
+    known_id = row.get("managed_id") or ""
+    if known_id.startswith(prefix) and UUID_RE.fullmatch(known_id):
+        ids.add(known_id)
     return next(iter(ids)) if len(ids) == 1 else None
 
 
@@ -613,6 +699,45 @@ def store_by_pane(session):
 
 # ---------------------------------------------------------------- panes
 
+def primary_pane(row, rows):
+    if row.get("managed_primary") in ("0", "1"):
+        return row["managed_primary"] == "1"
+    if row.get("managed_label"):
+        return False
+    marked = [r for r in rows if r.get("managed_primary") == "1"]
+    if marked:
+        return row["pane_id"] == marked[0]["pane_id"]
+    first_window = min((r["window"] for r in rows), default=None)
+    return row["window"] == first_window and row["pane"] == 0
+
+
+def previous_worker(workers, pane):
+    """Recover settings by bound identity or unique label, never infer an ID."""
+    harness = pane["kind"]
+    for sid in (pane.get("session_id"), pane.get("managed_id")):
+        if (harness, sid) in workers:
+            return workers[harness, sid]
+    label = pane.get("label") or pane.get("managed_label")
+    matches = [w for w in workers.values() if w["harness"] == harness and label and w.get("label") == label]
+    return matches[0] if len(matches) == 1 else {}
+
+
+def unresolved_workers(workers, panes):
+    """Last-known records bound to unresolved agents or labelled recovery shells."""
+    retained = {}
+    for pane in panes:
+        worker = {}
+        if pane["kind"] in AGENTS and not pane["session_id"]:
+            worker = previous_worker(workers, pane)
+        elif pane["kind"] == "idle" and pane.get("label"):
+            matches = [w for w in workers.values() if w.get("label") == pane["label"]]
+            if len(matches) == 1:
+                worker = matches[0]
+        if worker:
+            retained[worker_key(worker)] = pane
+    return retained
+
+
 def inspect_panes(session, reg=None):
     reg = reg or Registry.load()
     rows = pane_rows(session)
@@ -620,14 +745,7 @@ def inspect_panes(session, reg=None):
     entries = reg.by_tmux_session(session)
     entry = entries[0] if len(entries) == 1 else None
     st = store_by_pane(session)
-    first_window = min((r["window"] for r in rows), default=None)
-    workers = {}
-    if entry:
-        for w in entry.get_all("worker"):
-            parts = w.split()
-            if parts:
-                kv = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
-                workers[parts[0]] = kv
+    workers = {worker_key(w): w for w in worker_records(entry)} if entry else {}
     out = []
     tty_of = {pid: tty for pid, _, tty, _ in procs}
     for r in rows:
@@ -641,17 +759,22 @@ def inspect_panes(session, reg=None):
         own = next((a for pid, _, _, a in procs if pid == r["pane_pid"]), "")
         if classify(own) in AGENTS or (not fg and not is_shell(own)):
             fg = own
-        kind = r.get("managed_harness") or classify(fg)
+        managed = r.get("managed_harness")
+        # A tool/subagent child cannot contradict an opaque managed parent's type.
+        observed = classify(own) if managed in AGENTS and not is_shell(own) else classify(fg)
+        conflict = managed in AGENTS and observed in AGENTS and managed != observed
+        kind = observed if conflict else (managed or observed)
         if kind == "command":
             kind, fg = "cmd", r.get("managed_command") or fg
         sid, src = None, None
-        primary = r["window"] == first_window and r["pane"] == 0
+        primary = primary_pane(r, rows)
+        primary_entry = entry if primary and entry and harness_of(entry) == kind else None
         if kind in AGENTS:
             store_sid = st.get(r["pane_id"], (None, None))[0] if kind != "codex" else None
-            known_sid = (entry.get("resumed_session_id") if primary and entry else None) or r.get("managed_id", "")
+            known_sid = (r.get("managed_id", "") if not conflict else "") or (primary_entry.get("resumed_session_id") if primary_entry else None)
             if kind == "codex" and not known_sid:
                 prefix = codex_title_prefix(r.get("title", ""))
-                matches = [wid for wid in workers if prefix and wid.startswith(prefix)]
+                matches = [wid for h, wid in workers if h == kind and prefix and wid.startswith(prefix)]
                 if len(matches) == 1:
                     known_sid = matches[0]
             native_sid = codex_pane_id(dict(r, managed_id=known_sid)) if kind == "codex" else None
@@ -659,22 +782,31 @@ def inspect_panes(session, reg=None):
                 sid, src = native_sid, "native-title"
             elif kind == "codex" and codex_title_prefix(r.get("title", "")):
                 pass  # Unresolved/ambiguous current title must not fall back to an old ID.
-            elif kind != "codex" and primary and entry and entry.get("resumed_session_id"):
-                sid, src = entry.get("resumed_session_id"), "registry"
-            elif r.get("managed_id"):
+            elif r.get("managed_id") and not conflict:
                 sid, src = r["managed_id"], "pane"
-            elif store_sid and store_sid in workers:
+            elif kind != "codex" and primary_entry and primary_entry.get("resumed_session_id") and not conflict:
+                sid, src = primary_entry.get("resumed_session_id"), "registry"
+            elif store_sid and (kind, store_sid) in workers:
                 sid, src = store_sid, "registry"
             elif store_sid:
                 sid, src = store_sid, "store"
             elif kind in ("claude", "pi") and argv_session_id(fg):
                 sid = argv_session_id(fg)
-                src = "registry" if sid in workers else "argv"
+                src = "registry" if (kind, sid) in workers else "argv"
             elif kind == "codex" and (match := re.search(r"\bcodex\s+resume\s+(" + UUID_RE.pattern + r")\b", fg)):
                 sid, src = match.group(1), "argv"
+        saved = primary_entry.as_dict() if primary_entry else previous_worker(workers, dict(r, kind=kind, session_id=sid))
+        if conflict:
+            saved = {}
+        label = r.get("managed_label") or saved.get("label")
+        name = (entry.name if primary else f"{entry.name}-{label}" if label else None) if entry else None
         out.append(dict(r, kind=kind, command=fg, session_id=sid, id_source=src,
-                        primary=primary, state=st.get(r["pane_id"], (None, None))[1],
-                        label=r.get("managed_label") or (workers.get(sid, {}).get("label") if sid else None)))
+                        primary=primary, state=st.get(r["pane_id"], (None, None))[1], label=label,
+                        name=name or r["pane_id"], entry=entry.name if entry else None,
+                        entry_harness=harness_of(entry) if entry else None, harness_conflict=conflict,
+                        model=r.get("managed_model") or saved.get("model"),
+                        effort=r.get("managed_effort") or saved.get("effort"),
+                        agent_args=r.get("agent_args") or saved.get("agent_args") or "[]"))
     return out
 
 
@@ -716,7 +848,8 @@ def cmd_reg(a):
             for k in a.keys:
                 if "=" in k:
                     key, match = k.split("=", 1)
-                    if not b.unset(key, match):
+                    removed = drop_worker(b, match) if key == "worker" and " " not in match else b.unset(key, match)
+                    if not removed:
                         die(f"no '{key}' line matching '{match}' in {a.id}")
                 else:
                     b.unset(k)
@@ -726,11 +859,17 @@ def cmd_reg(a):
         elif op == "worker":
             b = reg.block(a.id)
             if a.action == "add":
-                if any((v.split() or [""])[0] == a.session_id for v in b.get_all("worker")):
-                    return
-                extra = " ".join(a.extra)
-                b.append("worker", f"{a.session_id}{' ' + extra if extra else ''}")
-            elif not b.unset("worker", a.session_id):
+                extra = {}
+                for item in a.extra:
+                    key, assign_op, value = parse_assignment(item)
+                    if assign_op != "=" or key == "session_id":
+                        die("worker fields use key=value; session ID is positional")
+                    extra[key] = value
+                if a.harness and extra.get("harness", a.harness) != a.harness:
+                    die("conflicting worker harnesses")
+                put_worker(b, dict(extra, session_id=a.session_id,
+                                   harness=a.harness or extra.get("harness") or harness_of(b)))
+            elif not drop_worker(b, a.session_id, a.harness):
                 print(f"no worker line for {a.session_id} in {a.id}; nothing to drop", file=sys.stderr)
                 return
             if a.id != "@header":
@@ -749,21 +888,55 @@ def apply_assign(block, assigns):
 
 # ---------------------------------------------------------------- commands: whoami, panes
 
-def cmd_whoami(a):
-    pane = whoami_pane()
-    row = next(p for p in pane_rows() if p["pane_id"] == pane)
-    entries = Registry.load().by_tmux_session(row["session"])
-    info = dict(pane=pane, address=f"{row['session']}:{row['window']}.{row['pane']}",
-                session=row["session"], cwd=row["cwd"],
-                entry=entries[0].name if len(entries) == 1 else "",
-                harness=harness_of(entries[0]) if len(entries) == 1 else "")
-    if len(entries) > 1:
-        info["error"] = f"several entries have tmux_session {row['session']}: " + ", ".join(e.name for e in entries)
-    if a.json:
+def pane_identity(pane):
+    """Shared routing view. Transport availability must be checked at delivery."""
+    return dict(name=pane["name"], pane_id=pane["pane_id"], tmux_session=pane["session"],
+                address=f"{pane['session']}:{pane['window']}.{pane['pane']}",
+                entry=pane["entry"], entry_harness=pane["entry_harness"],
+                harness=pane["kind"] if pane["kind"] in AGENTS else "command",
+                session_id=pane["session_id"], cwd=pane["cwd"], primary=pane["primary"],
+                label=pane["label"], model=pane["model"], effort=pane["effort"],
+                agent_args=agent_arguments(pane["agent_args"]), dead=pane.get("dead", False),
+                harness_conflict=pane["harness_conflict"])
+
+
+def resolve_target(target):
+    """Resolve an amx name or explicit pane ID. Never guess between aliases."""
+    reg = Registry.load()
+    rows = pane_rows()
+    explicit = re.fullmatch(r"%\d+", target)
+    sessions = {r["session"] for r in rows if not explicit or r["pane_id"] == target}
+    matches = []
+    for session in sorted(sessions):
+        entries = reg.by_tmux_session(session)
+        for pane in inspect_panes(session, reg):
+            if (pane["pane_id"] if explicit else pane["name"]) == target:
+                if len(entries) > 1:
+                    die(f"several entries have tmux_session {session}; fix the registry first")
+                matches.append(pane_identity(pane))
+    if len(matches) > 1:
+        die(f"ambiguous target '{target}'; use a pane ID: " + ", ".join(p["pane_id"] for p in matches))
+    if not matches:
+        die(f"no live pane for '{target}'; use an amx name or explicit %pane ID")
+    return matches[0]
+
+
+def print_identity(info, as_json):
+    if as_json:
         print(json.dumps(info))
     else:
-        for k, v in info.items():
-            print(f"{k}={v}")
+        for key, value in info.items():
+            print(f"{key}={value if value is not None else ''}")
+
+
+def cmd_resolve(a):
+    print_identity(resolve_target(a.target), a.json)
+
+
+def cmd_whoami(a):
+    info = resolve_target(whoami_pane())
+    info.update(pane=info["pane_id"], session=info["tmux_session"])
+    print_identity(info, a.json)
 
 
 def cmd_panes(a):
@@ -821,7 +994,6 @@ def write_resume_state(session, out, reg=None):
     entry = entries[0] if len(entries) == 1 else None
     name = entry.name if entry else a.session
     harness = harness_of(entry) if entry else "claude"
-    effort = entry.get("effort") if entry else None
     panes = inspect_panes(a.session, reg)
     lines = [f"# Resume state: {name}", "", f"shutdown: {now_str()}", f"harness: {harness}", ""]
     missing = []
@@ -832,29 +1004,29 @@ def write_resume_state(session, out, reg=None):
         lines += [f"## window {w}: {wname}", f"layout: {layout}", ""]
         for p in ps:
             cwd = (p.get("launch_cwd") if p["kind"] == "cmd" else None) or p["cwd"]
-            lines += [f"### pane {p['pane']}", f"cwd: {cwd}"]
+            lines += [f"### pane {p['pane']}", f"cwd: {cwd}", f"primary: {str(p['primary']).lower()}"]
             if p["kind"] in AGENTS:
+                args = agent_arguments(p.get("agent_args"))
                 if not p["session_id"]:
                     missing.append(f"window {w} pane {p['pane']} ({p['kind']}, {p['cwd']})")
                     lines.append("command: ")
                 else:
-                    e = effort if (p["primary"] and p["kind"] in ("claude", "codex")) else None
                     nm = name if p["primary"] else (f"{name}-{p['label']}" if p["label"] else None)
-                    args = json.loads(p.get("agent_args") or (entry.get("agent_args") if entry and p["primary"] else None) or "[]")
-                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm, args)}")
-                    if args:
-                        lines.append(f"agent_args: {json.dumps(args)}")
-                    lines.append(f"harness: {p['kind']}")
+                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], p.get('effort'), nm, args)}")
                     lines.append(f"session_id: {p['session_id']}")
-                    if p["label"]:
-                        lines.append(f"label: {p['label']}")
+                lines.append(f"harness: {p['kind']}")
+                for key in ("model", "effort"):
+                    if p.get(key):
+                        lines.append(f"{key}: {p[key]}")
+                if args:
+                    lines.append(f"agent_args: {json.dumps(args)}")
             elif p["kind"] == "cmd":
                 lines.append(f"command: {p['command']}")
                 lines.append("harness: command")
-                if p["label"]:
-                    lines.append(f"label: {p['label']}")
             else:
                 lines.append("command:")
+            if p["label"]:
+                lines.append(f"label: {p['label']}")
             lines.append("")
     out = Path(a.out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -907,11 +1079,13 @@ def mint_id():
         return str(uuid.uuid4())
 
 
-def start_pane(pane_id, cwd, line, harness, sid, agent_args=(), command="", label=""):
+def start_pane(pane_id, cwd, line, harness, sid, agent_args=(), command="", label="",
+               model=None, effort=None, primary=False):
     """tmux owns the command lifetime; a failed launch stays visible, with its status."""
     tmux("set-option", "-p", "-t", pane_id, "remain-on-exit", "on")
     for key, value in (("harness", harness), ("session_id", sid), ("agent_args", json.dumps(list(agent_args))),
-                       ("command", command), ("label", label), ("launch_cwd", cwd)):
+                       ("command", command), ("label", label), ("launch_cwd", cwd),
+                       ("model", model or ""), ("effort", effort or ""), ("primary", "1" if primary else "0")):
         tmux("set-option", "-p", "-t", pane_id, f"@amx_{key}", value)
     env = ["-e", f"AMX_STATE_DIR={STATE}", "-e", f"PATH={os.environ.get('PATH', os.defpath)}"]
     for key in ("AMX_AGENT_STATUS_DIR", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "CODEX_HOME", "CODEX_SQLITE_HOME"):
@@ -1001,7 +1175,7 @@ def cmd_spawn(a):
     brief = write_brief(a.id, a.brief_file)
     line = launch_line(a.harness, sid, a.model, a.effort, a.id, brief, a.agent_arg, a.command)
     tmux("new-session", "-d", "-s", a.id, "-n", a.id, "-c", cwd)
-    pane_id = tmux("list-panes", "-t", f"={a.id}", "-F", "#{pane_id}").stdout.split()[0]
+    pane_id = tmux("list-panes", "-t", f"={a.id}:", "-F", "#{pane_id}").stdout.split()[0]
 
     fields = [f"harness={a.harness}", f"tmux_session={a.id}", f"cwd={cwd}", f"agent_args={json.dumps(a.agent_arg)}"]
     if sid:
@@ -1015,7 +1189,8 @@ def cmd_spawn(a):
         b = reg.new(a.id)
         apply_assign(b, ["started=now"] + fields + ["last_touched=now"])
     mutate(fn)
-    start_pane(pane_id, cwd, line, a.harness, sid, a.agent_arg, a.command or "")
+    start_pane(pane_id, cwd, line, a.harness, sid, a.agent_arg, a.command or "",
+               model=a.model, effort=a.effort, primary=True)
     print(f"session={a.id}\npane={pane_id}\nharness={a.harness}")
     report_start(pane_id, a.timeout)
     if a.harness == "codex":
@@ -1037,8 +1212,6 @@ def spawn_into(a):
     if not has_session(a.into):
         die(f"tmux session '{a.into}' isn't running")
     harness = a.harness or harness_of(entry)
-    if harness != "command" and harness != harness_of(entry):
-        die("agent panes must use the session's harness; use a separate session")
     if harness == "command" and not a.command:
         die("command panes need --command")
     if not a.label or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", a.label):
@@ -1049,7 +1222,7 @@ def spawn_into(a):
     name = f"{entry.name}-{a.label}"
     if harness == "pi" and "--session-control" in a.agent_arg and pi_alias_live(name):
         die(f"pi session name '{name}' is in use by a running session (~/.pi/session-control/{name}.alias)")
-    if (any(f"label={a.label}" in w.split() for w in entry.get_all("worker"))
+    if (any(w.get("label") == a.label for w in worker_records(entry))
             or any(p.get("managed_label") == a.label for p in pane_rows(a.into))):
         die(f"label '{a.label}' is already used by a pane in {entry.name}")
     sid = mint_id() if harness in ("claude", "pi") else ""
@@ -1059,16 +1232,24 @@ def spawn_into(a):
         r = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={a.into}:", "-n", a.window, "-c", cwd)
     else:
         target = a.split or tmux("display-message", "-p", "-t", f"={a.into}:", "#{pane_id}").stdout.strip()
+        owner = tmux("display-message", "-p", "-t", target, "#{session_name}").stdout.strip()
+        if owner != a.into:
+            die(f"split target {target} is not in requested session {a.into}")
         r = tmux("split-window", "-d", "-P", "-F", "#{pane_id}", "-t", target, "-c", cwd)
     pane_id = r.stdout.strip()
 
     def fn(reg):
         b = reg.block(entry.name)
+        b.unset("auto")  # an attached worker must not disappear when the primary ends
         if sid:
-            b.append("worker", f"{sid} cwd={cwd} label={a.label}")
+            worker = dict(session_id=sid, harness=harness, cwd=cwd, label=a.label,
+                          agent_args=json.dumps(a.agent_arg))
+            worker.update({k: v for k, v in (("model", a.model), ("effort", a.effort)) if v})
+            put_worker(b, worker)
         b.set("last_touched", now_str())
     mutate(fn)
-    start_pane(pane_id, cwd, line, harness, sid, a.agent_arg, a.command or "", a.label)
+    start_pane(pane_id, cwd, line, harness, sid, a.agent_arg, a.command or "", a.label,
+               model=a.model, effort=a.effort)
     print(f"pane={pane_id}\nname={name}\nharness={harness}")
     report_start(pane_id, a.timeout)
     if harness == "codex":
@@ -1085,6 +1266,9 @@ def cmd_rebuild(a):
     reg = Registry.load()
     entry = reg.block(a.id)
     rs_path = entry.get("resume_state")
+    if not rs_path and worker_records(entry):
+        die(f"{a.id} has worker records but no resume_state; recover its per-pane layout and commands "
+            "before rebuilding, rather than silently restoring only the primary")
     if rs_path:
         rs = parse_resume_state(Path(rs_path).expanduser().read_text())
     elif harness_of(entry) == "command" and entry.get("command") and entry.get("cwd"):
@@ -1102,7 +1286,7 @@ def cmd_rebuild(a):
     if has_session(session):
         die(f"tmux session '{session}' already exists; not overwriting")
     default_h = rs["fields"].get("harness") or harness_of(entry)
-    effort = entry.get("effort")
+    saved_workers = {worker_key(w): w for w in worker_records(entry)}
 
     plan = []  # (window, [(pane, cwd, command)])
     problems = []
@@ -1115,8 +1299,11 @@ def cmd_rebuild(a):
             sid = p.get("session_id")
             h = p.get("harness") or default_h
             cmd = p.get("command", "")
-            primary = wi == 0 and p is w["panes"][0]
-            args = json.loads(p.get("agent_args") or (entry.get("agent_args") if primary else None) or "[]")
+            primary = p["primary"] == "true" if "primary" in p else wi == 0 and p is w["panes"][0]
+            saved = entry.as_dict() if primary and h == harness_of(entry) else saved_workers.get((h, sid), {})
+            args = agent_arguments(p.get("agent_args") or saved.get("agent_args"))
+            effort = p.get("effort") or saved.get("effort")
+            model = p.get("model") or saved.get("model")
             if not sid and cmd and p.get("harness") in AGENTS:
                 problems.append(f"window {w['index']} pane {p['index']}: {h} command has no session_id; "
                                 "record its native ID, or leave the pane as a shell and start a fresh agent explicitly")
@@ -1128,10 +1315,11 @@ def cmd_rebuild(a):
                     cmd = resume_line("pi", sid, agent_args=args)
                 elif h in ("claude", "codex"):
                     nm = entry.name if primary else (f"{entry.name}-{p['label']}" if p.get("label") else None)
-                    cmd = resume_line(h, sid, effort if primary else None, nm, args)
+                    cmd = resume_line(h, sid, effort, nm, args)
                 else:
                     problems.append(f"window {w['index']} pane {p['index']}: no resume adapter for {h}")
-            panes.append((dict(p, harness=h, agent_args=json.dumps(args)), cwd, cmd))
+            panes.append((dict(p, harness=h, agent_args=json.dumps(args), effort=effort,
+                               model=model, primary=primary), cwd, cmd))
         plan.append((w, panes))
     if problems:
         die("not rebuilding; fix these first:\n  " + "\n  ".join(problems))
@@ -1153,12 +1341,15 @@ def cmd_rebuild(a):
                 tmux("select-layout", "-t", f"={session}:{widx}", w["layout"])
             ids = tmux("list-panes", "-t", f"={session}:{widx}", "-F", "#{pane_id}").stdout.split()
             for pid, (p, cwd, cmd) in zip(ids, panes):
+                tmux("set-option", "-p", "-t", pid, "@amx_primary", "1" if p["primary"] else "0")
+                tmux("set-option", "-p", "-t", pid, "@amx_label", p.get("label", ""))
                 if cmd and p.get("session_id"):
-                    start_pane(pid, cwd, cmd, p["harness"], p["session_id"], json.loads(p["agent_args"]), label=p.get("label", ""))
+                    start_pane(pid, cwd, cmd, p["harness"], p["session_id"], agent_arguments(p["agent_args"]),
+                               label=p.get("label", ""), model=p.get("model"), effort=p.get("effort"), primary=p["primary"])
                     wait_for_start(pid, 30)
                 elif cmd:
                     start_pane(pid, cwd, launch_line("command", "", command=cmd), "command", "",
-                               command=cmd, label=p.get("label", ""))
+                               command=cmd, label=p.get("label", ""), primary=p["primary"])
                     wait_for_start(pid, 30)
     except CmError as error:
         failure = STATE / "snapshots" / f"{a.id}-rebuild-failed.txt"
@@ -1174,6 +1365,7 @@ def cmd_rebuild(a):
     def fn(reg):
         b = reg.block(a.id)
         b.set("tmux_session", session)
+        sync_workers(b, inspect_panes(session, reg))
         for k in ("shutdown", "snapshot", "resume_state", "paused", "wrap_requested"):
             b.unset(k)
         b.set("last_touched", now_str())
@@ -1234,20 +1426,36 @@ def live_entry(reg, name):
     return e, ts
 
 
+def pane_worker(pane):
+    worker = dict(session_id=pane["session_id"], harness=pane["kind"], cwd=pane["cwd"])
+    worker.update({key: pane[key] for key in ("label", "model", "effort", "agent_args") if pane.get(key) is not None})
+    return worker
+
+
 def sync_workers(b, panes):
-    """Record current primary identity and non-primary agent panes that have ids."""
+    """Refresh harness-scoped identity and launch settings, including existing workers."""
+    if any(p.get("harness_conflict") for p in panes):
+        die("pane harness metadata conflicts with its process; resolve it before saving identities")
+    known = [(p["kind"], p["session_id"]) for p in panes if p["kind"] in AGENTS and p["session_id"]]
+    if len(known) != len(set(known)):
+        die("the same agent conversation is bound to several panes; resolve duplicate identities first")
     primary = next((p for p in panes if p["primary"]), None)
-    if primary and primary["session_id"]:
-        b.set("resumed_session_id", primary["session_id"])
-    elif primary and primary["kind"] in AGENTS:
-        b.unset("resumed_session_id")
-    running = {p["session_id"]: p for p in panes if p["session_id"] and not p["primary"]}
-    have = {(v.split() or [""])[0] for v in b.get_all("worker")}
-    for wid in have - set(running):
-        b.unset("worker", wid)
-    for sid in set(running) - have:
-        p = running[sid]
-        b.append("worker", f"{sid} cwd={p['cwd']}" + (f" label={p['label']}" if p["label"] else ""))
+    if primary and primary["kind"] in AGENTS:
+        set_primary_harness(b, primary["kind"])
+        if primary["session_id"]:
+            b.set("resumed_session_id", primary["session_id"])
+        else:
+            b.unset("resumed_session_id")
+    running = {(p["kind"], p["session_id"]): p for p in panes
+               if p["kind"] in AGENTS and p["session_id"] and not p["primary"]}
+    previous = {worker_key(w): w for w in worker_records(b)}
+    updated = [dict(previous_worker(previous, p), **pane_worker(p)) for p in running.values()]
+    unresolved = unresolved_workers(previous, panes)
+    for worker in previous.values():
+        if worker_key(worker) not in running and worker_key(worker) not in unresolved:
+            drop_worker(b, worker["session_id"], worker["harness"])
+    for worker in updated:
+        put_worker(b, worker)
 
 
 def record_pane_ids(entry_id):
@@ -1258,27 +1466,53 @@ def record_pane_ids(entry_id):
     return {p["pane_id"]: p["session_id"] for p in panes if p["session_id"]}
 
 
+def clear_pane_settings(pane):
+    """Launch options belong to an adapter, not to the pane that once ran it."""
+    for key, value in (("model", ""), ("effort", ""), ("agent_args", "[]")):
+        tmux("set-option", "-p", "-t", pane, f"@amx_{key}", value)
+
+
 def cmd_identify(a):
     if bool(a.pane) != bool(a.session_id):
         die("identify needs both --pane and --session-id for an explicit identity")
     if a.pane:
         reg = Registry.load()
         entry, session = live_entry(reg, a.id)
-        pane = next((p for p in inspect_panes(session, reg) if p["pane_id"] == a.pane), None)
+        panes = inspect_panes(session, reg)
+        pane = next((p for p in panes if p["pane_id"] == a.pane), None)
         if not pane or pane["kind"] not in AGENTS:
             die(f"{a.pane} is not an agent pane in {a.id}")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.session_id):
             die("invalid session ID")
         if pane["kind"] in ("claude", "codex") and not UUID_RE.fullmatch(a.session_id):
             die(f"{pane['kind']} needs a full UUID")
+        if any(p["pane_id"] != a.pane and (p["kind"], p["session_id"]) == (pane["kind"], a.session_id) for p in panes):
+            die("this conversation ID is already bound to another pane")
+        old = previous_worker({worker_key(w): w for w in worker_records(entry)},
+                              dict(pane, kind=pane.get("managed_harness") or pane["kind"],
+                                   session_id=pane.get("managed_id") or pane["session_id"])) if not pane["primary"] else {}
         prefix = codex_title_prefix(pane.get("title", "")) if pane["kind"] == "codex" else None
         if prefix and not a.session_id.startswith(prefix):
             die("session ID does not match this pane's native Codex title")
+        if pane.get("harness_conflict") or (pane["primary"] and harness_of(entry) != pane["kind"]):
+            clear_pane_settings(a.pane)
+        tmux("set-option", "-p", "-t", a.pane, "@amx_harness", pane["kind"])
         tmux("set-option", "-p", "-t", a.pane, "@amx_session_id", a.session_id)
         if pane.get("label"):
             tmux("set-option", "-p", "-t", a.pane, "@amx_label", pane["label"])
-        if pane["primary"]:
-            mutate(lambda current: current.block(a.id).set("resumed_session_id", a.session_id))
+        def bind_identity(current):
+            block = current.block(a.id)
+            if pane["primary"]:
+                set_primary_harness(block, pane["kind"])
+                block.set("resumed_session_id", a.session_id)
+            elif old:
+                worker = dict(old, harness=pane["kind"], session_id=a.session_id)
+                if old["harness"] != pane["kind"]:
+                    for key in ("model", "effort", "agent_args"):
+                        worker.pop(key, None)
+                drop_worker(block, old["session_id"], old["harness"])
+                put_worker(block, worker)
+        mutate(bind_identity)
     ids = record_pane_ids(a.id)
     for pane, sid in ids.items():
         print(f"{pane}\t{sid}")
@@ -1321,14 +1555,32 @@ def append_log(rec):
         f.write(json.dumps(rec) + "\n")
 
 
+def entry_keys(block):
+    keys = [(harness_of(block), block.get("resumed_session_id"))] if block.get("resumed_session_id") else []
+    return keys + [worker_key(worker) for worker in worker_records(block)]
+
+
 def entry_ids(block):
-    ids = [block.get("resumed_session_id")] if block.get("resumed_session_id") else []
-    return ids + [(w.split() or [""])[0] for w in block.get_all("worker")]
+    return [sid for _, sid in entry_keys(block)]
+
+
+def entry_harnesses(block):
+    harnesses = {harness_of(block), *(w["harness"] for w in worker_records(block))}
+    session = block.get("tmux_session")
+    if session and has_session(session):
+        harnesses.update(r["managed_harness"] for r in pane_rows(session) if r.get("managed_harness") in HARNESSES)
+    elif block.get("resume_state"):
+        try:
+            saved = parse_resume_state(Path(block.get("resume_state")).expanduser().read_text())
+            harnesses.update(p["harness"] for w in saved["windows"] for p in w["panes"] if p.get("harness") in HARNESSES)
+        except OSError:
+            pass
+    return harnesses
 
 
 def log_removed(block, how):
     append_log({"event": "removed", "how": how, "entry": block.name, "tracked": not block.get("auto"),
-                "session_ids": entry_ids(block), "fields": block.as_dict()})
+                "session_ids": entry_ids(block), "session_keys": entry_keys(block), "fields": block.as_dict()})
 
 
 def cmd_pause(a):
@@ -1355,9 +1607,24 @@ def cmd_pause(a):
     print(f"{a.id} {'paused' if on else 'unpaused'}")
 
 
+def guard_secondary(entry, whole_session=False):
+    session = entry.get("tmux_session")
+    if not session or whole_session:
+        return
+    own = my_pane_quiet()
+    if not own:
+        return  # a manager outside tmux can still operate on a named container
+    rows = pane_rows(session)
+    row = next((r for r in rows if r["pane_id"] == own), None)
+    if row and not primary_pane(row, rows):
+        die(f"{own} is a secondary pane in {entry.name}; this operation affects the whole session. "
+            "Finish only this worker instead, or obtain user agreement and pass --whole-session.")
+
+
 def cmd_shutdown(a):
     reg = Registry.load()
     e, ts = live_entry(reg, a.id)
+    guard_secondary(e, a.whole_session)
     snap = STATE / "snapshots" / f"{a.id}.txt"
     snapshot_session(ts, snap, 500)
     rs, missing, panes = write_resume_state(ts, STATE / "resume" / f"{a.id}.md", reg)
@@ -1394,6 +1661,7 @@ def cmd_wrap(a):
     live = bool(ts) and has_session(ts)
     snap = None
     if live:
+        guard_secondary(e, a.whole_session)
         snap = STATE / "snapshots" / f"{a.id}.txt"
         panes = snapshot_session(ts, snap, 500)
 
@@ -1428,11 +1696,12 @@ def entry_state(d):
 def cmd_ls(a):
     for e in Registry.load().entries():
         d = e.as_dict()
-        if (a.harness and harness_of(e) != a.harness) or (d.get("auto") and not a.all):
+        if (a.harness and a.harness not in entry_harnesses(e)) or (d.get("auto") and not a.all):
             continue
         busy = store(d["tmux_session"]).get("state", "") if d.get("tmux_session") else ""
         print("\t".join([e.name, harness_of(e), entry_state(d) + (" auto" if d.get("auto") else ""),
-                         busy or "-", d.get("ticket") or "-", d.get("cwd") or "-"]))
+                         busy or "-", d.get("ticket") or "-", d.get("cwd") or "-",
+                         ",".join(sorted(entry_harnesses(e)))]))
 
 
 def read_log():
@@ -1461,21 +1730,27 @@ def cmd_log(a):
     tracked = set()
     for r in recs:
         if r.get("event") == "removed" and r.get("tracked"):
-            tracked.update(r.get("session_ids") or [])
+            fields = r.get("fields") or {}
+            if "session_keys" in r:
+                tracked.update(tuple(key) for key in r["session_keys"])
+            else:
+                h = fields.get("harness") or "claude"
+                tracked.update((h, sid) for sid in r.get("session_ids") or [])
+                tracked.update(worker_key(parse_worker(w, h)) for w in fields.get("worker", []))
         elif r.get("tracked"):
-            tracked.add(r.get("session_id"))
+            tracked.add((r.get("harness") or "claude", r.get("session_id")))
     reg = Registry.load()
-    current = {sid for e in reg.entries() for sid in entry_ids(e)}
+    current = {key for e in reg.entries() for key in entry_keys(e)}
     for e in reg.entries():
         if not e.get("auto"):
-            tracked.update(entry_ids(e))
+            tracked.update(entry_keys(e))
     last = {}
     for r in recs:
         if r.get("session_id") and r.get("event") in ("start", "end"):
-            last[r["session_id"]] = r
+            last[(r.get("harness") or "claude", r["session_id"])] = r
     rows = sorted(last.values(), key=lambda r: r["ts"], reverse=True)
     if a.untracked:
-        rows = [r for r in rows if r["session_id"] not in tracked and r["session_id"] not in current
+        rows = [r for r in rows if (r.get("harness") or "claude", r["session_id"]) not in tracked | current
                 and r.get("tmux_session") and not r.get("nested") and not is_shared(r["tmux_session"], reg)]
     for r in rows[:a.limit]:
         print("\t".join(str(r.get(k) or "-") for k in
@@ -1576,50 +1851,65 @@ def handle_hook(harness, ev):
            "pane": pane, "branch": git_branch(cwd), "source": ev.get("source") or ev.get("reason")}
     if nested:
         rec["nested"] = True
-    if not row or not sid or nested or is_shared(session):
+    if not row or not sid or nested or is_shared(session) or row.get("managed_harness") == "command":
         append_log(rec)
         return
-    first = min(r["window"] for r in rows if r["session"] == session)
-    primary = row["window"] == first and row["pane"] == 0
+    session_rows = [r for r in rows if r["session"] == session]
+    primary = primary_pane(row, session_rows)
     reason = ev.get("reason") or ""
+    changed_harness = bool(row.get("managed_harness")) and row["managed_harness"] != harness
 
     def fn(reg):
         entries = reg.by_tmux_session(session)
         if len(entries) > 1:
             return None
         b = entries[0] if entries else None
-        if b and harness_of(b) != harness:
-            return b.name
         if event == "start":
             if b is None:
-                if reg.entry(session):
-                    return None  # a shut-down entry of that name; reconcile reports it
+                if not primary or reg.entry(session):
+                    return None  # don't guess a parent's harness or revive a shut-down entry
                 b = reg.new(session)
                 apply_assign(b, ["started=now", "auto=true", f"harness={harness}", f"tmux_session={session}",
                                  f"cwd={cwd}"])
             if primary:
-                if b.get("resumed_session_id") != sid:
-                    b.set("resumed_session_id", sid)
-            elif sid not in entry_ids(b):
-                b.append("worker", f"{sid} cwd={cwd}")
+                set_primary_harness(b, harness)
+                b.set("resumed_session_id", sid)
+            else:
+                old_key = (row.get("managed_harness") or harness, row.get("managed_id"))
+                old = next((w for w in worker_records(b) if worker_key(w) == old_key), {})
+                if old and old_key != (harness, sid):
+                    drop_worker(b, old["session_id"], old["harness"])
+                settings = {"model", "effort", "agent_args"}
+                worker = {key: value for key, value in old.items() if not changed_harness or key not in settings}
+                worker.update(session_id=sid, harness=harness, cwd=cwd)
+                for key, source in (("label", "managed_label"), ("model", "managed_model"),
+                                    ("effort", "managed_effort"), ("agent_args", "agent_args")):
+                    if row.get(source) and not (changed_harness and key in settings):
+                        worker[key] = row[source]
+                put_worker(b, worker)
             b.set("last_touched", now_str())
         elif b and reason != "clear":
-            if primary and b.get("auto") and b.get("resumed_session_id") == sid:
-                log_removed(b, "auto-end")
-                reg.remove(b.name)
-                return b.name
+            if primary and harness_of(b) == harness and b.get("auto") and b.get("resumed_session_id") == sid:
+                if len(session_rows) == 1 and not worker_records(b):
+                    log_removed(b, "auto-end")
+                    reg.remove(b.name)
+                    return b.name
+                b.unset("auto")  # other panes still belong to this container
             if not primary:
-                b.unset("worker", sid)
-                b.set("last_touched", now_str())
+                drop_worker(b, sid, harness)
+            b.set("last_touched", now_str())
         return b.name if b else None
     name = mutate(fn)
     rec["entry"] = name
     if name:
         e = Registry.load().entry(name)
         rec["tracked"] = bool(e) and not e.get("auto")
-        if event == "start" and e and harness_of(e) == harness:
-            # Keep pane-bound identity current on /new, /clear and resume.
-            tmux("set-option", "-p", "-t", pane, "@amx_session_id", sid, check=False)
+        if event == "start" and e:
+            if changed_harness:
+                clear_pane_settings(pane)
+            # Keep each pane's identity and role current, regardless of the entry default.
+            for key, value in (("session_id", sid), ("harness", harness), ("primary", "1" if primary else "0")):
+                tmux("set-option", "-p", "-t", pane, f"@amx_{key}", value, check=False)
     append_log(rec)
 
 
@@ -1713,7 +2003,7 @@ def cmd_reconcile(a):
         ts = d.get("tmux_session")
         if ts:
             known.add(ts)
-        if a.harness and h != a.harness:
+        if a.harness and a.harness not in entry_harnesses(e):
             continue
         if ts and ts not in live:
             cwd = str(Path(d.get("worktree") or d.get("cwd") or "/nonexistent").expanduser())
@@ -1725,24 +2015,29 @@ def cmd_reconcile(a):
                 out.append(("dead", e.name, f"tmux_session {ts} not running"))
         elif ts:
             panes = inspect_panes(ts, reg)
-            running = {p["session_id"] for p in panes if p["session_id"]}
+            running = {(p["kind"], p["session_id"]) for p in panes if p["session_id"]}
             for p in panes:
                 if p.get("dead"):
                     out.append(("exited", e.name, f"pane {p['pane_id']} exited (status {p.get('exit_status') or 'unknown'}); inspect its retained output"))
-                if p["kind"] in AGENTS and p["kind"] != h:
-                    out.append(("mixed", e.name, f"{p['kind']} pane {p['pane_id']} in a {h} session"))
+                if p.get("harness_conflict"):
+                    out.append(("harness-conflict", e.name, f"pane {p['pane_id']}: recorded {p.get('managed_harness')}, observed {p['kind']}"))
                 if p["kind"] in AGENTS and not p["session_id"]:
                     out.append(("no-id", e.name, f"{p['kind']} pane {p['pane_id']} ({p['cwd']}): id unknown; "
                                 f"try amx identify {e.name}, or find the native ID"))
-                elif p["primary"] and p["session_id"] and p["session_id"] != e.get("resumed_session_id"):
+                elif p["primary"] and p["session_id"] and (p["kind"], p["session_id"]) != (h, e.get("resumed_session_id")):
                     out.append(("session-changed", e.name, f"primary ID differs: amx identify {e.name}"))
-                elif p["kind"] in AGENTS and not p["primary"] and p["session_id"] not in entry_ids(e):
+                elif p["kind"] in AGENTS and not p["primary"] and (p["kind"], p["session_id"]) not in entry_keys(e):
                     out.append(("unrecorded", e.name, f"pane {p['pane_id']} runs {p['session_id']} (cwd {p['cwd']}) "
-                                f"with no worker line: amx reg worker add {e.name} {p['session_id']} cwd={p['cwd']}"))
-            for w in e.get_all("worker"):
-                wid = (w.split() or [""])[0]
-                if wid and wid not in running:
-                    out.append(("stale-worker", e.name, f"{wid} not running: amx reg worker drop {e.name} {wid}"))
+                                f"with no worker line: amx identify {e.name}"))
+            workers = {worker_key(w): w for w in worker_records(e)}
+            unresolved = unresolved_workers(workers, panes)
+            for key, worker in workers.items():
+                wh, wid = key
+                if key in unresolved:
+                    out.append(("recovery-only", e.name, f"{wh} {wid} is last-known metadata for pane {unresolved[key]['pane_id']}, "
+                                "not its confirmed current identity; resolve the pane before discarding the record"))
+                elif key not in running:
+                    out.append(("stale-worker", e.name, f"{wh} {wid} not running: amx reg worker drop {e.name} {wid} --harness {wh}"))
             if d.get("paused"):
                 prim = next((p for p in panes if p["primary"]), None)
                 if prim and prim["state"] == "working":
@@ -1816,6 +2111,11 @@ def main(argv=None):
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_whoami)
 
+    p = sub.add_parser("resolve", help="resolve an amx name or explicit pane ID to its live identity")
+    p.add_argument("target")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_resolve)
+
     p = sub.add_parser("reg", help="read or change the registry (writes are locked)")
     rs = p.add_subparsers(dest="op", required=True)
     q = rs.add_parser("show", help="print the registry or one entry (@header for the header)")
@@ -1839,7 +2139,8 @@ def main(argv=None):
     q.add_argument("action", choices=["add", "drop"])
     q.add_argument("id")
     q.add_argument("session_id")
-    q.add_argument("extra", nargs="*", help="cwd=... label=...")
+    q.add_argument("extra", nargs="*", help="harness=... cwd=... label=... model=... effort=... agent_args=JSON")
+    q.add_argument("--harness", choices=AGENTS, help="scope worker identity; required when a drop is ambiguous")
     p.set_defaults(fn=cmd_reg)
 
     p = sub.add_parser("panes", help="classify every pane of a tmux session")
@@ -1902,14 +2203,16 @@ def main(argv=None):
     p.add_argument("id")
     p.add_argument("--resume-target")
     p.add_argument("--force", action="store_true", help="proceed even if some agent pane has no session id")
+    p.add_argument("--whole-session", action="store_true", help="allow a secondary pane to shut down its entire container")
     p.set_defaults(fn=cmd_shutdown)
 
     p = sub.add_parser("wrap", help="final: snapshot, remove the entry (logged), release LED key, kill tmux (guarded)")
     p.add_argument("id")
     p.add_argument("--notes", help="one line kept with the entry in the session log")
+    p.add_argument("--whole-session", action="store_true", help="allow a secondary pane to wrap its entire container")
     p.set_defaults(fn=cmd_wrap)
 
-    p = sub.add_parser("ls", help="entries: id harness state busy ticket cwd (auto ones with -a)")
+    p = sub.add_parser("ls", help="entries: id primary-harness state busy ticket cwd member-harnesses (auto ones with -a)")
     p.add_argument("-a", "--all", action="store_true")
     p.add_argument("--harness")
     p.set_defaults(fn=cmd_ls)

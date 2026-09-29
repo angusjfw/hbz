@@ -189,7 +189,8 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         self.cm.main(["identify", "work", "--pane", pane["pane_id"], "--session-id", "corrected-id"])
         self.assertEqual(self.cm.inspect_panes("work")[1]["session_id"], "corrected-id")
         workers = self.cm.Registry.load().entry("work").get_all("worker")
-        self.assertEqual(workers, [f"corrected-id cwd={self.root} label=second"])
+        self.assertEqual(self.cm.worker_records(self.cm.Registry.load().entry("work")),
+                         [dict(session_id="corrected-id", harness="pi", cwd=str(self.root), label="second", agent_args="[]")])
         _, missing, panes = self.cm.write_resume_state("work", self.root / "resume.md")
         self.assertFalse(missing)
         self.assertEqual(panes[1]["session_id"], "corrected-id")
@@ -250,7 +251,8 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         self.cm.main(["spawn", "--into", "code", "--label", "second"])
         entry = self.cm.Registry.load().entry("code")
         self.assertEqual(entry.get("resumed_session_id"), SID)
-        self.assertEqual(entry.get_all("worker"), [f"{OTHER} cwd={self.root} label=second"])
+        self.assertEqual(self.cm.worker_records(entry),
+                         [dict(session_id=OTHER, harness="codex", cwd=str(self.root), label="second", agent_args="[]")])
 
     def test_failed_rebuild_preserves_recovery_and_error_output(self):
         script = self.bin / "worker"
@@ -270,8 +272,11 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         self.assertIsNotNone(self.cm.Registry.load().entry("generic").get("shutdown"))
         self.assertIn("cannot restart", (self.cm.STATE / "snapshots/generic-rebuild-failed.txt").read_text())
 
-    def test_mixed_agent_spawn_is_rejected(self):
+    def test_mixed_agent_spawn_is_allowed(self):
+        codex = self.bin / "codex"
+        codex.write_text(f"#!/bin/sh\nprintf '\\033]0;{SID}\\007'\nexec sleep 60\n")
+        codex.chmod(0o755)
         self.spawn()
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            self.cm.main(["spawn", "--into", "work", "--harness", "codex", "--label", "wrong"])
-        self.assertEqual(len(self.cm.pane_rows("work")), 1)
+        self.cm.main(["spawn", "--into", "work", "--harness", "codex", "--label", "code"])
+        self.assertEqual([p["kind"] for p in self.cm.inspect_panes("work")], ["pi", "codex"])
+        self.assertEqual(self.cm.worker_records(self.cm.Registry.load().entry("work"))[0]["harness"], "codex")

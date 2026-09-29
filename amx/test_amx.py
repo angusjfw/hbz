@@ -94,7 +94,7 @@ class RegistryTests(unittest.TestCase):
         self.run_cm("reg", "worker", "add", "alpha", "3333", "cwd=/y", "label=ui")
         self.run_cm("reg", "worker", "add", "alpha", "3333", "cwd=/y", "label=ui")
         t = self.text()
-        self.assertEqual(t.count("worker: 3333 cwd=/y label=ui"), 1)
+        self.assertEqual(t.count("worker: 3333 harness=claude cwd=/y label=ui"), 1)
         self.assertLess(t.index("worker: 2222"), t.index("worker: 3333"))
 
     def test_header_append_and_unset(self):
@@ -440,9 +440,10 @@ class HookTests(unittest.TestCase):
         self.assertEqual(e.get("auto"), "true")
         self.assertEqual(e.get("resumed_session_id"), "p1")
         self.fire("%2", "SessionStart", "w1")
-        self.assertEqual(self.entry().get_all("worker"), ["w1 cwd=/w"])
+        self.assertEqual(self.entry().get_all("worker"), ["w1 harness=claude cwd=/w"])
         self.fire("%2", "SessionEnd", "w1", reason="prompt_input_exit")
         self.assertEqual(self.entry().get_all("worker"), [])
+        self.rows[:] = [row for row in self.rows if row["pane_id"] != "%2"]
         self.fire("%1", "SessionEnd", "p1", reason="prompt_input_exit")
         self.assertIsNone(self.entry())
         recs = [json.loads(x) for x in (self.tmp / "session-log.jsonl").read_text().splitlines()]

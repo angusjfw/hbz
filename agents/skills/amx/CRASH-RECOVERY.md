@@ -60,7 +60,10 @@ acting. They confirm the set once, not session by session.
 
 Per agent pane, take the session id from the first route that has it:
 
-1. The entry's `resumed_session_id` or a `worker:` line.
+1. The entry's `resumed_session_id` for its primary, or a `worker:` line
+   for that pane. Match `(harness, session-id)`; do not apply the entry's
+   default harness to explicitly mixed workers. Only legacy worker lines
+   without `harness=` inherit it.
 2. Claude: the saved full command's `--session-id` / `--resume`.
    pi: the saved full command is just `pi`. Use the pane title instead,
    `π - <name> - <dir>`: `<name>` is the entry id for the primary, or
@@ -78,7 +81,9 @@ Per agent pane, take the session id from the first route that has it:
 5. A transcript content hunt: `amx transcripts <harness> <cwd> --grep …`.
 
 Then per entry, write a resume_state from the save file (format in
-`REFERENCE.md`), set it with
+`REFERENCE.md`), preserving each pane's harness, primary role, label,
+effort and extra arguments. Pane positions do not establish ownership if
+the primary disappeared. Set it with
 `amx reg set <id> resume_state=<path> shutdown=now` and
 `amx reg unset <id> tmux_session`, and run `amx rebuild <id>`.
 
@@ -92,8 +97,9 @@ their recorded command and restart it, with its possible side effects.
 ## 5. Record what happened
 
 Per entry: `amx reg set <id> notes="…"` saying it was rebuilt after a
-crash and which ids came back by which route. Re-add `worker:` lines for
-every non-primary pane brought back (`amx reconcile` lists them).
+crash and which ids came back by which route. Rebuild refreshes worker
+records from the restored panes; run `amx reconcile` to check identities
+and any unresolved panes.
 
 ## An agent pane with no registry entry
 

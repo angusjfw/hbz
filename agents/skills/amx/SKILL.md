@@ -1,6 +1,6 @@
 ---
 name: amx
-description: Manager role for agent and command sessions in tmux, including Claude Code, pi and Codex. Only when the user explicitly invokes /amx (or /skill:amx). Tracks a per-machine session registry, spawns workers in their own tmux sessions (one tmux session per registry session), handles pause, shutdown, cold resume and wrap, and keeps docs and journal complete across sessions. The manager does meta work only and delegates everything substantive to workers.
+description: Manager role for agent and command sessions in tmux, including Claude Code, pi and Codex. Only when the user explicitly invokes /amx (or /skill:amx). Tracks a per-machine session registry, spawns workers in tmux sessions or requested panes/windows (one tmux session per registry session), handles pause, shutdown, cold resume and wrap, and keeps docs and journal complete across sessions. The manager does meta work only and delegates everything substantive to workers.
 disable-model-invocation: true
 ---
 
@@ -84,10 +84,11 @@ Map the user's wording to one of these before acting:
 - **Wrap**: "wrap up", "complete", "close out", "finish". Final: journal
   entry, entry removed, tmux killed.
 
-"Session" means a registry session (one tmux session, one agent harness
-or a generic command). Non-agent command panes can accompany any harness.
-A worker is a pane running an agent; the primary worker is the first
-window's pane 0. A window is just a collection of panes.
+"Session" means a registry session: one tmux container, potentially
+mixing agent harnesses and generic commands. A worker is an agent pane;
+the primary initially occupies the first window's pane 0 and retains its
+role across renumbering. A window is a collection of panes. Finishing a
+secondary worker does not finish its parent session.
 
 ## On invocation
 
@@ -219,8 +220,8 @@ running.
    Write the brief to a file.
 5. **Pick the worker harness**, then model and effort. Honor the user's
    harness choice; otherwise default to your own supported agent harness.
-   A worker tmux session uses one agent harness throughout, including
-   additional agent panes. For a generic CLI/tool, record its explicit
+   For an additional pane, `--into` defaults to the entry's harness but
+   accepts another supported agent harness. For a generic CLI/tool, record its explicit
    command instead; don't invent model, effort or conversation-resume
    capabilities. Pick model and effort from surface signals only (you can't
    investigate to gauge complexity): how the user framed it, the kind of
@@ -247,6 +248,11 @@ running.
    Generic sessions use `amx spawn --id <id> --cwd <dir> --command '<command>'`
    instead of agent options. They restart that command, not a conversation.
    Generic panes can be added with `--into <session> --label <label> --command …`.
+   For an agent inside an existing session, use `--into <session>
+   --harness <h> --label <label>` and optionally `--window <name>` instead
+   of `--id`. Honor the requested containment: a pane/window must not
+   silently become a new session or an unmanaged launch. On an error,
+   inspect it and ask before changing placement.
 7. Add the task (`[active]`). Tell the user the session name, model and
    effort with a one-line reason (or the command for a generic session). They switch with `prefix+w`, the
    session-LED switcher, or `agent-deck switch <id>`.
@@ -284,10 +290,13 @@ changes anything; you act:
   register it (`amx reg new <id> harness=… tmux_session=… cwd=…
   resumed_session_id=…`) or ignore. Never take it over silently.
 - `unrecorded`: an agent pane with no worker line. Run the printed
-  `amx reg worker add …` (an unrecorded pane can't come back after a
-  crash).
+  `amx identify …` to record its harness, native ID and launch settings
+  (an unrecorded pane can't reliably come back after a crash).
 - `stale-worker`: a worker line whose agent is gone. Run the printed
   drop.
+- `recovery-only`: last-known metadata belongs to an unresolved agent or
+  its recovery shell. Keep it while finding the current native ID; do not
+  treat the old ID as live or drop the record automatically.
 - `no-id`: an agent pane whose session id is unknown. Try `amx identify <id>`
   for native identity, then the harness's own session browser or
   `amx transcripts <harness> <cwd> --grep <phrase from its pane>`.
@@ -301,7 +310,9 @@ changes anything; you act:
 - `busy-paused`: a paused session is working again: `amx pause <id> off`.
 - `stale-manager`, `stale-watch`: leftovers from dead managers. Run the
   printed command.
-- `mixed`: a pane of the other harness inside a session. Tell the user.
+- `harness-conflict`: pane metadata disagrees with an observed agent
+  process. Inspect the pane and explicitly bind the correct native ID
+  before saving. Mixed membership alone is valid, not drift.
 - `exited`: a retained pane whose command ended. Inspect its output and
   report the exit status; don't describe it as a running worker.
 
@@ -334,6 +345,10 @@ it does not restore tool/application state. It checks everything first and creat
 pi transcript is missing; on a failure midway it kills the half-built
 session. Either way the entry stays shut down. Show the error and let
 the user decide. On success, set the task prefix to `[active]`.
+
+Without a resume_state, entries with worker records cannot be rebuilt
+as primary-only sessions. Recover the per-pane state first; do not drop
+worker records merely to bypass this refusal.
 
 The snapshot and resume_state files stay on disk; they're the only
 recovery data until the next shutdown.
@@ -369,7 +384,7 @@ When the user asks you to wrap a session:
    panes (`amx snapshot <tmux_session> <file>`).
 2. Write the journal entry per the project's schema. Carry the resume
    pointers: the full `resumed_session_id` when known and `cwd`, every
-   `worker:` line's id and cwd, the command for a generic session, and the snapshot path
+   `worker:` line's harness, id and cwd, the command for a generic session, and the snapshot path
    (`~/.local/state/amx/snapshots/<id>.txt`). The entry is about to go.
    If notes are thin and the snapshot plus recent git activity don't
    tell the story, ask the user one focused question.
