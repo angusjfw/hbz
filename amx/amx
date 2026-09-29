@@ -16,6 +16,7 @@ import os
 import re
 import shlex
 import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -31,6 +32,8 @@ REGISTRY = STATE / "sessions.md"
 LOCK = STATE / "sessions.md.lock"
 LAST_WRITER = STATE / ".last-writer"
 AGENT_STATUS = Path(os.environ.get("AMX_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
+# pi's session-control extension (agent-stuff control.ts): one socket per session
+PI_CONTROL = Path(os.environ.get("AMX_PI_CONTROL_DIR", Path.home() / ".pi/session-control"))
 # the tmux-interaction skill, in this repo's shared skills dir
 INPUT_BOX = Path(__file__).resolve().parents[1] / "agents/skills/tmux-interaction/scripts/read-input-box.py"
 
@@ -650,21 +653,54 @@ def pi_transcript(cwd, sid):
 def pi_alias_live(name):
     """True if a running pi session holds this --name. pi leaves aliases and
     sockets behind when killed, so an alias only counts if its socket answers."""
-    import socket
-    alias = Path.home() / ".pi/session-control" / f"{name}.alias"
     try:
-        target = alias.resolve(strict=True)
+        target = (PI_CONTROL / f"{name}.alias").resolve(strict=True)
     except (OSError, RuntimeError):
         return False
+    return socket_answers(target)
+
+
+def pi_socket(sid):
+    return PI_CONTROL / f"{sid}.sock"
+
+
+def socket_connect(path):
+    """A connected session-control socket, or None if nothing listens there."""
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(1)
+    s.settimeout(5)
     try:
-        s.connect(str(target))
-        return True
+        s.connect(str(path))
+        return s
     except OSError:
-        return False
-    finally:
         s.close()
+        return None
+
+
+def socket_answers(path):
+    s = socket_connect(path)
+    if s:
+        s.close()
+    return bool(s)
+
+
+def socket_send(path, message, mode):
+    """One control.ts `send`: its response dict, or None if nothing listens.
+    Once connected, failures are errors: the message may already have landed."""
+    s = socket_connect(path)
+    if not s:
+        return None
+    buf = b""
+    with closing(s):
+        try:
+            s.sendall((json.dumps({"type": "send", "message": message, "mode": mode}) + "\n").encode())
+            while b"\n" not in buf and (chunk := s.recv(4096)):
+                buf += chunk
+        except OSError as e:
+            die(f"no reply from {path}: {e}")
+    try:
+        return json.loads(buf.split(b"\n", 1)[0])
+    except ValueError:
+        die(f"no reply from {path}" + (f": {buf[:200]!r}" if buf else ""))
 
 
 def pi_session_names(path):
