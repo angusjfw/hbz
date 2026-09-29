@@ -58,6 +58,8 @@ installs its npm dependencies automatically.
 - `MODELS.md` — broader catalog reference and reasoning for the picks.
 - `agents/*.md` — subagent definitions.
 - `extensions/*.ts` — local Pi extensions.
+  - `stash.ts` — `ctrl+s` stashes the editor draft; it comes back after the
+    next prompt is sent, or on `ctrl+s` with an empty editor.
 - `automode.json` — config for the `pi-automode` package.
 - `ollama/*.Modelfile` — local agent model overrides with larger context windows.
 
