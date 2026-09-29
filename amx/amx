@@ -20,6 +20,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -1010,6 +1011,94 @@ def msg_header(sender):
         return "[from an agent outside tmux; no reply route]"
     name = sender["name"]
     return f'[from {name} ({sender["harness"]}, {sender["pane_id"]}); reply: amx msg {name} "..."]'
+
+
+SUBMIT_PAUSE = 0.3
+BOX_RULE = re.compile(r"^─{10,}(?: [A-Z]+)?$")  # pi draws its editor between two of these
+INSERT_MARK = re.compile(r"-- INSERT --|─ INSERT$")  # Claude's vim status, pi-vim's rule label
+BOX_STATES = {"empty", "ghost", "draft", "no-box"}
+
+
+def screen(pane_id):
+    return tmux("capture-pane", "-p", "-J", "-t", pane_id).stdout
+
+
+def pi_box(text):
+    lines = [line.rstrip() for line in text.splitlines()]
+    rules = [i for i, line in enumerate(lines) if BOX_RULE.match(line)]
+    if len(rules) < 2:
+        return "no-box"
+    return "draft" if any(line.strip() for line in lines[rules[-2] + 1:rules[-1]]) else "empty"
+
+
+def insert_mode(text):
+    return any(INSERT_MARK.search(line.rstrip()) for line in text.rstrip().splitlines()[-8:])
+
+
+def box_state(target):
+    """'empty', 'ghost', 'draft' or 'no-box'; None where no reader exists."""
+    h, pane_id = target["harness"], target["pane_id"]
+    if h == "claude" and INPUT_BOX.exists():
+        state = run([str(INPUT_BOX), pane_id], check=False).stdout.split("\t", 1)[0].strip()
+        return state if state in BOX_STATES else None
+    if h == "pi":
+        return pi_box(screen(pane_id))
+    return None
+
+
+def ready_for_typing(target, wait, force):
+    """Refuse unless typing can't interrupt a turn, answer a prompt or clobber a draft.
+    force covers what amx can't see or can't trust: no busy state, no box reader, and
+    `working`, which no hook clears when the user interrupts a turn."""
+    name = target["name"]
+    deadline = time.monotonic() + wait
+    while target["state"] == "working" and not force:
+        if time.monotonic() >= deadline:
+            raise Refused("busy", f"{name} is working; retry later, --wait SECS, "
+                                  "or --force if the pane shows it idle (interrupts leave this state stale)")
+        time.sleep(1)
+        target = resolve_target(target["pane_id"])
+    box = box_state(target)
+    # No hook fires when the user cancels a prompt, so needs_input can outlive it;
+    # an empty box back on screen means the prompt is gone.
+    if target["state"] == "needs_input" and box not in ("empty", "ghost"):
+        raise Refused("needs-input", f"{name} is waiting on the user (a permission prompt or question)")
+    if target["state"] in (None, "off") and not force:
+        raise Refused("state-unknown", f"no busy state for {name}; look at the pane, then --force if it's idle")
+    if box == "draft":
+        raise Refused("draft", f"{name}'s input box holds unsent text; ask the user")
+    if box == "no-box":
+        raise Refused("box-unknown", f"no input box on {name}'s screen (a dialog may be up); look at the pane")
+    if box is None and not force:
+        raise Refused("box-unknown", f"can't read {name}'s input box; look at the pane, then --force if nobody is typing there")
+    return target
+
+
+def type_into(target, text):
+    """Paste into an agent's input box and submit. True once the box reads empty again.
+    Bracketed paste lands intact in vim INSERT and NORMAL mode alike; Escape only
+    leaves INSERT, where Enter would add a newline instead of submitting."""
+    pane_id, buf = target["pane_id"], f"amx-msg-{os.getpid()}"
+    with tempfile.NamedTemporaryFile("w", prefix="amx-msg-", delete=False) as f:
+        f.write(text)
+    try:
+        tmux("load-buffer", "-b", buf, f.name)
+    finally:
+        os.unlink(f.name)
+    tmux("paste-buffer", "-p", "-d", "-b", buf, "-t", pane_id)
+    time.sleep(SUBMIT_PAUSE)
+    if insert_mode(screen(pane_id)):
+        tmux("send-keys", "-t", pane_id, "Escape")
+        time.sleep(SUBMIT_PAUSE)
+    tmux("send-keys", "-t", pane_id, "Enter")
+    for _ in range(10):
+        time.sleep(SUBMIT_PAUSE)
+        box = box_state(target)
+        if box in ("empty", "ghost"):
+            return True
+        if box is None:
+            return False
+    return False
 
 
 def compose(sender, route, body):
