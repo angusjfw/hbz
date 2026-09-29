@@ -1108,6 +1108,47 @@ def compose(sender, route, body):
     return f"{msg_header(sender)}\n{body}"
 
 
+def msg_sender():
+    """Own identity for the header, or None outside tmux or when it can't be resolved."""
+    pane_id = my_pane_quiet()
+    try:
+        return resolve_target(pane_id) if pane_id else None
+    except CmError:
+        return None
+
+
+def cmd_msg(a):
+    if (a.text is None) == (a.file is None):
+        die("give the message as TEXT or --file, not both")
+    body = (Path(a.file).expanduser().read_text() if a.file else a.text).rstrip()
+    if not body:
+        die("empty message")
+    try:
+        target = resolve_target(a.target)
+    except CmError as e:
+        raise Refused("ambiguous" if "ambiguous" in str(e) else "unresolved", str(e)) from None
+    sender = msg_sender()
+    if sender and sender["pane_id"] == target["pane_id"]:
+        raise Refused("self", f"{target['pane_id']} is your own pane")
+    sid = target["session_id"]
+    live = target["harness"] == "pi" and bool(sid) and socket_answers(pi_socket(sid))
+    route = msg_route(sender, target, a.via, live)
+    if route == "socket":
+        resp = socket_send(pi_socket(sid), compose(sender, route, body), "steer" if a.steer else "follow_up")
+        if resp is None and a.via == "socket":
+            raise Refused("no-socket", f"{target['name']}'s session-control socket stopped answering")
+        if resp is not None:
+            if not resp.get("success"):
+                die(f"{target['name']} rejected the message: {resp.get('error') or 'no reason given'}")
+            print(f"delivered via=socket target={target['name']} pane={target['pane_id']} verified=yes")
+            return
+        route = "pane"  # nothing listened after all; the message can't have landed
+    target = ready_for_typing(target, a.wait, a.force)
+    verified = type_into(target, compose(sender, route, body))
+    print(f"delivered via=pane target={target['name']} pane={target['pane_id']} "
+          f"verified={'yes' if verified else 'no'}")
+
+
 def cmd_panes(a):
     panes = inspect_panes(a.session)
     if a.json:
@@ -2284,6 +2325,17 @@ def main(argv=None):
     p.add_argument("target")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_resolve)
+
+    p = sub.add_parser("msg", help="message another agent pane across harnesses (see `amx reference`)")
+    p.add_argument("target", help="amx name or explicit %%pane ID")
+    p.add_argument("text", nargs="?")
+    p.add_argument("--file", help="read the message from a file")
+    p.add_argument("--via", choices=["auto", "socket", "pane"], default="auto")
+    p.add_argument("--steer", action="store_true", help="socket: interrupt the current turn instead of queueing")
+    p.add_argument("--wait", type=float, default=0, metavar="SECS", help="typing: wait up to SECS for a busy target")
+    p.add_argument("--force", action="store_true",
+                   help="typing: proceed without busy state or a box reader (never over a draft or prompt)")
+    p.set_defaults(fn=cmd_msg)
 
     p = sub.add_parser("reg", help="read or change the registry (writes are locked)")
     rs = p.add_subparsers(dest="op", required=True)

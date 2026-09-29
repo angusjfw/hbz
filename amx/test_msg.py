@@ -1,5 +1,7 @@
 """amx msg: route to native tools, pi's control socket, or the pane."""
 
+import contextlib
+import io
 import json
 import socket
 import tempfile
@@ -276,6 +278,108 @@ class TypingTests(test_startup.IsolatedTmuxCase):
         self.cm.box_state = lambda t: "draft"
         self.assertFalse(self.cm.type_into(target, "hi"))
         self.assertEqual(self.received(out, b"\r"), b"\x1b[200~hi\x1b[201~\r")
+
+
+class CommandTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.cm = load_cm(Path(self.tmp.name))
+        self.panes = {"%1": pane("claude", "lead", "%1"), "%2": pane("pi", "work-pi", "%2"),
+                      "%3": pane("claude", "work-c", "%3")}
+        self.me = "%1"
+        self.live = False
+        self.sent, self.typed = [], []
+        self.reply = {"type": "response", "success": True}
+        self.cm.resolve_target = self.resolve
+        self.cm.my_pane_quiet = lambda: self.me
+        self.cm.socket_answers = lambda path: self.live
+        self.cm.socket_send = self.socket_send
+        self.cm.ready_for_typing = lambda target, wait, force: target
+        self.cm.type_into = lambda target, text: self.typed.append((target["pane_id"], text)) or True
+
+    def resolve(self, name):
+        if name == "twin":
+            self.cm.die("ambiguous target 'twin'; use a pane ID: %4, %5")
+        found = self.panes.get(name) or next((p for p in self.panes.values() if p["name"] == name), None)
+        if not found:
+            self.cm.die(f"no live pane for '{name}'; use an amx name or explicit %pane ID")
+        return found
+
+    def socket_send(self, path, message, mode):
+        self.sent.append((path, message, mode))
+        return self.reply if self.live else None
+
+    def msg(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        code = 0
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                self.cm.main(["msg", *args])
+            except SystemExit as e:
+                code = e.code
+        return code, out.getvalue().strip(), err.getvalue().strip()
+
+    def test_socket_delivery(self):
+        self.live = True
+        code, out, _ = self.msg("work-pi", "hello")
+        self.assertEqual((code, out), (0, "delivered via=socket target=work-pi pane=%2 verified=yes"))
+        path, message, mode = self.sent[0]
+        self.assertEqual((path, mode), (self.cm.pi_socket(SID), "follow_up"))
+        self.assertEqual(message, self.cm.msg_header(self.panes["%1"]) + "\nhello")
+        self.msg("work-pi", "now", "--steer")
+        self.assertEqual(self.sent[1][2], "steer")
+
+    def test_socket_gone_falls_through_to_typing(self):
+        self.cm.socket_answers = lambda path: True  # answered the probe, gone by the send
+        code, out, _ = self.msg("work-pi", "hello")
+        self.assertEqual((code, out), (0, "delivered via=pane target=work-pi pane=%2 verified=yes"))
+        self.assertEqual(self.typed[0][0], "%2")
+        self.cm.socket_answers = lambda path: True
+        code, _, err = self.msg("work-pi", "hello", "--via", "socket")
+        self.assertEqual(code, 1)
+        self.assertTrue(err.startswith("refused no-socket:"), err)
+
+    def test_socket_rejection_is_an_error(self):
+        self.live = True
+        self.reply = {"type": "response", "success": False, "error": "nope"}
+        code, _, err = self.msg("work-pi", "hello")
+        self.assertEqual(code, 2)
+        self.assertIn("nope", err)
+        self.assertEqual(self.typed, [])
+
+    def test_typed_delivery_and_file_body(self):
+        body = self.root_file("line one\nline 'two' $x\n\n")
+        code, out, _ = self.msg("%2", "--file", str(body))
+        self.assertEqual(out, "delivered via=pane target=work-pi pane=%2 verified=yes")
+        self.assertEqual(self.typed[0][1], self.cm.msg_header(self.panes["%1"]) + "\nline one\nline 'two' $x")
+        self.cm.type_into = lambda target, text: False
+        self.assertEqual(self.msg("%2", "x")[1], "delivered via=pane target=work-pi pane=%2 verified=no")
+
+    def root_file(self, text):
+        f = Path(self.tmp.name) / "body.txt"
+        f.write_text(text)
+        return f
+
+    def test_refusals(self):
+        for args, reason in ((("work-c", "hi"), "native"), (("twin", "hi"), "ambiguous"),
+                             (("nobody", "hi"), "unresolved"), (("lead", "hi"), "self")):
+            code, out, err = self.msg(*args)
+            self.assertEqual((code, out), (1, ""), args)
+            self.assertTrue(err.startswith(f"refused {reason}:"), err)
+        self.assertEqual(self.msg("work-c", "hi", "--via", "pane")[0], 0)
+
+    def test_sender_unknown_still_sends(self):
+        self.me = None
+        self.assertEqual(self.msg("work-c", "hi")[0], 0)
+        self.assertTrue(self.typed[0][1].startswith("[from an agent outside tmux"))
+        self.me = "%9"
+        self.assertEqual(self.msg("work-c", "hi")[0], 0)
+
+    def test_body_is_required_once(self):
+        for args in ((), ("hi", "--file", "f"), ("  \n",)):
+            code, _, err = self.msg("work-pi", *args)
+            self.assertEqual(code, 2, args)
 
 
 if __name__ == "__main__":
