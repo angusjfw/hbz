@@ -15,9 +15,10 @@ work; you do meta work.
 registry and file formats. Per-harness notes (Claude Code vs pi) are in
 `HARNESSES.md` next to this file; read it once on invocation.
 
-Session hooks register every agent session started in a tmux session of
-its own as an `auto` entry, and unregister it when it exits. Auto entries
-carry no obligations until someone tracks them.
+When installed, optional session hooks register agent sessions started in
+their own tmux sessions as `auto` entries, and unregister them on exit.
+Auto entries carry no obligations until someone tracks them. Spawned
+sessions are registered by `amx` itself; hooks are not required.
 
 ## Hard boundary: meta work only
 
@@ -139,8 +140,9 @@ Watch for it:
   killed, however often. After a kill, `amx reconcile` before re-arming
   and tell the user: Claude Code stops background tasks when memory is
   low.
-- **pi:** call the `amx_watch` tool with `start` (from the `amx`
-  extension).
+- **pi:** if available, call `amx_watch` with `start` (an optional
+  extension). Without a background notification tool, reconcile on each
+  manager turn and tell the user that idle notifications aren't active.
 
 On each `changed` event: `amx ls -a` and `amx reconcile`, compare with
 what you last knew, and give the user a short mention of each change
@@ -156,7 +158,7 @@ removed record: `amx log --removed <id> -n 1`. Say how it went (`wrap`,
 
 If the watch isn't running when you touch the registry (it expired, or
 this is a resumed conversation), run `amx reconcile` first, then restart
-the watch.
+the watch if your harness supports it.
 
 ## Task list
 
@@ -230,8 +232,10 @@ running.
    `amx` checks for a name collision, creates the tmux session detached,
    records the entry and launches the agent with the brief. A collision
    error means a tmux session or entry with that id exists: ask the user
-   whether to track it (`amx track`) or pick another id. Exit 3 means the agent didn't
-   appear in time: look at the pane and tell the user.
+   whether to track it (`amx track`) or pick another id. Success means the
+   command stayed running during startup observation, not that it is ready.
+   Exit 3 means it exited early or couldn't be observed: inspect the
+   retained pane and report its error/status. Hooks aren't required.
 7. Add the task (`[active]`). Tell the user the session name, model and
    effort with a one-line reason. They switch with `prefix+w`, the
    session-LED switcher, or `agent-deck switch <id>`.
@@ -281,6 +285,8 @@ changes anything; you act:
 - `stale-manager`, `stale-watch`: leftovers from dead managers. Run the
   printed command.
 - `mixed`: a pane of the other harness inside a session. Tell the user.
+- `exited`: a retained pane whose command ended. Inspect its output and
+  report the exit status; don't describe it as a running worker.
 
 Sync the task list afterwards.
 
@@ -384,7 +390,8 @@ If workers mention ports or dev servers, note them in the entry's
 1. For each active entry you manage, ask: leave running, shut down,
    or wrap. Do what they choose; leave another manager's entries alone.
 2. `amx reconcile` and settle what it reports.
-3. Stop the watch (Claude Code: stop the Monitor; pi: `amx_watch stop`).
+3. Stop the watch if one is running (Claude Code: stop the Monitor;
+   pi with the extension: `amx_watch stop`).
 4. `amx reg unset @header manager=<address>`.
 5. If your tmux session exists only for the manager, the user can kill
    it; don't kill a session they work in.

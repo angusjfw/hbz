@@ -305,7 +305,8 @@ def ps_table():
 def pane_rows(target=None):
     fmt = "\t".join(["#{session_name}", "#{window_index}", "#{window_name}", "#{window_layout}",
                      "#{pane_index}", "#{pane_id}", "#{pane_pid}", "#{pane_tty}",
-                     "#{pane_current_path}", "#{pane_title}"])
+                     "#{pane_current_path}", "#{pane_title}", "#{pane_dead}", "#{pane_dead_status}",
+                     "#{@amx_harness}", "#{@amx_session_id}", "#{@amx_agent_args}"])
     args = ["list-panes", "-F", fmt]
     args += ["-s", "-t", f"={target}"] if target else ["-a"]
     r = tmux(*args, check=False)
@@ -318,7 +319,8 @@ def pane_rows(target=None):
         f = line.split("\t")
         rows.append(dict(session=f[0], window=int(f[1]), window_name=f[2], layout=f[3],
                          pane=int(f[4]), pane_id=f[5], pane_pid=int(f[6]),
-                         tty=f[7].replace("/dev/", ""), cwd=f[8], title=f[9]))
+                         tty=f[7].replace("/dev/", ""), cwd=f[8], title=f[9], dead=f[10] == "1",
+                         exit_status=f[11], managed_harness=f[12], managed_id=f[13], agent_args=f[14]))
     return rows
 
 
@@ -378,7 +380,7 @@ def argv_session_id(args):
     return m.group(1) if m else None
 
 
-def launch_line(harness, sid, model=None, effort=None, name=None, brief=None):
+def launch_line(harness, sid, model=None, effort=None, name=None, brief=None, agent_args=()):
     if harness == "claude":
         parts = ["claude", "--session-id", sid]
         if model:
@@ -388,7 +390,7 @@ def launch_line(harness, sid, model=None, effort=None, name=None, brief=None):
         if name:
             parts += ["--name", name]
     elif harness == "pi":
-        parts = ["pi", "--session-control", "--session-id", sid]
+        parts = ["pi", "--session-id", sid]
         if model:
             parts += ["--model", model]
         if effort:
@@ -397,13 +399,14 @@ def launch_line(harness, sid, model=None, effort=None, name=None, brief=None):
             parts += ["--name", name]
     else:
         die(f"unknown harness '{harness}'")
+    parts += list(agent_args)
     line = " ".join(shlex.quote(p) for p in parts)
     if brief:
         line += f' "$(cat {shlex.quote(str(brief))})"'
     return line
 
 
-def resume_line(harness, sid, effort=None, name=None):
+def resume_line(harness, sid, effort=None, name=None, agent_args=()):
     if harness == "claude":
         # Claude doesn't restore --name on resume, and the name is its address
         parts = ["claude"] + (["--effort", effort] if effort else []) + ["--resume", sid]
@@ -411,10 +414,10 @@ def resume_line(harness, sid, effort=None, name=None):
             parts += ["--name", name]
     elif harness == "pi":
         # pi restores model, thinking level and --name itself
-        parts = ["pi", "--session-control", "--session-id", sid]
+        parts = ["pi", "--session-id", sid]
     else:
         die(f"unknown harness '{harness}'")
-    return " ".join(shlex.quote(p) for p in parts)
+    return " ".join(shlex.quote(p) for p in [*parts, *agent_args])
 
 
 def claude_project_dir(cwd):
@@ -558,7 +561,7 @@ def inspect_panes(session, reg=None):
             own = next((a for pid, _, _, a in procs if pid == r["pane_pid"]), "")
             if not is_shell(own):
                 fg = own
-        kind = classify(fg)
+        kind = r.get("managed_harness") or classify(fg)
         sid, src = None, None
         primary = r["window"] == first_window and r["pane"] == 0
         if kind in ("claude", "pi"):
@@ -569,6 +572,8 @@ def inspect_panes(session, reg=None):
                 sid, src = store_sid, "registry"
             elif store_sid:
                 sid, src = store_sid, "store"
+            elif r.get("managed_id"):
+                sid, src = r["managed_id"], "pane"
             elif kind == "claude" and argv_session_id(fg):
                 sid = argv_session_id(fg)
                 src = "registry" if sid in workers else "argv"
@@ -746,7 +751,10 @@ def write_resume_state(session, out, reg=None):
                 else:
                     e = effort if (p["primary"] and p["kind"] == "claude") else None
                     nm = name if p["primary"] else (f"{name}-{p['label']}" if p["label"] else None)
-                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm)}")
+                    args = json.loads(p.get("agent_args") or (entry.get("agent_args") if entry and p["primary"] else None) or "[]")
+                    lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm, args)}")
+                    if args:
+                        lines.append(f"agent_args: {json.dumps(args)}")
                     lines.append(f"harness: {p['kind']}")
                     lines.append(f"session_id: {p['session_id']}")
                     if p["label"]:
@@ -807,16 +815,52 @@ def mint_id():
         return str(uuid.uuid4())
 
 
-def wait_for_agent(session, pane_id, sid, timeout):
-    end = time.time() + timeout
-    while time.time() < end:
-        if store_by_pane(session).get(pane_id, (None,))[0] == sid:
-            return "store"
-        for p in inspect_panes(session):
-            if p["pane_id"] == pane_id and p["kind"] in ("claude", "pi"):
-                return "process"
-        time.sleep(0.5)
-    return None
+def start_pane(pane_id, cwd, line, harness, sid, agent_args=()):
+    """tmux owns the command lifetime; a failed launch stays visible, with its status."""
+    tmux("set-option", "-p", "-t", pane_id, "remain-on-exit", "on")
+    for key, value in (("harness", harness), ("session_id", sid), ("agent_args", json.dumps(list(agent_args)))):
+        tmux("set-option", "-p", "-t", pane_id, f"@amx_{key}", value)
+    env = ["-e", f"AMX_STATE_DIR={STATE}", "-e", f"PATH={os.environ.get('PATH', os.defpath)}"]
+    for key in ("AMX_AGENT_STATUS_DIR", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR"):
+        if key in os.environ:
+            env += ["-e", f"{key}={os.environ[key]}"]
+    tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, *env, f"exec {line}")
+
+
+def wait_for_start(pane_id, timeout, settle=2.0):
+    """Observe a continuous running interval, not readiness or a hook acknowledgement."""
+    end = time.monotonic() + timeout
+    running_since = None
+    last_pid = None
+    while True:
+        r = tmux("display-message", "-p", "-t", pane_id,
+                 "#{pane_dead}\t#{pane_dead_status}\t#{pane_pid}\t#{pane_dead_signal}", check=False)
+        fields = r.stdout.strip("\n").split("\t")
+        if r.returncode or len(fields) != 4:
+            die(f"pane {pane_id} disappeared during startup")
+        dead, status, pid, signal = fields
+        if dead == "1":
+            die(f"command in {pane_id} exited during startup (" +
+                (f"signal {signal}" if signal else f"status {status or 'unknown'}") + "); pane retained")
+        now = time.monotonic()
+        if dead == "0" and pid:
+            if pid != last_pid:
+                running_since, last_pid = now, pid
+            if now - running_since >= settle:
+                return "running"
+        else:
+            running_since, last_pid = None, None
+        if now >= end:
+            die(f"startup observation timed out for {pane_id}; inspect the pane")
+        time.sleep(min(0.1, max(0, end - now)))
+
+
+def report_start(pane_id, timeout):
+    try:
+        print(f"startup={wait_for_start(pane_id, timeout)} (readiness not verified)")
+    except CmError as e:
+        print(f"WARNING: {e}", file=sys.stderr)
+        sys.exit(3)
 
 
 def write_brief(name, text_or_file):
@@ -845,11 +889,12 @@ def cmd_spawn(a):
         die(f"registry entry '{a.id}' already exists")
     sid = mint_id()
     brief = write_brief(a.id, a.brief_file)
-    line = launch_line(a.harness, sid, a.model, a.effort, a.id, brief)
+    line = launch_line(a.harness, sid, a.model, a.effort, a.id, brief, a.agent_arg)
     tmux("new-session", "-d", "-s", a.id, "-n", a.id, "-c", cwd)
     pane_id = tmux("list-panes", "-t", f"={a.id}", "-F", "#{pane_id}").stdout.split()[0]
 
-    fields = [f"harness={a.harness}", f"tmux_session={a.id}", f"cwd={cwd}", f"resumed_session_id={sid}"]
+    fields = [f"harness={a.harness}", f"tmux_session={a.id}", f"cwd={cwd}", f"resumed_session_id={sid}",
+              f"agent_args={json.dumps(a.agent_arg)}"]
     for k in ("ticket", "worktree", "branch", "model", "effort"):
         v = getattr(a, k)
         if v:
@@ -859,12 +904,9 @@ def cmd_spawn(a):
         b = reg.new(a.id)
         apply_assign(b, ["started=now"] + fields + ["last_touched=now"])
     mutate(fn)
-    tmux("send-keys", "-t", pane_id, line, "Enter")
-    how = wait_for_agent(a.id, pane_id, sid, a.timeout)
+    start_pane(pane_id, cwd, line, a.harness, sid, a.agent_arg)
     print(f"session={a.id}\npane={pane_id}\nsession_id={sid}\nharness={a.harness}")
-    if not how:
-        print(f"WARNING: agent not seen in {pane_id} after {a.timeout}s; inspect the pane", file=sys.stderr)
-        sys.exit(3)
+    report_start(pane_id, a.timeout)
 
 
 def spawn_into(a):
@@ -879,14 +921,16 @@ def spawn_into(a):
     if not a.label or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", a.label):
         die("--into needs --label (letters, digits, . _ -)")
     cwd = str(Path(a.cwd or entry.get("cwd") or ".").expanduser())
+    if not Path(cwd).is_dir():
+        die(f"cwd {cwd} doesn't exist")
     name = f"{entry.name}-{a.label}"
-    if harness == "pi" and pi_alias_live(name):
+    if harness == "pi" and "--session-control" in a.agent_arg and pi_alias_live(name):
         die(f"pi session name '{name}' is in use by a running session (~/.pi/session-control/{name}.alias)")
     if any(f"label={a.label}" in w.split() for w in entry.get_all("worker")):
         die(f"label '{a.label}' is already used by a worker in {entry.name}")
     sid = mint_id()
     brief = write_brief(f"{entry.name}-{a.label}", a.brief_file)
-    line = launch_line(harness, sid, a.model, a.effort, name, brief)
+    line = launch_line(harness, sid, a.model, a.effort, name, brief, a.agent_arg)
     if a.window:
         r = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={a.into}:", "-n", a.window, "-c", cwd)
     else:
@@ -899,12 +943,9 @@ def spawn_into(a):
         b.append("worker", f"{sid} cwd={cwd} label={a.label}")
         b.set("last_touched", now_str())
     mutate(fn)
-    tmux("send-keys", "-t", pane_id, line, "Enter")
-    how = wait_for_agent(a.into, pane_id, sid, a.timeout)
+    start_pane(pane_id, cwd, line, harness, sid, a.agent_arg)
     print(f"pane={pane_id}\nname={name}\nsession_id={sid}\nharness={harness}")
-    if not how:
-        print(f"WARNING: agent not seen in {pane_id} after {a.timeout}s; inspect the pane", file=sys.stderr)
-        sys.exit(3)
+    report_start(pane_id, a.timeout)
 
 
 def cmd_rebuild(a):
@@ -939,16 +980,17 @@ def cmd_rebuild(a):
             h = p.get("harness") or default_h
             cmd = p.get("command", "")
             primary = wi == 0 and p is w["panes"][0]
+            args = json.loads(p.get("agent_args") or (entry.get("agent_args") if primary else None) or "[]")
             if sid:
                 if h == "pi":
                     if not pi_transcript(cwd, sid):
                         problems.append(f"pi session {sid} not found under {pi_session_root() / pi_slug(cwd)} "
                                         f"with header cwd {cwd}; `pi --session-id` would start a blank session")
-                    cmd = resume_line("pi", sid)
+                    cmd = resume_line("pi", sid, agent_args=args)
                 elif h == "claude":
                     nm = entry.name if primary else (f"{entry.name}-{p['label']}" if p.get("label") else None)
-                    cmd = resume_line("claude", sid, effort if primary else None, nm)
-            panes.append((p, cwd, cmd))
+                    cmd = resume_line("claude", sid, effort if primary else None, nm, args)
+            panes.append((dict(p, harness=h, agent_args=json.dumps(args)), cwd, cmd))
         plan.append((w, panes))
     if problems:
         die("not rebuilding; fix these first:\n  " + "\n  ".join(problems))
@@ -969,9 +1011,13 @@ def cmd_rebuild(a):
             if w.get("layout") and len(panes) > 1:
                 tmux("select-layout", "-t", f"={session}:{widx}", w["layout"])
             ids = tmux("list-panes", "-t", f"={session}:{widx}", "-F", "#{pane_id}").stdout.split()
-            for pid, (_, _, cmd) in zip(ids, panes):
-                if cmd:
-                    tmux("send-keys", "-t", pid, cmd, "Enter")
+            for pid, (p, cwd, cmd) in zip(ids, panes):
+                if cmd and p.get("session_id"):
+                    start_pane(pid, cwd, cmd, p["harness"], p["session_id"], json.loads(p["agent_args"]))
+                    wait_for_start(pid, 30)
+                elif cmd:
+                    tmux("send-keys", "-t", pid, "-l", "--", cmd)
+                    tmux("send-keys", "-t", pid, "Enter")
     except CmError:
         tmux("kill-session", "-t", f"={session}", check=False)
         raise
@@ -1295,7 +1341,8 @@ def sole_agent(pane_pid):
     pid, agents = os.getppid(), 0
     for _ in range(40):
         if pid == pane_pid:
-            return agents == 1
+            # tmux may run the agent directly rather than through an idle shell.
+            return agents + (classify(procs.get(pid, (None, ""))[1]) in ("claude", "pi")) == 1
         if pid not in procs:
             return False
         ppid, args = procs[pid]
@@ -1483,6 +1530,8 @@ def cmd_reconcile(a):
             panes = inspect_panes(ts, reg)
             running = {p["session_id"] for p in panes if p["session_id"]}
             for p in panes:
+                if p.get("dead"):
+                    out.append(("exited", e.name, f"pane {p['pane_id']} exited (status {p.get('exit_status') or 'unknown'}); inspect its retained output"))
                 if p["kind"] in ("claude", "pi") and p["kind"] != h:
                     out.append(("mixed", e.name, f"{p['kind']} pane {p['pane_id']} in a {h} session"))
                 if p["kind"] in ("claude", "pi") and not p["session_id"]:
@@ -1616,6 +1665,8 @@ def main(argv=None):
     p.add_argument("--cwd")
     p.add_argument("--model")
     p.add_argument("--effort", help="Claude --effort, or pi --thinking")
+    p.add_argument("--agent-arg", action="append", default=[], metavar="ARG",
+                   help="extra agent argument, repeatable; e.g. --agent-arg=--session-control (pi extension required)")
     p.add_argument("--brief-file")
     p.add_argument("--ticket")
     p.add_argument("--worktree")

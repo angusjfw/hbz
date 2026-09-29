@@ -43,7 +43,9 @@ amx spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_fi
 It splits beside the active pane (or opens a window with `--window`) and
 prints `pane=`, `name=` and `session_id=`. The printed name
 (`<entry>-<label>`) is the worker's address; keep the `session_id` for
-Finish.
+Finish. For pi socket messaging, first verify its session-control
+extension is available, then add `--agent-arg=--session-control`. Without
+it, use tmux interaction; plain pi needs no extension to be managed.
 
 **Otherwise**, start it yourself:
 
@@ -52,8 +54,8 @@ tmux split-window -d -P -F '#{pane_id}' -c "$cwd" \
   "<agent> --name $name \"\$(cat $brief_file)\""
 ```
 
-where `<agent>` is `claude`, or `pi --session-control` (pi needs it to be
-messageable).
+where `<agent>` is `claude` or `pi`. Add `--session-control` to pi only
+when its optional messaging extension is available and needed.
 
 - Split beside your own pane, or use `new-window -d` when the window is full.
   Check the layout first (`tmux list-panes -F '#{pane_id} #{pane_current_command}'`).

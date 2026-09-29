@@ -55,6 +55,10 @@ Entry fields (all optional; unknown fields and prose are kept):
 - `cwd`, `worktree`, `branch`, `ticket`.
 - `model`, `effort`: the spawn choice. For pi, `effort` is the thinking
   level.
+- `agent_args`: JSON array of explicit extra CLI arguments for the primary
+  agent, passed with repeatable `spawn --agent-arg=ARG`. For example,
+  `--agent-arg=--session-control` opts into pi's separately installed
+  messaging extension; it is not part of the default launch.
 - `started`, `last_touched`, `shutdown`, `paused`: timestamps. Always set
   from the clock (`k=now` / `k=today`), never typed.
 - `resumed_session_id`: the primary worker's session id (first window,
@@ -124,9 +128,27 @@ command: yarn dev
 - Old files use `claude_session_id:`; it reads as `session_id:` with
   harness `claude`.
 - Any other `## ` section is prose for the reader.
-- `amx rebuild` builds agent panes' commands from `session_id` and
-  `harness` (so pi panes always get `--session-control`), and replays
-  other panes' `command:` as written.
+- `amx rebuild` builds agent panes' commands from `session_id`, `harness`
+  and optional `agent_args` (a JSON array), and replays other panes'
+  `command:` as written. Explicit extra arguments survive shutdown/resume.
+
+## Startup observation
+
+`amx spawn` runs the command directly under tmux with `remain-on-exit`.
+It observes the same live pane process for two seconds before reporting
+`startup=running (readiness not verified)`. This is not proof that login,
+model loading or agent initialization has finished. Failures after that
+window remain possible; `amx reconcile` reports retained exited panes.
+
+An early exit (including status 0), missing pane or observation timeout
+returns exit 3. The registry entry and any surviving pane are retained for
+inspection. This applies to both new sessions and `spawn --into`.
+
+Hooks and the agent-status store are optional, not startup acknowledgements.
+Managed panes carry harness, session ID and extra arguments in tmux pane
+options, allowing snapshot and resume without hooks. Without hooks, an
+agent's in-process session switch must be recorded explicitly before
+shutdown; the launch ID alone cannot follow a new conversation.
 
 ## Snapshots
 

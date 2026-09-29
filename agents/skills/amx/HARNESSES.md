@@ -54,13 +54,16 @@ choice, otherwise default to the manager's harness.
 - pi's process shows only `pi` in `ps`, so a pane's session id can't be
   read from the process. Keep worker lines complete; `amx reconcile`
   flags gaps.
-- Every pi worker runs with `--session-control`, so it can be messaged
-  over its socket. Its `--name` (the entry id, or `<id>-<label>` for a
-  pane added with `amx spawn --into`) is a global alias.
+- Messaging is optional. If the session-control extension is installed,
+  `amx spawn --agent-arg=--session-control` opts in. Only then can its
+  `--name` (the entry id, or `<id>-<label>` for an additional pane) be used
+  as a global socket alias. Without it, inspect or interact via tmux.
+  Extra arguments are recorded for resume.
 - Session hooks: the `amx` extension runs `amx hook --harness pi` on
   session start and on quit, for the interactive session only.
-- Watch: the `amx_watch` tool (`start`, `stop`) from the `amx`
-  extension.
+- Watch: use `amx_watch` (`start`, `stop`) if the optional extension is
+  loaded. Otherwise reconcile on each manager turn; don't claim idle
+  notifications are active.
 - Task list: none. `amx ls` is the view.
 - Subagents: only if a subagent extension is loaded; otherwise do grunt
   work inline.
