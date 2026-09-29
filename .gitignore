@@ -18,12 +18,12 @@ brew/Brewfile.work
 keyboard/session-leds/agent-deck/target/
 __pycache__/
 
-# Local Claude settings — live file holds machine/work-local fields;
-# seeded from claude/settings.json.example by `make claude`
+# Live settings — the tools and local edits write to them; `make claude` / `make pi`
+# three-way merge the committed .example into them (.applied is the last merged baseline)
 claude/settings.json
-
-# Live pi settings — pi writes to it; seeded from pi/settings.json.example by `make pi`
+claude/settings.json.applied
 pi/settings.json
+pi/settings.json.applied
 
 # Skill npm dependencies (installed at setup time)
 node_modules/

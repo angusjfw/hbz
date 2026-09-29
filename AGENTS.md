@@ -25,10 +25,12 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `keyboard/` — ZSA Voyager layout: QMK source and firmware (repo is source of truth; flashed, not symlinked) + session-leds tooling
 - `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch)
 - `arch/` — Arch/sway install notes, `screenshots/` — repo screenshots
+- `scripts/` — helpers shared by make targets (e.g. the settings merge)
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.
 
 ## Untracked files
 - `docs/design.md` is gitignored — `git diff` won't show changes. The edit tool's write diff is usually sufficient; otherwise summarise from memory.
+- `claude/settings.json` and `pi/settings.json` are the gitignored live settings. They are machine-local, but not left alone: `make claude` / `make pi` three-way merge the committed `.example` into them (`scripts/merge-settings.py`). Local changes survive; a key changed on both sides keeps the local value with a warning. Shared defaults go in the `.example`.
 
 ## Secrets
 This is a public repo. Never commit secrets, tokens, API keys, or personal paths that leak info.

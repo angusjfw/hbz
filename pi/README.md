@@ -67,8 +67,12 @@ installs its npm dependencies automatically.
 
 ## Changing defaults
 
-- Edit `pi/settings.json.example` or `pi/models.json` in this repo, then run
-  `make pi`.
-- The live `~/.pi/agent/settings.json` is gitignored because Pi writes to it at
-  runtime; `make pi` merges the committed baseline over the top so new defaults
-  land while preserving any keys only the live file has set.
+- Shared defaults: edit `pi/settings.json.example` or `pi/models.json` in this
+  repo, then run `make pi`.
+- Machine-only changes: edit the live `pi/settings.json` (gitignored, linked as
+  `~/.pi/agent/settings.json`), or let Pi write them. `make pi` does a three-way
+  merge with `scripts/merge-settings.py`: keys you haven't changed follow the
+  baseline, keys you have changed keep your value. Each run lists the local
+  overrides and warns when the baseline changed a key you also changed.
+- Pi only starts on the default model if it is in `enabledModels`; otherwise it
+  takes the first entry. Change both together.

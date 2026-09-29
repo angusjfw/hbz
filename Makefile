@@ -149,10 +149,9 @@ claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, ag
 	@# instructions
 	mkdir -p ~/.claude/hooks ~/.claude/skills ~/.claude/agents
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
-	@# settings — live file is gitignored (holds machine/work-local fields); merge the committed
-	@# baseline over it (baseline wins, so its list changes land), keeping keys only the live file has
-	@test -f ${DIR}/claude/settings.json || echo '{}' > ${DIR}/claude/settings.json
-	@jq -s '.[1] * .[0]' ${DIR}/claude/settings.json.example ${DIR}/claude/settings.json > ${DIR}/claude/settings.json.tmp && mv ${DIR}/claude/settings.json.tmp ${DIR}/claude/settings.json
+	@# settings — live file is gitignored (Claude Code and local edits write to it); three-way merge
+	@# the committed baseline into it, so baseline changes land and local changes survive
+	@${DIR}/scripts/merge-settings.py ${DIR}/claude/settings.json.example ${DIR}/claude/settings.json --target ~/.claude/settings.json
 	ln -sf ${DIR}/claude/settings.json ~/.claude/settings.json
 	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
@@ -167,10 +166,9 @@ pi: ## Install pi coding agent + symlink its config (instructions, settings, mod
 	npm ls -g @earendil-works/pi-coding-agent >/dev/null 2>&1 || npm install -g @earendil-works/pi-coding-agent
 	mkdir -p ~/.pi/agent/extensions
 	ln -sf ${DIR}/agents/AGENTS.md ~/.pi/agent/AGENTS.md
-	@# settings — live file is gitignored (pi writes to it); merge the committed baseline
-	@# over it (baseline wins, so its list changes land), keeping keys only pi has set
-	@test -f ${DIR}/pi/settings.json || echo '{}' > ${DIR}/pi/settings.json
-	@jq -s '.[1] * .[0]' ${DIR}/pi/settings.json.example ${DIR}/pi/settings.json > ${DIR}/pi/settings.json.tmp && mv ${DIR}/pi/settings.json.tmp ${DIR}/pi/settings.json
+	@# settings — live file is gitignored (pi and local edits write to it); three-way merge
+	@# the committed baseline into it, so baseline changes land and local changes survive
+	@${DIR}/scripts/merge-settings.py ${DIR}/pi/settings.json.example ${DIR}/pi/settings.json --target ~/.pi/agent/settings.json
 	ln -sf ${DIR}/pi/settings.json ~/.pi/agent/settings.json
 	ln -sf ${DIR}/pi/models.json ~/.pi/agent/models.json
 	@# extensions: single files, or directories with an index.ts
