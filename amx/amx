@@ -10,6 +10,7 @@ Run `amx -h` or `amx <command> -h` for usage.
 
 import argparse
 from contextlib import closing
+import fcntl
 import json
 import math
 import os
@@ -1109,6 +1110,18 @@ def type_into(target, text):
     return False
 
 
+def type_safely(target, text, wait, force):
+    """Check and type under one lock per pane, so concurrent senders take turns
+    instead of merging pastes or typing into a turn another sender just started."""
+    STATE.mkdir(parents=True, exist_ok=True)
+    with open(STATE / f"msg-{target['pane_id'].lstrip('%')}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        target = ready_for_typing(resolve_target(target["pane_id"]), wait, force)
+        verified = type_into(target, text)
+        time.sleep(SUBMIT_PAUSE)  # let the turn show as working before the next sender checks
+        return target, verified
+
+
 def compose(sender, route, body):
     """pi replies to pi through sender_info; everyone else reads the header."""
     if route == "socket" and sender and sender["live"]:
@@ -1156,8 +1169,7 @@ def cmd_msg(a):
             print(f"delivered via=socket target={target['name']} pane={target['pane_id']} verified=yes")
             return
         route = "pane"  # nothing listened after all; the message can't have landed
-    target = ready_for_typing(target, a.wait, a.force)
-    verified = type_into(target, compose(sender, route, body))
+    target, verified = type_safely(target, compose(sender, route, body), a.wait, a.force)
     print(f"delivered via=pane target={target['name']} pane={target['pane_id']} "
           f"verified={'yes' if verified else 'no'}")
 

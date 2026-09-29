@@ -198,7 +198,8 @@ Other errors exit 2.
 | `command` | not a chat agent | use tmux-interaction deliberately |
 | `dead`, `unresolved`, `ambiguous`, `self` | no usable target | check the name; use a `%pane` ID |
 
-Never `--force` into a pane the user may be typing in.
+Never `--force` into a pane the user may be typing in. Senders to one pane
+take turns: checks and typing run under a per-pane lock in the state dir.
 
 ## resume_state
 

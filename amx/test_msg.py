@@ -407,6 +407,28 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("send_to_session", err)
 
+    def test_senders_to_one_pane_take_turns(self):
+        active, overlaps = [], []
+
+        def slow_type(target, text):
+            if active:
+                overlaps.append(text)
+            active.append(text)
+            time.sleep(0.2)
+            active.remove(text)
+            return True
+
+        self.cm.type_into = slow_type
+        self.cm.SUBMIT_PAUSE = 0
+        results = []
+        threads = [threading.Thread(target=lambda n=n: results.append(
+            self.cm.type_safely(self.panes["%3"], f"m{n}", 0, False))) for n in range(3)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        self.assertEqual((len(results), overlaps), (3, []))
+
     def test_body_is_required_once(self):
         for args in ((), ("hi", "--file", "f"), ("  \n",)):
             code, _, err = self.msg("work-pi", *args)
