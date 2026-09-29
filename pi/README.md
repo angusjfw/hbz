@@ -60,6 +60,8 @@ installs its npm dependencies automatically.
 - `extensions/*.ts` — local Pi extensions.
   - `stash.ts` — `ctrl+s` stashes the editor draft; it comes back after the
     next prompt is sent, or on `ctrl+s` with an empty editor.
+  - `recap.ts` — `/recap [focus]` summarises the session in a panel, without
+    adding to the context.
 - `automode.json` — config for the `pi-automode` package.
 - `ollama/*.Modelfile` — local agent model overrides with larger context windows.
 
