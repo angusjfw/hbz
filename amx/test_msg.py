@@ -17,8 +17,8 @@ import test_startup
 SID = "11111111-2222-3333-4444-555555555555"
 
 
-def pane(harness, name="w", pane_id="%2", sid=SID, state="idle", dead=False):
-    return dict(name=name, pane_id=pane_id, harness=harness, session_id=sid, state=state, dead=dead)
+def pane(harness, name="w", pane_id="%2", sid=SID, state="idle", dead=False, live=False):
+    return dict(name=name, pane_id=pane_id, harness=harness, session_id=sid, state=state, dead=dead, live=live)
 
 
 class RouteTests(unittest.TestCase):
@@ -48,8 +48,12 @@ class RouteTests(unittest.TestCase):
 
     def test_native_pairs_are_refused_with_the_tool(self):
         self.assertIn("SendMessage", self.refused("native", pane("claude", pane_id="%1"), pane("claude")))
-        self.assertIn("send_to_session", self.refused("native", pane("pi", pane_id="%1"), pane("pi"), live=True))
-        self.assertEqual(self.route(pane("pi", pane_id="%1"), pane("pi")), "pane")
+        self.assertIn("send_to_session", self.refused("native", pane("pi", pane_id="%1", live=True), pane("pi"),
+                                                       live=True))
+        self.assertEqual(self.route(pane("pi", pane_id="%1", live=True), pane("pi")), "pane")
+
+    def test_pi_without_its_own_socket_has_no_native_tool(self):
+        self.assertEqual(self.route(pane("pi", pane_id="%1"), pane("pi"), live=True), "socket")
 
     def test_forced_routes(self):
         claude = pane("claude", pane_id="%1")
@@ -71,9 +75,11 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(self.cm.msg_header(None), "[from an agent outside tmux; no reply route]")
 
     def test_compose(self):
-        claude, pi = pane("claude", "c", "%1"), pane("pi", "p", "%1")
+        claude, pi = pane("claude", "c", "%1"), pane("pi", "p", "%1", live=True)
         self.assertEqual(self.cm.compose(claude, "socket", "hi"), self.cm.msg_header(claude) + "\nhi")
         self.assertEqual(self.cm.compose(pi, "pane", "hi"), self.cm.msg_header(pi) + "\nhi")
+        plain = pane("pi", "p", "%1")
+        self.assertEqual(self.cm.compose(plain, "socket", "hi"), self.cm.msg_header(plain) + "\nhi")
         body, tag = self.cm.compose(pi, "socket", "hi").split("\n\n")
         self.assertEqual(body, "hi")
         info = json.loads(tag.removeprefix("<sender_info>").removesuffix("</sender_info>"))
@@ -375,6 +381,19 @@ class CommandTests(unittest.TestCase):
         self.assertTrue(self.typed[0][1].startswith("[from an agent outside tmux"))
         self.me = "%9"
         self.assertEqual(self.msg("work-c", "hi")[0], 0)
+        self.assertTrue(self.typed[1][1].startswith('[from %9 (unknown, %9); reply: amx msg %9 "..."]'))
+
+    def test_sender_socket_decides_pi_native(self):
+        self.panes["%1"] = pane("pi", "lead", "%1", sid="lead-sid")
+        self.live = True
+        self.cm.socket_answers = lambda path: path == self.cm.pi_socket(SID)
+        code, out, _ = self.msg("work-pi", "done")
+        self.assertEqual((code, out), (0, "delivered via=socket target=work-pi pane=%2 verified=yes"))
+        self.assertTrue(self.sent[0][1].startswith("[from lead (pi, %1)"))
+        self.cm.socket_answers = lambda path: True  # the lead runs session-control too
+        code, _, err = self.msg("work-pi", "done")
+        self.assertEqual(code, 1)
+        self.assertIn("send_to_session", err)
 
     def test_body_is_required_once(self):
         for args in ((), ("hi", "--file", "f"), ("  \n",)):

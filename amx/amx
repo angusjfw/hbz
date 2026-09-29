@@ -1001,7 +1001,8 @@ def msg_route(sender, target, via, live):
         if h == "pi" and live:
             return "socket"
         raise Refused("no-socket", f"no live session-control socket for {name}")
-    if via == "auto" and sender and sender["harness"] == h and (h == "claude" or (h == "pi" and live)):
+    # pi only has send_to_session when it runs session-control itself
+    if via == "auto" and sender and sender["harness"] == h and (h == "claude" or (live and sender["live"])):
         raise Refused("native", f"use {NATIVE[h]} to reach {name} (or --via pane)")
     return "socket" if via == "auto" and h == "pi" and live else "pane"
 
@@ -1103,18 +1104,23 @@ def type_into(target, text):
 
 def compose(sender, route, body):
     """pi replies to pi through sender_info; everyone else reads the header."""
-    if route == "socket" and sender and sender["harness"] == "pi" and sender.get("session_id"):
+    if route == "socket" and sender and sender["live"]:
         return f"{body}\n\n<sender_info>{json.dumps({'sessionId': sender['session_id']})}</sender_info>"
     return f"{msg_header(sender)}\n{body}"
 
 
 def msg_sender():
-    """Own identity for the header, or None outside tmux or when it can't be resolved."""
+    """Own identity for routing and the header; None outside tmux. live: this pane
+    is pi with its own session-control socket, so it has send_to_session."""
     pane_id = my_pane_quiet()
-    try:
-        return resolve_target(pane_id) if pane_id else None
-    except CmError:
+    if not pane_id:
         return None
+    try:
+        me = resolve_target(pane_id)
+    except CmError:
+        return dict(name=pane_id, pane_id=pane_id, harness="unknown", session_id=None, live=False)
+    me["live"] = me["harness"] == "pi" and bool(me["session_id"]) and socket_answers(pi_socket(me["session_id"]))
+    return me
 
 
 def cmd_msg(a):
