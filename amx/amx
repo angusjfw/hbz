@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """amx: mechanics for agent sessions in tmux.
 
-Registry, tmux and transcript operations for managed agent sessions
-(Claude Code or pi). Judgement stays with the calling agent; amx only
-reads, reports and executes. Stdlib only.
+Registry, tmux and transcript operations for managed sessions
+(Claude Code, pi, Codex or generic commands). Judgement stays with the
+calling agent; amx only reads, reports and executes. Stdlib only.
 
 Run `amx -h` or `amx <command> -h` for usage.
 """
 
 import argparse
+from contextlib import closing
 import json
+import math
 import os
 import re
 import shlex
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -306,7 +309,8 @@ def pane_rows(target=None):
     fmt = "\t".join(["#{session_name}", "#{window_index}", "#{window_name}", "#{window_layout}",
                      "#{pane_index}", "#{pane_id}", "#{pane_pid}", "#{pane_tty}",
                      "#{pane_current_path}", "#{pane_title}", "#{pane_dead}", "#{pane_dead_status}",
-                     "#{@amx_harness}", "#{@amx_session_id}", "#{@amx_agent_args}"])
+                     "#{@amx_harness}", "#{@amx_session_id}", "#{@amx_agent_args}",
+                     "#{@amx_command}", "#{@amx_label}", "#{@amx_launch_cwd}"])
     args = ["list-panes", "-F", fmt]
     args += ["-s", "-t", f"={target}"] if target else ["-a"]
     r = tmux(*args, check=False)
@@ -320,7 +324,8 @@ def pane_rows(target=None):
         rows.append(dict(session=f[0], window=int(f[1]), window_name=f[2], layout=f[3],
                          pane=int(f[4]), pane_id=f[5], pane_pid=int(f[6]),
                          tty=f[7].replace("/dev/", ""), cwd=f[8], title=f[9], dead=f[10] == "1",
-                         exit_status=f[11], managed_harness=f[12], managed_id=f[13], agent_args=f[14]))
+                         exit_status=f[11], managed_harness=f[12], managed_id=f[13], agent_args=f[14],
+                         managed_command=f[15], managed_label=f[16], launch_cwd=f[17]))
     return rows
 
 
@@ -351,17 +356,24 @@ def whoami_pane():
 
 # ---------------------------------------------------------------- harness adapter
 
-CLAUDE_RE = re.compile(r"(^|/)claude(-code)?( |$)|node\b.*\bclaude")
-PI_RE = re.compile(r"^pi\s*$|^pi |(^|/)bin/pi( |$)|node\b.*pi-coding-agent")
+# Built-in adapters. Unknown CLIs can use command sessions without pretending
+# that restarting their command resumes an agent conversation.
+AGENTS = {
+    "claude": re.compile(r"(^|/)claude(-code)?( |$)|node\b.*\bclaude"),
+    "pi": re.compile(r"^pi\s*$|^pi |(^|/)bin/pi( |$)|node\b.*pi-coding-agent"),
+    "codex": re.compile(r"(^|/)codex( |$)|node\b.*(?:@openai/codex|/bin/codex)"),
+}
+HARNESSES = (*AGENTS, "command")
+UUID_RE = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+CODEX_TITLE_CONFIG = 'tui.terminal_title=["session-id"]'
 
 
 def classify(args):
     if not args:
         return "idle"
-    if CLAUDE_RE.search(args):
-        return "claude"
-    if PI_RE.search(args):
-        return "pi"
+    for harness, pattern in AGENTS.items():
+        if pattern.search(args):
+            return harness
     return "cmd"
 
 
@@ -380,7 +392,7 @@ def argv_session_id(args):
     return m.group(1) if m else None
 
 
-def launch_line(harness, sid, model=None, effort=None, name=None, brief=None, agent_args=()):
+def launch_line(harness, sid, model=None, effort=None, name=None, brief=None, agent_args=(), command=None):
     if harness == "claude":
         parts = ["claude", "--session-id", sid]
         if model:
@@ -397,6 +409,16 @@ def launch_line(harness, sid, model=None, effort=None, name=None, brief=None, ag
             parts += ["--thinking", effort]
         if name:
             parts += ["--name", name]
+    elif harness == "codex":
+        parts = ["codex", "-c", CODEX_TITLE_CONFIG]
+        if model:
+            parts += ["--model", model]
+        if effort:
+            parts += ["-c", f"model_reasoning_effort={json.dumps(effort)}"]
+    elif harness == "command":
+        if not command:
+            die("command sessions need --command")
+        return shlex.join(["/bin/sh", "-c", command])
     else:
         die(f"unknown harness '{harness}'")
     parts += list(agent_args)
@@ -415,8 +437,12 @@ def resume_line(harness, sid, effort=None, name=None, agent_args=()):
     elif harness == "pi":
         # pi restores model, thinking level and --name itself
         parts = ["pi", "--session-id", sid]
+    elif harness == "codex":
+        parts = ["codex", "resume", sid, "-c", CODEX_TITLE_CONFIG]
+        if effort:
+            parts += ["-c", f"model_reasoning_effort={json.dumps(effort)}"]
     else:
-        die(f"unknown harness '{harness}'")
+        die(f"harness '{harness}' has no conversation resume adapter")
     return " ".join(shlex.quote(p) for p in [*parts, *agent_args])
 
 
@@ -424,8 +450,12 @@ def claude_project_dir(cwd):
     return Path.home() / ".claude/projects" / re.sub(r"[/._]", "-", cwd)
 
 
+def pi_agent_dir():
+    return Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi/agent")).expanduser()
+
+
 def pi_settings():
-    p = Path.home() / ".pi/agent/settings.json"
+    p = pi_agent_dir() / "settings.json"
     try:
         return json.loads(p.read_text())
     except (OSError, ValueError):
@@ -438,7 +468,7 @@ def pi_session_root():
     sd = pi_settings().get("sessionDir")
     if sd:
         return Path(sd).expanduser()
-    return Path.home() / ".pi/agent/sessions"
+    return pi_agent_dir() / "sessions"
 
 
 def pi_slug(cwd):
@@ -467,7 +497,61 @@ def transcript_files(harness, cwd):
             h = pi_header(p)
             if h.get("cwd") == cwd:
                 out.append((p, h.get("id") or p.stem.split("_", 1)[-1]))
+    elif harness == "codex":
+        home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+        for root in (home / "sessions", home / "archived_sessions"):
+            for p in root.rglob("*.jsonl") if root.is_dir() else []:
+                header = pi_header(p)
+                meta = header.get("payload", {}) if header.get("type") == "session_meta" else {}
+                if meta.get("cwd") == cwd and meta.get("id"):
+                    out.append((p, meta["id"]))
     return out
+
+
+def codex_title_prefix(title):
+    title = title.strip()
+    if UUID_RE.fullmatch(title):
+        return title
+    # Codex truncates the native session-id title item to 29 chars + '...'.
+    if re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{5}\.\.\.", title):
+        return title[:-3]
+    return None
+
+
+def codex_ids(cwd, prefix):
+    """Resolve only native IDs with this prefix and cwd, never newest-by-time."""
+    home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")).expanduser()
+    db_home = Path(os.environ.get("CODEX_SQLITE_HOME", home)).expanduser()
+    ids = set()
+    for db_path in db_home.glob("state_*.sqlite"):
+        try:
+            with closing(sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.2)) as db:
+                rows = db.execute("SELECT id FROM threads WHERE cwd = ? AND id LIKE ?", (cwd, prefix + "%"))
+                ids.update(row[0] for row in rows if UUID_RE.fullmatch(row[0]))
+        except sqlite3.Error:
+            pass  # Other versions/storage layouts can still have rollout files.
+    for root in (home / "sessions", home / "archived_sessions"):
+        for path in root.rglob(f"*{prefix}*.jsonl") if root.is_dir() else []:
+            header = pi_header(path)
+            meta = header.get("payload", {}) if header.get("type") == "session_meta" else {}
+            sid = meta.get("id", "")
+            if meta.get("cwd") == cwd and UUID_RE.fullmatch(sid) and sid.startswith(prefix):
+                ids.add(sid)
+    return ids
+
+
+def codex_pane_id(row):
+    """Native per-pane title, optionally resolved against persisted native IDs."""
+    prefix = codex_title_prefix(row.get("title", ""))
+    if not prefix:
+        return None
+    if UUID_RE.fullmatch(prefix):
+        return prefix
+    ids = codex_ids(row["cwd"], prefix)
+    # A known full launch/resume ID can resolve an otherwise unpersisted thread.
+    if row.get("managed_id", "").startswith(prefix) and UUID_RE.fullmatch(row["managed_id"]):
+        ids.add(row["managed_id"])
+    return next(iter(ids)) if len(ids) == 1 else None
 
 
 def pi_transcript(cwd, sid):
@@ -544,7 +628,6 @@ def inspect_panes(session, reg=None):
             if parts:
                 kv = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
                 workers[parts[0]] = kv
-    claimed = set()
     out = []
     tty_of = {pid: tty for pid, _, tty, _ in procs}
     for r in rows:
@@ -555,38 +638,43 @@ def inspect_panes(session, reg=None):
             if ppid == r["pane_pid"] and tty == pane_tty:
                 fg = args
                 break
-        if not fg:
-            # no child on the pane tty: the pane runs a shell (idle) or tmux
-            # started a command directly and pane_pid is that command
-            own = next((a for pid, _, _, a in procs if pid == r["pane_pid"]), "")
-            if not is_shell(own):
-                fg = own
+        own = next((a for pid, _, _, a in procs if pid == r["pane_pid"]), "")
+        if classify(own) in AGENTS or (not fg and not is_shell(own)):
+            fg = own
         kind = r.get("managed_harness") or classify(fg)
+        if kind == "command":
+            kind, fg = "cmd", r.get("managed_command") or fg
         sid, src = None, None
         primary = r["window"] == first_window and r["pane"] == 0
-        if kind in ("claude", "pi"):
-            store_sid = st.get(r["pane_id"], (None, None))[0]
-            if primary and entry and entry.get("resumed_session_id"):
+        if kind in AGENTS:
+            store_sid = st.get(r["pane_id"], (None, None))[0] if kind != "codex" else None
+            known_sid = (entry.get("resumed_session_id") if primary and entry else None) or r.get("managed_id", "")
+            if kind == "codex" and not known_sid:
+                prefix = codex_title_prefix(r.get("title", ""))
+                matches = [wid for wid in workers if prefix and wid.startswith(prefix)]
+                if len(matches) == 1:
+                    known_sid = matches[0]
+            native_sid = codex_pane_id(dict(r, managed_id=known_sid)) if kind == "codex" else None
+            if native_sid:
+                sid, src = native_sid, "native-title"
+            elif kind == "codex" and codex_title_prefix(r.get("title", "")):
+                pass  # Unresolved/ambiguous current title must not fall back to an old ID.
+            elif kind != "codex" and primary and entry and entry.get("resumed_session_id"):
                 sid, src = entry.get("resumed_session_id"), "registry"
+            elif r.get("managed_id"):
+                sid, src = r["managed_id"], "pane"
             elif store_sid and store_sid in workers:
                 sid, src = store_sid, "registry"
             elif store_sid:
                 sid, src = store_sid, "store"
-            elif r.get("managed_id"):
-                sid, src = r["managed_id"], "pane"
-            elif kind == "claude" and argv_session_id(fg):
+            elif kind in ("claude", "pi") and argv_session_id(fg):
                 sid = argv_session_id(fg)
                 src = "registry" if sid in workers else "argv"
-            else:
-                cands = [w for w, kv in workers.items()
-                         if w not in claimed and str(Path(kv.get("cwd", "")).expanduser()) == r["cwd"]]
-                if len(cands) == 1:
-                    sid, src = cands[0], "registry-cwd"
-        if sid:
-            claimed.add(sid)
+            elif kind == "codex" and (match := re.search(r"\bcodex\s+resume\s+(" + UUID_RE.pattern + r")\b", fg)):
+                sid, src = match.group(1), "argv"
         out.append(dict(r, kind=kind, command=fg, session_id=sid, id_source=src,
                         primary=primary, state=st.get(r["pane_id"], (None, None))[1],
-                        label=workers.get(sid, {}).get("label") if sid else None))
+                        label=r.get("managed_label") or (workers.get(sid, {}).get("label") if sid else None)))
     return out
 
 
@@ -743,13 +831,14 @@ def write_resume_state(session, out, reg=None):
     for (w, wname, layout), ps in wins.items():
         lines += [f"## window {w}: {wname}", f"layout: {layout}", ""]
         for p in ps:
-            lines += [f"### pane {p['pane']}", f"cwd: {p['cwd']}"]
-            if p["kind"] in ("claude", "pi"):
+            cwd = (p.get("launch_cwd") if p["kind"] == "cmd" else None) or p["cwd"]
+            lines += [f"### pane {p['pane']}", f"cwd: {cwd}"]
+            if p["kind"] in AGENTS:
                 if not p["session_id"]:
                     missing.append(f"window {w} pane {p['pane']} ({p['kind']}, {p['cwd']})")
                     lines.append("command: ")
                 else:
-                    e = effort if (p["primary"] and p["kind"] == "claude") else None
+                    e = effort if (p["primary"] and p["kind"] in ("claude", "codex")) else None
                     nm = name if p["primary"] else (f"{name}-{p['label']}" if p["label"] else None)
                     args = json.loads(p.get("agent_args") or (entry.get("agent_args") if entry and p["primary"] else None) or "[]")
                     lines.append(f"command: {resume_line(p['kind'], p['session_id'], e, nm, args)}")
@@ -761,6 +850,9 @@ def write_resume_state(session, out, reg=None):
                         lines.append(f"label: {p['label']}")
             elif p["kind"] == "cmd":
                 lines.append(f"command: {p['command']}")
+                lines.append("harness: command")
+                if p["label"]:
+                    lines.append(f"label: {p['label']}")
             else:
                 lines.append("command:")
             lines.append("")
@@ -815,16 +907,24 @@ def mint_id():
         return str(uuid.uuid4())
 
 
-def start_pane(pane_id, cwd, line, harness, sid, agent_args=()):
+def start_pane(pane_id, cwd, line, harness, sid, agent_args=(), command="", label=""):
     """tmux owns the command lifetime; a failed launch stays visible, with its status."""
     tmux("set-option", "-p", "-t", pane_id, "remain-on-exit", "on")
-    for key, value in (("harness", harness), ("session_id", sid), ("agent_args", json.dumps(list(agent_args)))):
+    for key, value in (("harness", harness), ("session_id", sid), ("agent_args", json.dumps(list(agent_args))),
+                       ("command", command), ("label", label), ("launch_cwd", cwd)):
         tmux("set-option", "-p", "-t", pane_id, f"@amx_{key}", value)
     env = ["-e", f"AMX_STATE_DIR={STATE}", "-e", f"PATH={os.environ.get('PATH', os.defpath)}"]
-    for key in ("AMX_AGENT_STATUS_DIR", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR"):
+    for key in ("AMX_AGENT_STATUS_DIR", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "CODEX_HOME", "CODEX_SQLITE_HOME"):
         if key in os.environ:
             env += ["-e", f"{key}={os.environ[key]}"]
-    tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, *env, f"exec {line}")
+    for attempt in range(5):
+        result = tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, *env, f"exec {line}", check=False)
+        if result.returncode == 0:
+            return
+        # Retry only tmux's pre-exec tty allocation failure, never agent failures.
+        if "fork failed: Device not configured" not in result.stderr or attempt == 4:
+            die(f"could not launch in {pane_id}: {result.stderr.strip() or result.stdout.strip()}")
+        time.sleep(0.1)
 
 
 def wait_for_start(pane_id, timeout, settle=2.0):
@@ -876,26 +976,37 @@ def write_brief(name, text_or_file):
 
 
 def cmd_spawn(a):
+    if not math.isfinite(a.timeout) or a.timeout <= 0:
+        die("--timeout must be a positive finite number")
+    if a.command is not None:
+        if not a.command.strip() or "\n" in a.command or "\r" in a.command or "\t" in a.command:
+            die("--command must be a nonempty single line without tabs")
+        if a.harness and a.harness != "command":
+            die("--command cannot be combined with an agent harness")
+        a.harness = "command"
+    if a.harness == "command" and (a.model or a.effort or a.brief_file or a.agent_arg):
+        die("command sessions use --command, not model, effort, brief or agent arguments")
     if a.into:
         return spawn_into(a)
     if not (a.id and a.cwd and a.harness):
         die("spawn needs --harness, --id and --cwd (or --into)")
-    cwd = str(Path(a.cwd).expanduser())
+    cwd = str(Path(a.cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         die(f"cwd {cwd} doesn't exist (create the worktree first)")
     if has_session(a.id):
         die(f"tmux session '{a.id}' already exists: import it or pick another id")
     if Registry.load().entry(a.id):
         die(f"registry entry '{a.id}' already exists")
-    sid = mint_id()
+    sid = mint_id() if a.harness in ("claude", "pi") else ""
     brief = write_brief(a.id, a.brief_file)
-    line = launch_line(a.harness, sid, a.model, a.effort, a.id, brief, a.agent_arg)
+    line = launch_line(a.harness, sid, a.model, a.effort, a.id, brief, a.agent_arg, a.command)
     tmux("new-session", "-d", "-s", a.id, "-n", a.id, "-c", cwd)
     pane_id = tmux("list-panes", "-t", f"={a.id}", "-F", "#{pane_id}").stdout.split()[0]
 
-    fields = [f"harness={a.harness}", f"tmux_session={a.id}", f"cwd={cwd}", f"resumed_session_id={sid}",
-              f"agent_args={json.dumps(a.agent_arg)}"]
-    for k in ("ticket", "worktree", "branch", "model", "effort"):
+    fields = [f"harness={a.harness}", f"tmux_session={a.id}", f"cwd={cwd}", f"agent_args={json.dumps(a.agent_arg)}"]
+    if sid:
+        fields.append(f"resumed_session_id={sid}")
+    for k in ("ticket", "worktree", "branch", "model", "effort", "command"):
         v = getattr(a, k)
         if v:
             fields.append(f"{k}={v}")
@@ -904,9 +1015,17 @@ def cmd_spawn(a):
         b = reg.new(a.id)
         apply_assign(b, ["started=now"] + fields + ["last_touched=now"])
     mutate(fn)
-    start_pane(pane_id, cwd, line, a.harness, sid, a.agent_arg)
-    print(f"session={a.id}\npane={pane_id}\nsession_id={sid}\nharness={a.harness}")
+    start_pane(pane_id, cwd, line, a.harness, sid, a.agent_arg, a.command or "")
+    print(f"session={a.id}\npane={pane_id}\nharness={a.harness}")
     report_start(pane_id, a.timeout)
+    if a.harness == "codex":
+        sid = record_pane_ids(a.id).get(pane_id, "")
+    if a.harness in AGENTS:
+        print(f"session_id={sid or 'unknown'}")
+        if not sid:
+            print("WARNING: running, but session ID is not available yet; use amx identify before shutdown", file=sys.stderr)
+    else:
+        print("resume=command-restart (not conversation resume)")
 
 
 def spawn_into(a):
@@ -917,20 +1036,25 @@ def spawn_into(a):
     entry = entries[0]
     if not has_session(a.into):
         die(f"tmux session '{a.into}' isn't running")
-    harness = harness_of(entry)
+    harness = a.harness or harness_of(entry)
+    if harness != "command" and harness != harness_of(entry):
+        die("agent panes must use the session's harness; use a separate session")
+    if harness == "command" and not a.command:
+        die("command panes need --command")
     if not a.label or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", a.label):
         die("--into needs --label (letters, digits, . _ -)")
-    cwd = str(Path(a.cwd or entry.get("cwd") or ".").expanduser())
+    cwd = str(Path(a.cwd or entry.get("cwd") or ".").expanduser().resolve())
     if not Path(cwd).is_dir():
         die(f"cwd {cwd} doesn't exist")
     name = f"{entry.name}-{a.label}"
     if harness == "pi" and "--session-control" in a.agent_arg and pi_alias_live(name):
         die(f"pi session name '{name}' is in use by a running session (~/.pi/session-control/{name}.alias)")
-    if any(f"label={a.label}" in w.split() for w in entry.get_all("worker")):
-        die(f"label '{a.label}' is already used by a worker in {entry.name}")
-    sid = mint_id()
+    if (any(f"label={a.label}" in w.split() for w in entry.get_all("worker"))
+            or any(p.get("managed_label") == a.label for p in pane_rows(a.into))):
+        die(f"label '{a.label}' is already used by a pane in {entry.name}")
+    sid = mint_id() if harness in ("claude", "pi") else ""
     brief = write_brief(f"{entry.name}-{a.label}", a.brief_file)
-    line = launch_line(harness, sid, a.model, a.effort, name, brief, a.agent_arg)
+    line = launch_line(harness, sid, a.model, a.effort, name, brief, a.agent_arg, a.command)
     if a.window:
         r = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", f"={a.into}:", "-n", a.window, "-c", cwd)
     else:
@@ -940,12 +1064,21 @@ def spawn_into(a):
 
     def fn(reg):
         b = reg.block(entry.name)
-        b.append("worker", f"{sid} cwd={cwd} label={a.label}")
+        if sid:
+            b.append("worker", f"{sid} cwd={cwd} label={a.label}")
         b.set("last_touched", now_str())
     mutate(fn)
-    start_pane(pane_id, cwd, line, harness, sid, a.agent_arg)
-    print(f"pane={pane_id}\nname={name}\nsession_id={sid}\nharness={harness}")
+    start_pane(pane_id, cwd, line, harness, sid, a.agent_arg, a.command or "", a.label)
+    print(f"pane={pane_id}\nname={name}\nharness={harness}")
     report_start(pane_id, a.timeout)
+    if harness == "codex":
+        sid = record_pane_ids(entry.name).get(pane_id, "")
+    if harness in AGENTS:
+        print(f"session_id={sid or 'unknown'}")
+        if not sid:
+            print("WARNING: session ID unknown; use amx identify before shutdown", file=sys.stderr)
+    else:
+        print("resume=command-restart (not conversation resume)")
 
 
 def cmd_rebuild(a):
@@ -954,6 +1087,9 @@ def cmd_rebuild(a):
     rs_path = entry.get("resume_state")
     if rs_path:
         rs = parse_resume_state(Path(rs_path).expanduser().read_text())
+    elif harness_of(entry) == "command" and entry.get("command") and entry.get("cwd"):
+        rs = {"fields": {}, "windows": [{"index": 1, "name": a.id, "layout": None, "panes": [
+            {"index": 0, "cwd": entry.get("cwd"), "harness": "command", "command": entry.get("command")}]}]}
     elif entry.get("resumed_session_id") and entry.get("cwd"):
         # no layout recorded (wrapped, or registered by hand): one pane, primary only
         rs = {"fields": {}, "windows": [{"index": 1, "name": a.id, "layout": None, "panes": [
@@ -981,15 +1117,20 @@ def cmd_rebuild(a):
             cmd = p.get("command", "")
             primary = wi == 0 and p is w["panes"][0]
             args = json.loads(p.get("agent_args") or (entry.get("agent_args") if primary else None) or "[]")
+            if not sid and cmd and p.get("harness") in AGENTS:
+                problems.append(f"window {w['index']} pane {p['index']}: {h} command has no session_id; "
+                                "record its native ID, or leave the pane as a shell and start a fresh agent explicitly")
             if sid:
                 if h == "pi":
                     if not pi_transcript(cwd, sid):
                         problems.append(f"pi session {sid} not found under {pi_session_root() / pi_slug(cwd)} "
                                         f"with header cwd {cwd}; `pi --session-id` would start a blank session")
                     cmd = resume_line("pi", sid, agent_args=args)
-                elif h == "claude":
+                elif h in ("claude", "codex"):
                     nm = entry.name if primary else (f"{entry.name}-{p['label']}" if p.get("label") else None)
-                    cmd = resume_line("claude", sid, effort if primary else None, nm, args)
+                    cmd = resume_line(h, sid, effort if primary else None, nm, args)
+                else:
+                    problems.append(f"window {w['index']} pane {p['index']}: no resume adapter for {h}")
             panes.append((dict(p, harness=h, agent_args=json.dumps(args)), cwd, cmd))
         plan.append((w, panes))
     if problems:
@@ -1013,14 +1154,22 @@ def cmd_rebuild(a):
             ids = tmux("list-panes", "-t", f"={session}:{widx}", "-F", "#{pane_id}").stdout.split()
             for pid, (p, cwd, cmd) in zip(ids, panes):
                 if cmd and p.get("session_id"):
-                    start_pane(pid, cwd, cmd, p["harness"], p["session_id"], json.loads(p["agent_args"]))
+                    start_pane(pid, cwd, cmd, p["harness"], p["session_id"], json.loads(p["agent_args"]), label=p.get("label", ""))
                     wait_for_start(pid, 30)
                 elif cmd:
-                    tmux("send-keys", "-t", pid, "-l", "--", cmd)
-                    tmux("send-keys", "-t", pid, "Enter")
-    except CmError:
+                    start_pane(pid, cwd, launch_line("command", "", command=cmd), "command", "",
+                               command=cmd, label=p.get("label", ""))
+                    wait_for_start(pid, 30)
+    except CmError as error:
+        failure = STATE / "snapshots" / f"{a.id}-rebuild-failed.txt"
+        message = str(error).replace("; pane retained", "")
+        try:
+            snapshot_session(session, failure, 500)
+            message += f"; failed rebuild output: {failure}"
+        except (CmError, OSError):
+            pass
         tmux("kill-session", "-t", f"={session}", check=False)
-        raise
+        die(message)
 
     def fn(reg):
         b = reg.block(a.id)
@@ -1086,7 +1235,12 @@ def live_entry(reg, name):
 
 
 def sync_workers(b, panes):
-    """Make worker lines match the non-primary agent panes that have ids."""
+    """Record current primary identity and non-primary agent panes that have ids."""
+    primary = next((p for p in panes if p["primary"]), None)
+    if primary and primary["session_id"]:
+        b.set("resumed_session_id", primary["session_id"])
+    elif primary and primary["kind"] in AGENTS:
+        b.unset("resumed_session_id")
     running = {p["session_id"]: p for p in panes if p["session_id"] and not p["primary"]}
     have = {(v.split() or [""])[0] for v in b.get_all("worker")}
     for wid in have - set(running):
@@ -1094,6 +1248,46 @@ def sync_workers(b, panes):
     for sid in set(running) - have:
         p = running[sid]
         b.append("worker", f"{sid} cwd={p['cwd']}" + (f" label={p['label']}" if p["label"] else ""))
+
+
+def record_pane_ids(entry_id):
+    reg = Registry.load()
+    entry, session = live_entry(reg, entry_id)
+    panes = inspect_panes(session, reg)
+    mutate(lambda current: sync_workers(current.block(entry_id), panes))
+    return {p["pane_id"]: p["session_id"] for p in panes if p["session_id"]}
+
+
+def cmd_identify(a):
+    if bool(a.pane) != bool(a.session_id):
+        die("identify needs both --pane and --session-id for an explicit identity")
+    if a.pane:
+        reg = Registry.load()
+        entry, session = live_entry(reg, a.id)
+        pane = next((p for p in inspect_panes(session, reg) if p["pane_id"] == a.pane), None)
+        if not pane or pane["kind"] not in AGENTS:
+            die(f"{a.pane} is not an agent pane in {a.id}")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", a.session_id):
+            die("invalid session ID")
+        if pane["kind"] in ("claude", "codex") and not UUID_RE.fullmatch(a.session_id):
+            die(f"{pane['kind']} needs a full UUID")
+        prefix = codex_title_prefix(pane.get("title", "")) if pane["kind"] == "codex" else None
+        if prefix and not a.session_id.startswith(prefix):
+            die("session ID does not match this pane's native Codex title")
+        tmux("set-option", "-p", "-t", a.pane, "@amx_session_id", a.session_id)
+        if pane.get("label"):
+            tmux("set-option", "-p", "-t", a.pane, "@amx_label", pane["label"])
+        if pane["primary"]:
+            mutate(lambda current: current.block(a.id).set("resumed_session_id", a.session_id))
+    ids = record_pane_ids(a.id)
+    for pane, sid in ids.items():
+        print(f"{pane}\t{sid}")
+    entry = Registry.load().block(a.id)
+    unknown = [p["pane_id"] for p in inspect_panes(entry.get("tmux_session"))
+               if p["kind"] in AGENTS and not p["session_id"]]
+    if unknown:
+        print(f"WARNING: session ID still unknown for {', '.join(unknown)}; inspect the agent", file=sys.stderr)
+        sys.exit(3)
 
 
 def agent_status(action, session):
@@ -1342,11 +1536,11 @@ def sole_agent(pane_pid):
     for _ in range(40):
         if pid == pane_pid:
             # tmux may run the agent directly rather than through an idle shell.
-            return agents + (classify(procs.get(pid, (None, ""))[1]) in ("claude", "pi")) == 1
+            return agents + (classify(procs.get(pid, (None, ""))[1]) in AGENTS) == 1
         if pid not in procs:
             return False
         ppid, args = procs[pid]
-        if classify(args) in ("claude", "pi"):
+        if classify(args) in AGENTS:
             agents += 1
         pid = ppid
     return False
@@ -1423,6 +1617,9 @@ def handle_hook(harness, ev):
     if name:
         e = Registry.load().entry(name)
         rec["tracked"] = bool(e) and not e.get("auto")
+        if event == "start" and e and harness_of(e) == harness:
+            # Keep pane-bound identity current on /new, /clear and resume.
+            tmux("set-option", "-p", "-t", pane, "@amx_session_id", sid, check=False)
     append_log(rec)
 
 
@@ -1532,12 +1729,14 @@ def cmd_reconcile(a):
             for p in panes:
                 if p.get("dead"):
                     out.append(("exited", e.name, f"pane {p['pane_id']} exited (status {p.get('exit_status') or 'unknown'}); inspect its retained output"))
-                if p["kind"] in ("claude", "pi") and p["kind"] != h:
+                if p["kind"] in AGENTS and p["kind"] != h:
                     out.append(("mixed", e.name, f"{p['kind']} pane {p['pane_id']} in a {h} session"))
-                if p["kind"] in ("claude", "pi") and not p["session_id"]:
+                if p["kind"] in AGENTS and not p["session_id"]:
                     out.append(("no-id", e.name, f"{p['kind']} pane {p['pane_id']} ({p['cwd']}): id unknown; "
-                                "resolve with amx transcripts"))
-                elif p["kind"] in ("claude", "pi") and p["id_source"] == "store" and not p["primary"]:
+                                f"try amx identify {e.name}, or find the native ID"))
+                elif p["primary"] and p["session_id"] and p["session_id"] != e.get("resumed_session_id"):
+                    out.append(("session-changed", e.name, f"primary ID differs: amx identify {e.name}"))
+                elif p["kind"] in AGENTS and not p["primary"] and p["session_id"] not in entry_ids(e):
                     out.append(("unrecorded", e.name, f"pane {p['pane_id']} runs {p['session_id']} (cwd {p['cwd']}) "
                                 f"with no worker line: amx reg worker add {e.name} {p['session_id']} cwd={p['cwd']}"))
             for w in e.get_all("worker"):
@@ -1561,7 +1760,7 @@ def cmd_reconcile(a):
     for s in sorted(live - known - mgr_sessions):
         if is_shared(s, reg):
             continue  # the user's own session; never an entry
-        agents = [p for p in inspect_panes(s, reg) if p["kind"] in ("claude", "pi")]
+        agents = [p for p in inspect_panes(s, reg) if p["kind"] in AGENTS]
         if agents:
             kinds = ",".join(sorted({p["kind"] for p in agents}))
             out.append(("unregistered", s, f"{len(agents)} agent pane(s) ({kinds}); register or ignore"))
@@ -1659,12 +1858,13 @@ def main(argv=None):
     p.add_argument("out")
     p.set_defaults(fn=cmd_resume_state)
 
-    p = sub.add_parser("spawn", help="new managed session, or with --into a new agent pane in one")
-    p.add_argument("--harness", choices=["claude", "pi"])
+    p = sub.add_parser("spawn", help="new managed session, or with --into an agent/command pane in one")
+    p.add_argument("--harness", choices=HARNESSES)
+    p.add_argument("--command", help="generic shell command; restarting it is not conversation resume")
     p.add_argument("--id")
     p.add_argument("--cwd")
     p.add_argument("--model")
-    p.add_argument("--effort", help="Claude --effort, or pi --thinking")
+    p.add_argument("--effort", help="Claude --effort, pi --thinking, or Codex model_reasoning_effort")
     p.add_argument("--agent-arg", action="append", default=[], metavar="ARG",
                    help="extra agent argument, repeatable; e.g. --agent-arg=--session-control (pi extension required)")
     p.add_argument("--brief-file")
@@ -1678,7 +1878,13 @@ def main(argv=None):
     p.add_argument("--timeout", type=float, default=30)
     p.set_defaults(fn=cmd_spawn)
 
-    p = sub.add_parser("rebuild", help="bring an entry back into tmux: from resume_state, else one pane from resumed_session_id + cwd")
+    p = sub.add_parser("identify", help="record native IDs, or explicitly bind a full session ID to a pane")
+    p.add_argument("id")
+    p.add_argument("--pane", help="explicit identity: agent pane ID in this entry")
+    p.add_argument("--session-id", help="explicit identity: full native conversation ID")
+    p.set_defaults(fn=cmd_identify)
+
+    p = sub.add_parser("rebuild", help="resume agent conversations or restart recorded commands")
     p.add_argument("id")
     p.set_defaults(fn=cmd_rebuild)
 
@@ -1722,7 +1928,7 @@ def main(argv=None):
     p.set_defaults(fn=cmd_track)
 
     p = sub.add_parser("hook", help="session hook: read one event as JSON on stdin (always exits 0)")
-    p.add_argument("--harness", required=True, choices=["claude", "pi"])
+    p.add_argument("--harness", required=True, choices=AGENTS)
     p.set_defaults(fn=cmd_hook)
 
     p = sub.add_parser("migrate", help="move the old claude-manager state here (idempotent)")
@@ -1735,7 +1941,7 @@ def main(argv=None):
     p.set_defaults(fn=lambda a: (install_switcher(), print("installed")))
 
     p = sub.add_parser("transcripts", help="list a harness's transcripts for a cwd")
-    p.add_argument("harness", choices=["claude", "pi"])
+    p.add_argument("harness", choices=AGENTS)
     p.add_argument("cwd")
     p.add_argument("--grep")
     p.add_argument("--name", help="pi: session name")

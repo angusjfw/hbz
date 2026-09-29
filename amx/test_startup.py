@@ -81,6 +81,43 @@ class StartupTests(unittest.TestCase):
             self.cm.report_start("%1", 3)
         self.assertEqual(error.exception.code, 3)
 
+    def test_start_retries_only_pre_exec_tty_failure(self):
+        attempts = []
+        def launch(*args, **kw):
+            if args[0] == "respawn-pane":
+                attempts.append(args)
+                if len(attempts) == 1:
+                    return SimpleNamespace(returncode=1, stderr="respawn pane failed: fork failed: Device not configured", stdout="")
+            return SimpleNamespace(returncode=0, stderr="", stdout="")
+        self.cm.tmux = launch
+        self.cm.start_pane("%1", self.tmp.name, "pi", "pi", "sid")
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(attempts[0], attempts[1])
+
+    def test_start_tty_retry_is_bounded(self):
+        attempts = []
+        def launch(*args, **kw):
+            if args[0] == "respawn-pane":
+                attempts.append(args)
+                return SimpleNamespace(returncode=1, stderr="fork failed: Device not configured", stdout="")
+            return SimpleNamespace(returncode=0, stderr="", stdout="")
+        self.cm.tmux = launch
+        with self.assertRaisesRegex(self.cm.CmError, "fork failed"):
+            self.cm.start_pane("%1", self.tmp.name, "pi", "pi", "sid")
+        self.assertEqual(len(attempts), 5)
+
+    def test_start_does_not_retry_other_errors(self):
+        attempts = []
+        def launch(*args, **kw):
+            if args[0] == "respawn-pane":
+                attempts.append(args)
+                return SimpleNamespace(returncode=1, stderr="unknown pane", stdout="")
+            return SimpleNamespace(returncode=0, stderr="", stdout="")
+        self.cm.tmux = launch
+        with self.assertRaisesRegex(self.cm.CmError, "unknown pane"):
+            self.cm.start_pane("%1", self.tmp.name, "pi", "pi", "sid")
+        self.assertEqual(len(attempts), 1)
+
     def test_direct_agent_is_not_nested(self):
         self.cm.ps_table = lambda: [(10, 1, "t", "pi"), (20, 10, "t", "helper")]
         with patch.object(self.cm.os, "getppid", return_value=20):
@@ -92,16 +129,13 @@ class StartupTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("AMX_TMUX_TESTS") == "1" and shutil.which("tmux"),
                      "set AMX_TMUX_TESTS=1 for isolated tmux tests")
-class TmuxStartupTests(unittest.TestCase):
+class IsolatedTmuxCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
-        self.cm = load_cm(self.root / "state")
         self.socket = f"amx-test-{os.getpid()}-{self.root.name}"
         self.tmux_bin = shutil.which("tmux")
-        self.cm.tmux = self.tmux
-        self.addCleanup(lambda: self.tmux("kill-server", check=False))
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.agent = self.bin / "pi"
@@ -111,6 +145,10 @@ class TmuxStartupTests(unittest.TestCase):
                                      "AMX_AGENT_STATUS_DIR": str(self.root / "agent-status")})
         env.start()
         self.addCleanup(env.stop)
+        self.cm = load_cm(self.root / "state")
+        self.cm.tmux = self.tmux
+        self.addCleanup(lambda: self.tmux("kill-server", check=False))
+        self.assertEqual(self.cm.AGENT_STATUS, self.root / "agent-status")
         # A separate server, no user tmux config, no real agents or hooks.
         self.tmux("-f", "/dev/null", "new-session", "-d", "-s", "anchor")
         self.tmux("set-environment", "-g", "PATH", f"{self.bin}:/usr/bin:/bin")
@@ -126,6 +164,8 @@ class TmuxStartupTests(unittest.TestCase):
     def spawn(self, *extra):
         self.cm.main(["spawn", "--harness", "pi", "--id", "work", "--cwd", str(self.root), *extra])
 
+
+class TmuxStartupTests(IsolatedTmuxCase):
     def test_no_hooks_spawn_and_second_pane(self):
         self.spawn()
         self.cm.main(["spawn", "--into", "work", "--label", "second"])

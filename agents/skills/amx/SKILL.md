@@ -1,6 +1,6 @@
 ---
 name: amx
-description: Manager role for agent sessions in tmux, Claude Code or pi. Only when the user explicitly invokes /amx (or /skill:amx). Tracks a per-machine session registry, spawns workers in their own tmux sessions (one tmux session per registry session), handles pause, shutdown, cold resume and wrap, and keeps docs and journal complete across sessions. The manager does meta work only and delegates everything substantive to workers.
+description: Manager role for agent and command sessions in tmux, including Claude Code, pi and Codex. Only when the user explicitly invokes /amx (or /skill:amx). Tracks a per-machine session registry, spawns workers in their own tmux sessions (one tmux session per registry session), handles pause, shutdown, cold resume and wrap, and keeps docs and journal complete across sessions. The manager does meta work only and delegates everything substantive to workers.
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ crashes, and make sure journal and docs stay complete. Workers do the
 work; you do meta work.
 
 `amx` (on PATH) does every mechanical step; `amx reference` prints the
-registry and file formats. Per-harness notes (Claude Code vs pi) are in
+registry and file formats. Agent and generic-command notes are in
 `HARNESSES.md` next to this file; read it once on invocation.
 
 When installed, optional session hooks register agent sessions started in
@@ -84,8 +84,9 @@ Map the user's wording to one of these before acting:
 - **Wrap**: "wrap up", "complete", "close out", "finish". Final: journal
   entry, entry removed, tmux killed.
 
-"Session" means a registry session (one tmux session, one harness). A
-worker is a pane running an agent; the primary worker is the first
+"Session" means a registry session (one tmux session, one agent harness
+or a generic command). Non-agent command panes can accompany any harness.
+A worker is a pane running an agent; the primary worker is the first
 window's pane 0. A window is just a collection of panes.
 
 ## On invocation
@@ -141,8 +142,10 @@ Watch for it:
   and tell the user: Claude Code stops background tasks when memory is
   low.
 - **pi:** if available, call `amx_watch` with `start` (an optional
-  extension). Without a background notification tool, reconcile on each
-  manager turn and tell the user that idle notifications aren't active.
+  extension).
+- **Any manager without a background notification tool:** reconcile on
+  each turn and tell the user that idle notifications aren't active.
+  `amx watch` can report changes in a pane, but does not itself wake an agent.
 
 On each `changed` event: `amx ls -a` and `amx reconcile`, compare with
 what you last knew, and give the user a short mention of each change
@@ -215,9 +218,11 @@ running.
    you report the spawn. A "blank" or "empty" spawn gets no brief.
    Write the brief to a file.
 5. **Pick the worker harness**, then model and effort. Honor the user's
-   harness choice; otherwise default to your own. A worker tmux session
-   uses one agent harness throughout, including additional worker panes.
-   Pick model and effort from surface signals only (you can't
+   harness choice; otherwise default to your own supported agent harness.
+   A worker tmux session uses one agent harness throughout, including
+   additional agent panes. For a generic CLI/tool, record its explicit
+   command instead; don't invent model, effort or conversation-resume
+   capabilities. Pick model and effort from surface signals only (you can't
    investigate to gauge complexity): how the user framed it, the kind of
    work, its breadth and ambiguity. Model follows capability need,
    effort follows size. Lean powerful. Guidelines are in `HARNESSES.md`.
@@ -236,8 +241,14 @@ running.
    command stayed running during startup observation, not that it is ready.
    Exit 3 means it exited early or couldn't be observed: inspect the
    retained pane and report its error/status. Hooks aren't required.
+   Codex may report an unknown native ID until it saves the thread; use
+   `amx identify <id>` once available, never guess from another session.
+
+   Generic sessions use `amx spawn --id <id> --cwd <dir> --command '<command>'`
+   instead of agent options. They restart that command, not a conversation.
+   Generic panes can be added with `--into <session> --label <label> --command …`.
 7. Add the task (`[active]`). Tell the user the session name, model and
-   effort with a one-line reason. They switch with `prefix+w`, the
+   effort with a one-line reason (or the command for a generic session). They switch with `prefix+w`, the
    session-LED switcher, or `agent-deck switch <id>`.
 
 PR reviews: worktree on the PR's branch (`gh pr view <N> --json
@@ -277,8 +288,14 @@ changes anything; you act:
   crash).
 - `stale-worker`: a worker line whose agent is gone. Run the printed
   drop.
-- `no-id`: an agent pane whose session id is unknown. Find it with
+- `no-id`: an agent pane whose session id is unknown. Try `amx identify <id>`
+  for native identity, then the harness's own session browser or
   `amx transcripts <harness> <cwd> --grep <phrase from its pane>`.
+  Local transcript lookup need not cover every native storage format.
+  For explicit corrections, bind the full ID to the correct pane with
+  `amx identify <entry> --pane <pane-id> --session-id <native-id>`.
+- `session-changed`: the native primary ID differs from the registry.
+  Run the printed `amx identify` command to record it.
 - `wrap-pending`: an entry from before workers wrapped themselves. Write
   its journal entry (Wrap, step 2), then `amx wrap <id>`.
 - `busy-paused`: a paused session is working again: `amx pause <id> off`.
@@ -304,14 +321,16 @@ writes the resume_state, records ids and worker lines, parks the LED
 key, moves attached clients off and kills the tmux session (unless it's
 shared, which it leaves running and says so). If it stops
 with "no session id for …", resolve that pane per the `no-id` reconcile
-item, add the lines it asks for, and rerun with `--force`. Set the task
+item, record its primary/worker ID in the registry, and rerun normal
+shutdown. Don't force away an unknown conversation. Set the task
 prefix to `[shutdown]`.
 
 ## Cold resume
 
 `amx rebuild <id>`. It rebuilds windows, panes and layout from the
-resume_state, resumes every agent pane by id and replays other panes'
-commands. It checks everything first and creates nothing if a cwd or a
+resume_state, resumes every agent pane by id and restarts other panes'
+commands. Review generic commands first: restarting can repeat side effects;
+it does not restore tool/application state. It checks everything first and creates nothing if a cwd or a
 pi transcript is missing; on a failure midway it kills the half-built
 session. Either way the entry stays shut down. Show the error and let
 the user decide. On success, set the task prefix to `[active]`.
@@ -349,8 +368,8 @@ When the user asks you to wrap a session:
 1. `amx reg show <id>`. Read its notes and, if it's live, capture its
    panes (`amx snapshot <tmux_session> <file>`).
 2. Write the journal entry per the project's schema. Carry the resume
-   pointers: the full `resumed_session_id` and `cwd`, every `worker:`
-   line's id and cwd, and the snapshot path
+   pointers: the full `resumed_session_id` when known and `cwd`, every
+   `worker:` line's id and cwd, the command for a generic session, and the snapshot path
    (`~/.local/state/amx/snapshots/<id>.txt`). The entry is about to go.
    If notes are thin and the snapshot plus recent git activity don't
    tell the story, ask the user one focused question.

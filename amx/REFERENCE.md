@@ -42,11 +42,14 @@ notes: ~/code/journal/2026-04-29-eng-1234.md
 
 Header lines (before the first `## `):
 
-- `manager: <tmux address> harness=<h>`: one per running manager.
+- `manager: <tmux address> harness=<h>`: one per running manager. The
+  harness describes its runtime, not which workers it may manage.
 
 Entry fields (all optional; unknown fields and prose are kept):
 
-- `harness`: `claude` or `pi`. Absent means `claude`.
+- `harness`: `claude`, `pi`, `codex` or `command`. Absent means `claude`.
+- `command`: the shell command for a generic session. Restarted as written
+  by `/bin/sh`; no agent session ID or conversation-resume semantics.
 - `auto`: `true` on an entry the session hooks created. It goes away on
   `amx track`, pause or shutdown. An auto entry is removed when its
   primary agent exits.
@@ -58,11 +61,14 @@ Entry fields (all optional; unknown fields and prose are kept):
 - `agent_args`: JSON array of explicit extra CLI arguments for the primary
   agent, passed with repeatable `spawn --agent-arg=ARG`. For example,
   `--agent-arg=--session-control` opts into pi's separately installed
-  messaging extension; it is not part of the default launch.
+  messaging extension; it is not part of the default launch. Commands and
+  arguments are stored as plaintext; do not put credentials in them.
 - `started`, `last_touched`, `shutdown`, `paused`: timestamps. Always set
   from the clock (`k=now` / `k=today`), never typed.
-- `resumed_session_id`: the primary worker's session id (first window,
-  pane 0). Set at spawn, never truncated.
+- `resumed_session_id`: the primary agent's session id (first window,
+  pane 0), never truncated. Assigned at spawn for Claude/pi; discovered
+  from native identity for Codex. Absent for generic commands and while
+  an agent's native identity is unknown.
 - `worker`: repeatable, one per agent pane beyond the primary:
   `<session-id> cwd=<path> [label=<name>]`. No window or pane position;
   those renumber.
@@ -80,7 +86,7 @@ Derived from which fields are present:
 |---|---|
 | active | `tmux_session` |
 | paused | `tmux_session` + `paused` (tmux option `@amx_paused` set too) |
-| shutdown | no `tmux_session`; `shutdown` + `resume_state` + `resumed_session_id` |
+| shutdown | no `tmux_session`; `shutdown` + `resume_state`; agent IDs recorded when known |
 | wrap requested (old) | no `tmux_session`; `wrap_requested: true` |
 
 Any state can also carry `auto`. `amx ls` prints the state per entry
@@ -124,13 +130,71 @@ command: yarn dev
 
 - One `## window <n>: <name>` block per window, in order, with `layout:`.
 - One `### pane <n>` block per pane: `cwd:`, `command:` (empty for an idle
-  shell), and on agent panes `harness:`, `session_id:`, `label:`.
+  shell), and on agent panes `harness:`, `session_id:`, `label:`. Managed
+  command panes retain their launch cwd even if the process changes directory.
 - Old files use `claude_session_id:`; it reads as `session_id:` with
   harness `claude`.
 - Any other `## ` section is prose for the reader.
 - `amx rebuild` builds agent panes' commands from `session_id`, `harness`
   and optional `agent_args` (a JSON array), and replays other panes'
   `command:` as written. Explicit extra arguments survive shutdown/resume.
+  A declared agent command without `session_id` is rejected, not silently
+  treated as a generic restart. Leave its command empty for a shell if
+  the native ID cannot be recovered; fresh agent starts are explicit.
+
+## Harness capabilities
+
+| Harness | Launch identity | Cold resume |
+| --- | --- | --- |
+| `claude` | Native `--session-id` | Native `--resume` |
+| `pi` | Native `--session-id` | Exact saved project session; missing transcript is an error |
+| `codex` | Native terminal title, resolved to a full ID | Native `codex resume <id>` |
+| `command` | None | Restart the recorded shell command |
+
+Core management requires Python 3 and tmux, not agent hooks, skills or
+extensions. Optional hooks add auto-registration and session-switch
+tracking; optional status integrations add busy state and notifications.
+CLI-specific flags, identity and resume behavior live in the built-in
+harness adapter functions. Other CLIs can use `command` without an adapter:
+
+```bash
+amx spawn --id server --cwd /path/to/project --command 'make dev'
+amx spawn --into task --label logs --command 'tail -f app.log'
+amx spawn --harness codex --id review --cwd /path/to/project
+```
+
+Agent panes in a session use one harness. Generic command panes can be
+added to any session; their labels and exact commands survive shutdown.
+Commands run with the launch environment; amx does not snapshot secrets
+or arbitrary environment variables. Restarting a command may repeat its
+side effects. Review the recorded command before rebuilding.
+
+### Codex identity
+
+amx sets Codex's native `tui.terminal_title=["session-id"]` for its own
+launches and resumes. This changes the pane title, not saved Codex config.
+A full UUID is accepted directly. A truncated native UUID prefix must
+resolve to exactly one full ID in Codex's local thread index or rollout
+metadata for the same cwd (or match a recorded full resume ID). amx never
+chooses the newest session or copies an ID out of conversation text.
+
+An empty thread may not be persisted yet. Startup still reports the
+command as running, but prints `session_id=unknown`. Once Codex has saved
+the thread, `amx identify <id>` records its native ID; shutdown also
+records it automatically. Unknown IDs block normal shutdown. A native ID
+is not proof of saved conversation history: an empty renamed thread can
+have an index entry but no history to resume. If a CLI
+version, remote server or storage override prevents native discovery,
+bind the full ID explicitly with
+`amx identify <entry> --pane <pane-id> --session-id <full-native-id>`.
+This updates the pane-bound identity and registry together, including for
+additional workers. Do not infer it from another session in the same directory.
+
+Discovery reads `CODEX_HOME` (default `~/.codex`), `CODEX_SQLITE_HOME` when
+set, local `state_*.sqlite` thread indexes and JSONL rollout metadata.
+`amx transcripts codex <cwd>` searches local JSONL rollouts; other native
+storage formats may require Codex's own session browser. Native IDs and
+stored transcripts are separate capabilities.
 
 ## Startup observation
 
@@ -143,12 +207,18 @@ window remain possible; `amx reconcile` reports retained exited panes.
 An early exit (including status 0), missing pane or observation timeout
 returns exit 3. The registry entry and any surviving pane are retained for
 inspection. This applies to both new sessions and `spawn --into`.
+Rebuild failure leaves the entry shut down and removes the partial tmux
+session; its output is captured in `snapshots/<id>-rebuild-failed.txt`
+when possible, without overwriting the original recovery data.
 
 Hooks and the agent-status store are optional, not startup acknowledgements.
 Managed panes carry harness, session ID and extra arguments in tmux pane
 options, allowing snapshot and resume without hooks. Without hooks, an
 agent's in-process session switch must be recorded explicitly before
-shutdown; the launch ID alone cannot follow a new conversation.
+shutdown; the launch ID alone cannot follow a new conversation. Use
+`amx identify <entry> --pane <pane-id> --session-id <full-native-id>` to
+correct a pane's identity, rather than merely adding a second worker line.
+When installed, session-start hooks update the pane-bound ID on switches.
 
 ## Snapshots
 

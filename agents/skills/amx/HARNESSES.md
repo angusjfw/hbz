@@ -1,11 +1,12 @@
 # Harnesses
 
-What differs between Claude Code and pi for the manager. `amx` handles the
+What differs between agent harnesses and generic commands for the manager. `amx` handles the
 mechanical differences (launch and resume lines, transcript locations,
 pane detection); this page covers what you need to decide or know.
 
-A managed session is one harness, all its agent panes included. A
-manager can manage and spawn either harness. Use the worker's section
+A managed session uses one agent harness for all its agent panes, or is
+a generic command session. Non-agent command panes can accompany either.
+A manager can manage and spawn any supported harness. Use the worker's section
 for models, launch and resume; use the manager's section for watch,
 task-list and subagent capabilities. Honor an explicit worker harness
 choice, otherwise default to the manager's harness.
@@ -70,3 +71,35 @@ choice, otherwise default to the manager's harness.
 - Worker skill command: `/skill:amx-worker <mode>`.
 - Busy in a capture: `⠧ Working` in the input box's top border. Idle:
   plain border. No placeholder text in the input box.
+
+## Codex
+
+- Models: use Codex's defaults unless the user chooses a model. Check
+  the installed CLI/model picker, not the manager's model list.
+- `--effort` maps to native `model_reasoning_effort`. Use values supported
+  by the selected model; don't copy another harness's levels blindly.
+- Codex chooses its own native ID. amx requests its native session-ID
+  terminal title and resolves truncated prefixes against local native
+  metadata. An empty thread may not have a persisted ID yet; an unknown
+  ID is not a failed process launch, but blocks normal shutdown/resume.
+  `amx identify <entry>` records it once available. Never choose a recent
+  thread solely because its cwd matches.
+- Resume uses `codex resume <full-id>`; no custom hook or skill is required.
+- No amx hook or messaging setup is assumed. Native controls and tmux
+  interaction remain available. Don't infer busy/idle from another
+  harness's spinner conventions.
+- As a manager, use the capabilities actually exposed in the session.
+  Without idle notifications, reconcile on each turn.
+
+## Generic commands
+
+- Use `amx spawn --id <id> --cwd <dir> --command '<shell command>'`.
+  No model, effort, brief or agent ID is assumed. An unsupported agent
+  CLI can run this way too, without conversation-resume support.
+- Add non-agent panes to any session with
+  `amx spawn --into <session> --label <label> --command '<shell command>'`.
+- Pause is a registry flag, not OS process suspension. Shutdown snapshots
+  and stops the session. Rebuild restarts the recorded command, including
+  its side effects; it does not restore application state.
+- Hooks, auto-registration, agent busy state and messaging are optional
+  capabilities, not requirements for core lifecycle operations.

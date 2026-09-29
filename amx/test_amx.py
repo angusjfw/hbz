@@ -417,6 +417,8 @@ class HookTests(unittest.TestCase):
         self.cm.pane_rows = lambda target=None: self.rows
         self.cm.sole_agent = lambda pid: True
         self.cm.git_branch = lambda cwd: "main"
+        self.tmux_calls = []
+        self.cm.tmux = lambda *args, **kw: self.tmux_calls.append(args)
         os.environ["TMUX"] = "x"
 
     def tearDown(self):
@@ -452,6 +454,7 @@ class HookTests(unittest.TestCase):
         self.assertIsNotNone(self.entry())
         self.fire("%1", "SessionStart", "p2", source="clear")
         self.assertEqual(self.entry().get("resumed_session_id"), "p2")
+        self.assertIn(("set-option", "-p", "-t", "%1", "@amx_session_id", "p2"), self.tmux_calls)
 
     def test_tracked_entry_survives_primary_exit(self):
         self.fire("%1", "SessionStart", "p1")

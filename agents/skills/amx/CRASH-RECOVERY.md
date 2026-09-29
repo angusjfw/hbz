@@ -66,6 +66,11 @@ Per agent pane, take the session id from the first route that has it:
    `π - <name> - <dir>`: `<name>` is the entry id for the primary, or
    `<id>-<label>` for a worker, which a `worker:` line's `label=` maps to
    an id. Failing that, `amx transcripts pi <cwd> --name <name>`.
+   Codex: a saved `codex resume <id>` command carries the native ID.
+   Otherwise its saved session-ID title may be a truncated prefix; match
+   it uniquely against local Codex metadata/transcripts, never by cwd or
+   mtime alone. `amx transcripts codex <cwd> --grep <prefix>` can locate
+   JSONL rollouts; use Codex's own session browser for other storage.
 3. The session log: the last `start` line for that tmux session and pane
    (`grep '"pane": "%<id>"' ~/.local/state/amx/session-log.jsonl`, or by
    tmux session and cwd, since pane ids don't survive the restart).
@@ -77,8 +82,12 @@ Then per entry, write a resume_state from the save file (format in
 `amx reg set <id> resume_state=<path> shutdown=now` and
 `amx reg unset <id> tmux_session`, and run `amx rebuild <id>`.
 
-A pane whose id can't be established comes back as a fresh agent. Say
-so, per pane; a fresh agent in a rebuilt session looks resumed.
+An unknown agent ID is not permission to create a new conversation.
+Leave its recovery command empty so the pane returns as a shell; start and
+register a fresh agent only with the user's agreement. Say so per pane,
+rather than calling it resumed. Rebuild rejects a declared agent command
+without an ID. Generic command sessions have no conversation ID: review
+their recorded command and restart it, with its possible side effects.
 
 ## 5. Record what happened
 

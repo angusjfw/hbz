@@ -1,6 +1,6 @@
 ---
 name: amx-worker
-description: Pause, shut down or wrap up this agent session from inside its tmux pane (Claude Code or pi), when amx tracks the session. Use when the user says "pause", "park it", "unpause" (pause mode); "shut down", "shutdown", "kill this one", "drop tmux" (shutdown mode, keeps the session for a later resume); or "wrap up", "complete", "close out", "finish" (wrap mode, final, with a journal entry). Takes the mode as its argument.
+description: Pause, shut down or wrap up this agent session from inside its tmux pane (Claude Code, pi or Codex), when amx tracks the session. Use when the user says "pause", "park it", "unpause" (pause mode); "shut down", "shutdown", "kill this one", "drop tmux" (shutdown mode, keeps the session for a later resume); or "wrap up", "complete", "close out", "finish" (wrap mode, final, with a journal entry). Takes the mode as its argument.
 ---
 
 # amx worker
@@ -48,12 +48,12 @@ Keeps the entry so the session can be brought back later.
    ```
 
    This kills your own tmux session, so it must be your last action.
-3. If it stops with "no session id for …": run
-   `amx transcripts <harness> <cwd>` for that pane, pick the transcript
-   whose content matches, and add `harness:` and `session_id:` lines under
-   that pane in the resume_state file named in the error. Then rerun
-   with `--force`. If you can't tell which transcript it is, ask the
-   user.
+3. If it stops with "no session id for …": try `amx identify <entry>`.
+   Otherwise find the full native ID using the agent's session browser
+   or `amx transcripts <harness> <cwd>`. Bind the full ID to its pane with
+   `amx identify <entry> --pane <pane-id> --session-id <native-id>`.
+   This updates both pane metadata and registry; rerun normal shutdown. If you can't establish the identity, ask rather than force
+   a shutdown that cannot resume the conversation.
 
 ## Wrap
 
