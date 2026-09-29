@@ -102,24 +102,32 @@ window's pane 0. A window is just a collection of panes.
    (Substitute the real number and harness. Quote `=` targets: zsh
    expands a bare `=name`.) Re-run `amx whoami` afterwards; the address
    changed.
-3. Register yourself: `amx reg set @header manager+="<address> harness=<harness>"`.
+3. Read `amx reg get @header manager` and `amx reconcile`. If another
+   live manager is registered, warn the user and agree which manager
+   owns which entries before acting; harness alone is not ownership.
+   Remove stale manager records only after confirming their panes are gone.
+   Register yourself, unless already listed:
+   `amx reg set @header manager+="<address> harness=<harness>"`.
+   The header harness describes your runtime, not a worker filter.
    A manager's session counts as shared, so it is never an entry: if
    `amx whoami` showed an `entry=` that `amx reg get <entry> auto` says
    is auto, remove it with `amx reg rm <entry>`.
 4. Start the watch (see Watch).
 5. `amx switcher` (installs the paused badge in `prefix+w`).
-6. `amx ls -a --harness <harness>` and `amx reconcile --harness <harness>`.
+6. `amx ls -a` and `amx reconcile`.
    Act on the report per Reconcile. Mirror entries into the task list if
    your harness has one (see Task list).
-7. pi only: read `defaultModel`, `defaultThinkingLevel` and
-   `enabledModels` from `~/.pi/agent/settings.json` once, for spawn
-   choices.
+7. Before the first spawn of each worker harness, read its model/effort
+   guidance in `HARNESSES.md`. Worker configuration comes from that
+   harness, regardless of which harness you run in.
 
 Read the project rulebook, tmux state and knowledge stores only when a
 request needs them.
 
-You act only on entries whose harness matches yours. Other entries are
-visible so you don't mistake them for strays; mention them only if asked.
+Manage entries across harnesses, subject to any ownership split agreed
+with another manager. Your harness determines your watch and task-list
+capabilities; each worker's harness determines its launch, model choices
+and resume behavior.
 
 ## Watch
 
@@ -204,7 +212,10 @@ running.
    If the brief carries anything beyond the user's words, say so when
    you report the spawn. A "blank" or "empty" spawn gets no brief.
    Write the brief to a file.
-5. **Pick model and effort** from surface signals only (you can't
+5. **Pick the worker harness**, then model and effort. Honor the user's
+   harness choice; otherwise default to your own. A worker tmux session
+   uses one agent harness throughout, including additional worker panes.
+   Pick model and effort from surface signals only (you can't
    investigate to gauge complexity): how the user framed it, the kind of
    work, its breadth and ambiguity. Model follows capability need,
    effort follows size. Lean powerful. Guidelines are in `HARNESSES.md`.
@@ -245,7 +256,7 @@ Add the task (`[active]`).
 
 ## Reconcile
 
-`amx reconcile --harness <harness>` reports drift, one line each. It never
+`amx reconcile` reports drift across harnesses, one line each. It never
 changes anything; you act:
 
 - `dead`: the tmux session is gone. Ask the user: finished, shut down
@@ -370,8 +381,8 @@ If workers mention ports or dev servers, note them in the entry's
 
 "Wrap up the manager", "I'm done for the day":
 
-1. For each active entry of your harness, ask: leave running, shut down,
-   or wrap. Do what they choose.
+1. For each active entry you manage, ask: leave running, shut down,
+   or wrap. Do what they choose; leave another manager's entries alone.
 2. `amx reconcile` and settle what it reports.
 3. Stop the watch (Claude Code: stop the Monitor; pi: `amx_watch stop`).
 4. `amx reg unset @header manager=<address>`.

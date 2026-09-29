@@ -5,12 +5,16 @@ mechanical differences (launch and resume lines, transcript locations,
 pane detection); this page covers what you need to decide or know.
 
 A managed session is one harness, all its agent panes included. A
-manager spawns workers of its own harness.
+manager can manage and spawn either harness. Use the worker's section
+for models, launch and resume; use the manager's section for watch,
+task-list and subagent capabilities. Honor an explicit worker harness
+choice, otherwise default to the manager's harness.
 
 ## Claude Code
 
-- Models: aliases `haiku`, `sonnet`, `opus`, `fable` (see the model list
-  in your context for the current set).
+- Models: use the installed Claude CLI's model choices, not the
+  manager's own model list. Check `claude --help` for supported aliases
+  when running from another harness.
   - Mostly invoking a skill, mechanical → smallest.
   - Clear-scope work → mid-size.
   - Real engineering, design, cross-system work, debugging, non-trivial
@@ -34,8 +38,10 @@ manager spawns workers of its own harness.
 ## pi
 
 - Models: read `defaultModel`, `defaultThinkingLevel` and
-  `enabledModels` from `~/.pi/agent/settings.json` once per invocation
-  (`pi --list-models <search>` expands a glob). The set changes often, so
+  `enabledModels` from `~/.pi/agent/settings.json` before the first pi
+  spawn, regardless of the manager's harness (`pi --list-models <search>`
+  expands a glob). If settings are absent, use the CLI defaults or ask.
+  The set changes often, so
   there is no fixed table:
   - Most work → the default model.
   - Design, debugging, review → the strongest enabled model.
