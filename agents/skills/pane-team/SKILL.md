@@ -6,14 +6,22 @@ description: >-
   workers). Use for multi-part or long-running work the user wants to watch and
   steer, or when asked to coordinate, spawn a worker, run tasks in parallel,
   split work across panes, or get another agent's eyes on something. For a
-  short self-contained lookup or task, use a subagent instead.
+  short self-contained lookup or task, use a subagent instead. Not needed just
+  to message another session: use your harness's native tool (SendMessage,
+  send_to_session) for the same CLI, or `amx msg <name> "..."` for a different
+  one.
 ---
 
 # pane-team
 
 Workers are full agent sessions in panes of the user's tmux server, visible
 and steerable by the user. A pane is the unit; a window just holds panes.
-Workers run the same agent CLI you do (`claude` or `pi`).
+A worker may run a different agent CLI from yours (`claude`, `pi`, `codex`);
+mixed teams are normal.
+
+pane-team is part of amx. It builds on tmux interaction, each harness's
+native messaging and pi's session-control extension. A manager session is
+common but never required.
 
 ## Pick a shape
 
@@ -37,15 +45,19 @@ shut down and resumed:
 
 ```bash
 amx spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
-  [--model <model>] [--window <name>]
+  [--harness <claude|pi|codex>] [--model <model>] [--window <name>]
 ```
 
 It splits beside the active pane (or opens a window with `--window`) and
 prints `pane=`, `name=` and `session_id=`. The printed name
 (`<entry>-<label>`) is the worker's address; keep the `session_id` for
-Finish. For pi socket messaging, first verify its session-control
-extension is available, then add `--agent-arg=--session-control`. Without
-it, use tmux interaction; plain pi needs no extension to be managed.
+Finish. `--harness` defaults to the entry's. For pi socket messaging, first
+verify its session-control extension is available, then add
+`--agent-arg=--session-control`. Without it, `amx msg` types into its pane;
+plain pi needs no extension to be managed.
+
+A pane or window the user asked for goes into the current tmux session
+(`--into`, `--window`). Never turn it into a new session.
 
 **Otherwise**, start it yourself:
 
@@ -65,8 +77,9 @@ when its optional messaging extension is available and needed.
 ## Brief
 
 Include: the user's own words for the goal, what done looks like, where the
-work happens (cwd, branch), who to report to (your own name), and anything the
-worker must not touch.
+work happens (cwd, branch), who to report to (your own name) and how (your
+native tool if the worker runs your CLI, else `amx msg <your name>`), and
+anything the worker must not touch.
 
 ## Talk
 
@@ -77,8 +90,11 @@ worker must not touch.
   turn ending: a turn can end long before the task does.
 - Claude Code holds messages to a session in a different permission mode for
   the user's approval, so start workers in the mode you run in.
-- If no messaging tool reaches the worker, fall back to `tmux send-keys` to
-  type into its pane and `tmux capture-pane -p` to read it.
+- When the worker runs a different CLI, or no native tool reaches it, use
+  `amx msg <name> "..."` (`--file` for long messages). It picks pi's socket
+  or types into the pane safely, and never needs a manager. If it prints
+  `refused <reason>`, nothing was sent; `amx reference` says what to do.
+  Read a worker's output with `tmux capture-pane -p`.
 
 ## Keep track
 
