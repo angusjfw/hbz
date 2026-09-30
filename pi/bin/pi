@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run pi on the first node on PATH outside asdf. A project's .tool-versions
+# would otherwise pick pi's Node through the asdf shim, and pi needs 22.19+.
+asdf_dir=${ASDF_DATA_DIR:-$HOME/.asdf}
+set -f
+IFS=:
+for dir in $PATH; do
+  case $dir in "$asdf_dir"/*) continue ;; esac
+  [ -x "$dir/node" ] && exec "$dir/node" "$HOME/.npm-global/bin/pi" "$@"
+done
+echo "pi: no node on PATH outside $asdf_dir" >&2
+exit 1
