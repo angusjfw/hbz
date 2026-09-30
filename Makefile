@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude worktrunk pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -162,8 +162,15 @@ claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, ag
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
 
-pi: ## Install pi coding agent + symlink its config (instructions, settings, models, extensions, agents)
+npm: ## Put npm globals in ~/.npm-global, outside asdf's Node installs, so asdf doesn't shim them
+	mkdir -p ~/.npm-global
+	npm config set prefix ~/.npm-global
+
+pi: npm ## Install pi coding agent + symlink its config (instructions, settings, models, extensions, agents)
 	npm ls -g @earendil-works/pi-coding-agent >/dev/null 2>&1 || npm install -g @earendil-works/pi-coding-agent
+	@# wrapper runs pi on the system Node, not whichever one the current project pins
+	mkdir -p ~/.local/bin
+	ln -sf ${DIR}/pi/bin/pi ~/.local/bin/pi
 	mkdir -p ~/.pi/agent/extensions
 	ln -sf ${DIR}/agents/AGENTS.md ~/.pi/agent/AGENTS.md
 	@# settings — live file is gitignored (pi and local edits write to it); three-way merge
