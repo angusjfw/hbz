@@ -3,5 +3,8 @@ font-family = JetBrains Mono
 font-size = 15
 macos-titlebar-style = hidden
 
+# local theme overlay, if one is installed
+config-file = ?~/.config/ghostty/local
+
 # TODO: hide split drag handle when supported
 # https://github.com/ghostty-org/ghostty/discussions/10108

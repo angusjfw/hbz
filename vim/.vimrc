@@ -199,6 +199,8 @@ autocmd FileType typescript nmap <buffer> <Leader>t : <C-u>echo tsuquyomi#hint()
 " Theme
 set termguicolors
 colorscheme acme-hbz
+" local theme overlay, if one is installed
+if filereadable(expand('~/.vimrc.local')) | source ~/.vimrc.local | endif
 
 " goyo
 let g:goyo_width = 100

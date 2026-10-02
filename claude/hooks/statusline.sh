@@ -23,6 +23,10 @@ style=$(jqr '.output_style.name')
 D=$'\033[2m'; B=$'\033[1m'
 C=$'\033[36m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; M=$'\033[35m'
 RST=$'\033[0m'
+DIR=$D      # cwd colour
+PREFIX=""   # drawn before the cwd
+# local theme overlay, if one is installed: may override any of the above
+[ -f "$HOME/.claude/statusline-colours.sh" ] && . "$HOME/.claude/statusline-colours.sh"
 SEP="${D} · ${RST}"
 
 disp_cwd=${cwd/#$HOME/\~}
@@ -48,7 +52,7 @@ if [ -z "$effort" ]; then
   esac
 fi
 
-line="${D}${disp_cwd}${RST}"
+line="${PREFIX}${DIR}${disp_cwd}${RST}"
 [ -n "$branch" ] && line+="${SEP}${G}${branch}${RST}"
 line+="${SEP}${ctx}"
 [ -n "$model" ]  && line+="${SEP}${B}${C}${model}${RST}"

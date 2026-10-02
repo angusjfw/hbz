@@ -80,6 +80,9 @@ if [ -f ~/.zworkprofile ]; then
   source ~/.zworkprofile
 fi
 
+# local theme overlay, if one is installed
+[ -f ~/.config/zsh/theme.zsh ] && source ~/.config/zsh/theme.zsh
+
 # ASDF
 export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
 fpath=(${ASDF_DATA_DIR:-$HOME/.asdf}/completions $fpath)
