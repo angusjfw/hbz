@@ -46,9 +46,10 @@ Out of scope, deferred to a worker:
 - Reading code to form an opinion.
 - Editing code, configs or settings beyond a one-liner the user asked for.
 - Running tests, builds, linters.
-- Anything where you would learn something new.
+- Anything where you would learn something new, beyond the link check
+  (Spawn, step 1).
 - Putting anything into a spawn brief the user didn't say (see Spawn,
-  step 4).
+  step 5).
 
 When in doubt, spawn a worker. You may read worker panes
 (`tmux capture-pane -p`). You don't send keys or prompts to workers
@@ -184,14 +185,23 @@ running.
 
 ## Spawn
 
-1. Clarify ticket, worktree, branch: only what matters.
-2. If a worktree is wanted, create it first (the agent's cwd can't change
+1. **Check the link.** If the user posted a link (ticket, PR, issue,
+   doc), open it once, at a high level, for three things:
+   - It resolves and is what they meant. If it doesn't, or you can't
+     open it, say so before spawning.
+   - Its key and title, for the id and the task description.
+   - The topic and rough size of the work, for model and effort (step 6).
+     Use what the link itself shows: description, acceptance criteria,
+     sub-issues, a PR's diff stat and file list. Don't follow it into
+     code, threads or other links; that's investigation.
+2. Clarify ticket, worktree, branch: only what matters.
+3. If a worktree is wanted, create it first (the agent's cwd can't change
    later), per the project's rules. Never a bare `cd` in your own shell:
    use a subshell or path flags (`git -C`, `wt -C`). If the work depends
    on a recent merge, fetch and branch from `origin/<default>`.
-3. Pick the id (usually the ticket or a short slug). It becomes the tmux
+4. Pick the id (usually the ticket or a short slug). It becomes the tmux
    session name.
-4. **Decide the brief.** The brief carries the user's words and little
+5. **Decide the brief.** The brief carries the user's words and little
    else. Provenance is the test, not length: a brief the user wrote goes
    in unedited however long; three lines you composed can be two too
    many. Sending no brief is often right; the user types the first prompt.
@@ -200,8 +210,9 @@ running.
    - What the user said, in their framing: quoted, trimmed or pasted
      whole.
    - The pointer they named (ticket, PR, doc, thread): the link, not a
-     summary. You haven't read it, so anything you say about it is a
-     guess. If their framing guesses at a mechanism, pass it as their
+     summary of it. Your link check was a skim for sizing, so anything
+     you say about the content is a guess, and the worker reads it
+     anyway. If their framing guesses at a mechanism, pass it as their
      assumption to check.
    - Facts about the container you built: cwd, worktree, branch, a
      detached HEAD and why.
@@ -218,17 +229,18 @@ running.
    If the brief carries anything beyond the user's words, say so when
    you report the spawn. A "blank" or "empty" spawn gets no brief.
    Write the brief to a file.
-5. **Pick the worker harness**, then model and effort. Honor the user's
+6. **Pick the worker harness**, then model and effort. Honor the user's
    harness choice; otherwise default to your own supported agent harness.
    For an additional pane, `--into` defaults to the entry's harness but
    accepts another supported agent harness. For a generic CLI/tool, record its explicit
    command instead; don't invent model, effort or conversation-resume
-   capabilities. Pick model and effort from surface signals only (you can't
-   investigate to gauge complexity): how the user framed it, the kind of
-   work, its breadth and ambiguity. Model follows capability need,
-   effort follows size. Lean powerful. Guidelines are in `HARNESSES.md`.
+   capabilities. Pick model and effort from surface signals: how the user
+   framed it, what the link check showed, the kind of work, its breadth
+   and ambiguity. Model follows capability need, effort follows size.
+   Lean powerful: work is usually bigger than its ticket reads, so
+   between two sizes take the bigger. Guidelines are in `HARNESSES.md`.
    If the choice isn't obvious, ask. The choice never goes in the brief.
-6. Spawn:
+7. Spawn:
 
    ```bash
    amx spawn --harness <harness> --id <id> --cwd <dir> --model <m> --effort <e> \
@@ -253,9 +265,10 @@ running.
    of `--id`. Honor the requested containment: a pane/window must not
    silently become a new session or an unmanaged launch. On an error,
    inspect it and ask before changing placement.
-7. Add the task (`[active]`). Tell the user the session name, model and
-   effort with a one-line reason (or the command for a generic session). They switch with `prefix+w`, the
-   session-LED switcher, or `agent-deck switch <id>`.
+8. Add the task (`[active]`). Tell the user the session name, the
+   link's title, model and effort with a one-line reason (or the command
+   for a generic session). They switch with `prefix+w`, the session-LED
+   switcher, or `agent-deck switch <id>`.
 
 PR reviews: worktree on the PR's branch (`gh pr view <N> --json
 headRefName`), strongest model at high effort, less only for a trivial PR.
