@@ -42,6 +42,9 @@ pi_config = Path(HOME, ".pi/agent/mcp-adapter.json")
 if pi_config.parent.is_dir():
     config = json.loads(pi_config.read_text()) if pi_config.exists() else {}
     config.setdefault("mcpServers", {}).update(servers)
+    # Chrome asks you to approve each new connection, so stay connected after first use
+    # rather than dropping it on pi's idle timeout and prompting again
+    config["mcpServers"]["chrome-devtools"]["lifecycle"] = "lazy-keep-alive"
     pi_config.write_text(json.dumps(config, indent=2) + "\n")
     print(f"updated {pi_config}")
 
