@@ -1,6 +1,6 @@
 DIR=$(shell pwd)
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude browser worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -143,7 +143,7 @@ define link-skills
 	~/.local/bin/amx migrate
 endef
 
-ai: claude pi ## Set up both coding agents: Claude Code and pi
+ai: claude pi browser ## Set up both coding agents: Claude Code and pi
 
 claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, agents)
 	@# instructions
@@ -161,6 +161,11 @@ claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, ag
 	@# external skills + tools
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
+
+browser: ## Register browser MCPs for Claude Code + pi (agents get their own Chrome window)
+	${DIR}/browser/install-mcp.py
+	mkdir -p ~/.local/bin
+	ln -sf ${DIR}/browser/chrome-devtools-mcp ~/.local/bin/chrome-devtools-mcp
 
 npm: ## Put npm globals in ~/.npm-global, outside asdf's Node installs, so asdf doesn't shim them
 	mkdir -p ~/.npm-global

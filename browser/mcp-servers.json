@@ -1,0 +1,15 @@
+{
+  "chrome-devtools": {
+    "command": "__HOME__/.local/bin/chrome-devtools-mcp",
+    "args": ["--autoConnect"]
+  },
+  "playwright": {
+    "command": "npx",
+    "args": [
+      "-y", "@playwright/mcp@0.0.83",
+      "--headless", "--isolated", "--browser", "chromium",
+      "--idle-timeout", "600",
+      "--output-dir", "__HOME__/.cache/playwright-mcp"
+    ]
+  }
+}

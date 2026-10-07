@@ -18,6 +18,7 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `ghostty/` — terminal emulator (macOS)
 - `agents/` — global AI agent instructions, symlinked as `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`
 - `agents/skills/` — skills shared by Claude Code and pi, each linked into `~/.claude/skills/` and `~/.pi/agent/skills/`
+- `browser/` — browser MCP servers for both agents (logged-in Chrome via chrome-devtools-mcp, isolated headless Playwright)
 - `amx/` — agent session CLI behind the `amx*` skills and pane-team, linked to `~/.local/bin/amx`
 - `claude/` — Claude Code settings and hooks (symlinked to `~/.claude/`)
 - `pi/` — pi coding agent settings, models, extensions (symlinked to `~/.pi/agent/`); local model Modelfiles

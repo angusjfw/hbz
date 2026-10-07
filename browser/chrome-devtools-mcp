@@ -1,0 +1,13 @@
+#!/bin/sh
+# Run the patched chrome-devtools-mcp (see install-mcp.py) on the first node on
+# PATH outside asdf, so a project's .tool-versions can't pick an older Node.
+asdf_dir=${ASDF_DATA_DIR:-$HOME/.asdf}
+bin=$HOME/.local/share/chrome-devtools-mcp/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js
+set -f
+IFS=:
+for dir in $PATH; do
+  case $dir in "$asdf_dir"/*) continue ;; esac
+  [ -x "$dir/node" ] && exec "$dir/node" "$bin" "$@"
+done
+echo "chrome-devtools-mcp: no node on PATH outside $asdf_dir" >&2
+exit 1
