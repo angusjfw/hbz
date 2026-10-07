@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Kill agent-launched browsers that outlived the agent that started them.
+#
+# A match is a Chrome-family main process started with automation flags, whose
+# parent has exited (reparented to launchd/init), and older than the max age.
+# A browser you start yourself carries none of these flags, including with
+# remote debugging switched on from chrome://inspect.
+set -euo pipefail
+
+max_age=${AGENT_BROWSER_MAX_AGE:-7200}  # seconds
+
+to_seconds() {  # ps etime: [[dd-]hh:]mm:ss
+  local t=$1 d=0 h=0 m s
+  [[ $t == *-* ]] && { d=${t%%-*}; t=${t#*-}; }
+  IFS=: read -ra p <<<"$t"
+  if (( ${#p[@]} == 3 )); then h=${p[0]}; m=${p[1]}; s=${p[2]}; else m=${p[0]}; s=${p[1]}; fi
+  echo $(( 10#$d * 86400 + 10#$h * 3600 + 10#$m * 60 + 10#$s ))
+}
+
+ps -axo pid=,ppid=,etime=,command= | while read -r pid ppid etime cmd; do
+  [[ $ppid == 1 ]] || continue
+  [[ $cmd =~ (/MacOS/(Google\ Chrome|Chromium|Google\ Chrome\ for\ Testing)|chrome-headless-shell|/chrome)( |$) ]] || continue
+  [[ $cmd =~ --(remote-debugging-port|remote-debugging-pipe|enable-automation) ]] || continue
+  (( $(to_seconds "$etime") > max_age )) || continue
+  echo "$(date '+%F %T') killing $pid (up $etime): ${cmd:0:160}"
+  kill "$pid" 2>/dev/null || continue
+  sleep 5
+  if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid"; fi
+done

@@ -162,10 +162,21 @@ claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, ag
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
 
-browser: ## Register browser MCPs for Claude Code + pi (agents get their own Chrome window)
+browser: ## Register browser MCPs for Claude Code + pi (agents get their own Chrome window); on macOS, start the stray agent-browser reaper
 	${DIR}/browser/install-mcp.py
-	mkdir -p ~/.local/bin
+	mkdir -p ~/.local/bin ~/.local/state
+	ln -sf ${DIR}/browser/reap-agent-browsers ~/.local/bin/reap-agent-browsers
 	ln -sf ${DIR}/browser/chrome-devtools-mcp ~/.local/bin/chrome-devtools-mcp
+	@if [ "$$(uname)" = Darwin ]; then \
+	  sed "s|__HOME__|$$HOME|g" ${DIR}/browser/io.hbz.browser-reaper.plist \
+	    > ~/Library/LaunchAgents/io.hbz.browser-reaper.plist; \
+	  launchctl bootout gui/$$(id -u)/io.hbz.browser-reaper 2>/dev/null || true; \
+	  for i in 1 2 3 4 5 6 7 8 9 10; do \
+	    launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.hbz.browser-reaper.plist \
+	      2>/dev/null && exit 0; \
+	    sleep 0.5; \
+	  done; echo "could not bootstrap io.hbz.browser-reaper" >&2; exit 1; \
+	fi
 
 npm: ## Put npm globals in ~/.npm-global, outside asdf's Node installs, so asdf doesn't shim them
 	mkdir -p ~/.npm-global
