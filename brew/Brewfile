@@ -25,7 +25,6 @@ brew "ollama", restart_service: :changed
 
 cask "ghostty"
 cask "keymapp"
-cask "ungoogled-chromium"
 cask "1password-cli"
 cask "claude"
 cask "claude-code"
