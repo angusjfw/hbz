@@ -117,5 +117,6 @@ Add the OAuth entry from your ChatGPT/Codex session to `~/.pi/agent/auth.json`:
   DeepSeek, etc.
 - Anthropic and OpenAI Codex implementations in `search.mjs` are adapted from
   `mitsuhiko/agent-stuff` (Apache-2.0). See `NOTICE`.
-- For browsing, screenshots, and page interaction, use the `web-browser` skill
-  instead.
+- For browsing, screenshots, and page interaction, use the browser MCP tools
+  instead: `playwright` (headless, isolated) or `chrome-devtools` (the user's
+  logged-in Chrome).

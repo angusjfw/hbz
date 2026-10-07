@@ -132,7 +132,7 @@ define link-skills
 	mkdir -p $(1) ~/.local/bin
 	for d in ${DIR}/agents/skills/*/; do ln -sfn "$${d%/}" $(1)/; done
 	$(call prune-links,$(1))
-	@# install per-skill npm deps when present (e.g. web-browser CDP scripts)
+	@# install per-skill npm deps when present
 	for d in ${DIR}/agents/skills/*; do \
 	  if [ -f "$$d/scripts/package.json" ]; then \
 	    (cd "$$d/scripts" && npm ci 2>/dev/null || npm install); \

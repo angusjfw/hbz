@@ -46,9 +46,9 @@ node ~/.pi/agent/skills/web-search/search.mjs "latest pi release notes"
 
 ## Web browser
 
-For browsing, screenshots, form interaction, and authenticated sessions, use
-the `web-browser` skill. It needs Chrome or Chromium installed; `make ai`
-installs its npm dependencies automatically.
+Browsing goes through two MCP servers that `make browser` adds to
+`mcp-adapter.json` (see `browser/`): `playwright` for headless, isolated work,
+and `chrome-devtools` for logged-in sessions in your own Chrome.
 
 ## MCP servers
 
