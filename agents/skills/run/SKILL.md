@@ -78,12 +78,12 @@ using the recipe, not authoring one.
 | Web server / API | background launch + `curl` smoke | [examples/server.md](examples/server.md) |
 | TUI / interactive terminal | tmux `send-keys` / `capture-pane` | [examples/tui.md](examples/tui.md) |
 | Electron / desktop GUI | Playwright `_electron` REPL under xvfb | [examples/electron.md](examples/electron.md) |
-| Browser-driven | dev server + `chromium-cli` script | [examples/playwright.md](examples/playwright.md) |
+| Browser-driven | dev server + Playwright MCP | [examples/playwright.md](examples/playwright.md) |
 | Library / SDK | import-and-call smoke script at the package boundary | [examples/library.md](examples/library.md) |
 
 If nothing fits, start from the closest match and adapt. For a web
 app, [examples/playwright.md](examples/playwright.md) — drive it with
-`chromium-cli`, no custom driver needed. For a desktop app,
+the Playwright MCP tools, no custom driver needed. For a desktop app,
 [examples/electron.md](examples/electron.md) — it has the `_electron`
 REPL driver skeleton and the tmux wrapping.
 
