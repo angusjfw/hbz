@@ -15,9 +15,9 @@ off-peak (outside 12:00–18:00 UTC weekdays) is ~half on many models. Models ma
 
 | Model | Input / Cached / Output | Context | Notes |
 |---|---|---|---|
-| `kimi-k2.7-code` | 0.95 / 0.19 / 4.00 | 256K | **enabled** — coding-focused agent model, vision in. Default. |
+| `kimi-k2.7-code` | 0.95 / 0.19 / 4.00 | 256K | **enabled** — coding-focused agent model, vision in. |
 | `minimax-m3` | 0.60 / 0.12 / 2.40 | 1M | **enabled** — cheap frontier-tier coding/agent, vision in. |
-| `deepseek-v4.1-flash` | 0.30 / 0.006 / 1.20 | 1M | **enabled** — fast/cheap coding fill-in, vision in. |
+| `deepseek-v4.1-flash` | 0.30 / 0.006 / 1.20 | 1M | **enabled** — fast/cheap coding fill-in, vision in. Default. |
 | `deepseek-v4-pro` | 1.32 / 0.044 / 3.96 | 1M | **enabled** — frontier MoE generalist, kept for hard reasoning. |
 | `kimi-k3` | 3.00 / 0.30 / 15.00 | 1M | Most capable multimodal agent model, priciest. |
 | `glm-5.3` | 1.40 / 0.26 / 4.40 | 1M | Long-horizon agent tasks. |
@@ -49,9 +49,10 @@ OpenRouter picks wired into pi (prices per-token from the API, shown per-M):
 
 ## Choosing
 
-- **Coding (default)** — `kimi-k2.7-code` (cloud).
+- **Coding (default)** — `deepseek-v4.1-flash` (cloud).
+- **Premium coding** — `kimi-k2.7-code` (cloud), vision in.
 - **Cheap + capable coding** — `minimax-m3` (cloud) or `qwen3-coder-plus` (OpenRouter).
-- **Fast/cheap fill-in** — `deepseek-v4.1-flash` (cloud) or `qwen3.8-flash` (OpenRouter).
+- **Fast/cheap fill-in** — `qwen3.8-flash` (OpenRouter).
 - **Hard reasoning, occasional** — `deepseek-v4-pro` (cloud) or `qwen3.8-max-0902` (OpenRouter).
 - **Vision** — `kimi-k2.7-code`, `minimax-m3` (cloud); `qwen3-vl-*` (OpenRouter/local).
 - **Fully offline** — `ornith-agent`, `gpt-oss-agent` (local GGUF, see `pi/ollama/`).

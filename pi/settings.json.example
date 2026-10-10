@@ -1,6 +1,6 @@
 {
   "defaultProvider": "ollama",
-  "defaultModel": "kimi-k2.7-code:cloud",
+  "defaultModel": "deepseek-v4.1-flash:cloud",
   "defaultThinkingLevel": "medium",
   "enabledModels": [
     "ollama/kimi-k2.7-code:cloud",

@@ -1,7 +1,7 @@
 {
   "autoMode": {
     "enabled": false,
-    "classifierModel": "ollama/ornith-agent",
+    "classifierModel": "ollama/deepseek-v4.1-flash:cloud",
     "allowInsideWorkingDirectory": true,
     "deniedPaths": [
       "~/.ssh/*",

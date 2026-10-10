@@ -9,7 +9,7 @@
       "apiKey": "ollama",
       "models": [
         {
-          // Default: coding-specialized agent model. Vision in, cheap.
+          // Coding-specialized agent model. Vision in, cheap.
           "id": "kimi-k2.7-code:cloud",
           "name": "Kimi K2.7 Code (Ollama Cloud)",
           "input": [
@@ -45,7 +45,7 @@
           }
         },
         {
-          // Fast/cheap coding fill-in for routine edits and lookups.
+          // Default: fast/cheap coding fill-in for routine edits and lookups.
           "id": "deepseek-v4.1-flash:cloud",
           "name": "DeepSeek V4.1 Flash (Ollama Cloud)",
           "input": [
