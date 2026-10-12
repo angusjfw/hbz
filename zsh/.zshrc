@@ -14,7 +14,12 @@ set bell-style none
 if command -v brew >/dev/null 2>&1; then
   fpath+=("$(brew --prefix)/share/zsh/site-functions")
 fi
-fpath+=("$HOME/.npm-global/lib/node_modules/pure-prompt")
+# pure-prompt's layout differs by version: older npm releases keep the setup
+# function under functions/, current ones put it at the package root.
+for d in "$HOME/.npm-global/lib/node_modules/pure-prompt" \
+         "$HOME/.npm-global/lib/node_modules/pure-prompt/functions"; do
+  [ -d "$d" ] && fpath+=("$d")
+done
 autoload -U promptinit && promptinit
 prompt pure
 
