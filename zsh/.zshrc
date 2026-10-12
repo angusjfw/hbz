@@ -88,6 +88,10 @@ export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"
 fpath=(${ASDF_DATA_DIR:-$HOME/.asdf}/completions $fpath)
 autoload -Uz compinit && compinit
 
+# node via n (installed to ~/.n; outside ~/.asdf so pi's launcher can use it)
+export N_PREFIX="$HOME/.n"
+[ -d "$N_PREFIX/bin" ] && export PATH="$N_PREFIX/bin:$PATH"
+
 # postgresql (macOS)
 [ -d "/opt/homebrew/opt/postgresql@16/bin" ] && export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
 

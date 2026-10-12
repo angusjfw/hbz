@@ -1,0 +1,18 @@
+# Debian / Raspberry Pi OS packages for the coding setup (see `make rpi`).
+# One package per line; blank lines and # comments ignored by the apt target.
+build-essential
+ca-certificates
+curl
+direnv
+fzf
+git
+jq
+neovim
+ripgrep
+silversearcher-ag
+tmux
+tree
+unzip
+vim
+xz-utils
+zsh

@@ -1,6 +1,8 @@
 DIR=$(shell pwd)
+N_PREFIX ?= $(HOME)/.n
+WT_VERSION ?= 0.80.0
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude browser worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude browser worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon apt node rpi firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -180,10 +182,11 @@ browser: ## Register browser MCPs for Claude Code + pi (agents get their own Chr
 
 npm: ## Put npm globals in ~/.npm-global, outside asdf's Node installs, so asdf doesn't shim them
 	mkdir -p ~/.npm-global
-	npm config set prefix ~/.npm-global
+	PATH="$(N_PREFIX)/bin:$$PATH" npm config set prefix ~/.npm-global
 
 pi: npm ## Install pi coding agent + symlink its config (instructions, settings, models, extensions, agents)
-	npm ls -g @earendil-works/pi-coding-agent >/dev/null 2>&1 || npm install -g @earendil-works/pi-coding-agent
+	PATH="$(N_PREFIX)/bin:$$PATH" npm ls -g @earendil-works/pi-coding-agent >/dev/null 2>&1 \
+	  || PATH="$(N_PREFIX)/bin:$$PATH" npm install -g @earendil-works/pi-coding-agent
 	@# wrapper runs pi on the system Node, not whichever one the current project pins
 	mkdir -p ~/.local/bin
 	ln -sf ${DIR}/pi/bin/pi ~/.local/bin/pi
@@ -210,13 +213,41 @@ pi-local: ## Pull the local fallback models for pi and build their agent variant
 	ollama create ornith-agent -f ${DIR}/pi/ollama/ornith-agent.Modelfile
 	ollama create gpt-oss-agent -f ${DIR}/pi/ollama/gpt-oss-agent.Modelfile
 
-worktrunk: ## Symlink worktrunk config
+worktrunk: ## Symlink worktrunk config; install the wt binary if missing (macOS gets it from brew)
 	mkdir -p ~/.config/worktrunk
 	ln -sf ${DIR}/worktrunk/config.toml ~/.config/worktrunk/config.toml
+	@# the Mac gets wt from brew; on Linux fetch the upstream static musl release
+	@command -v wt >/dev/null 2>&1 || { \
+	  tmp=$$(mktemp -d); \
+	  curl -fsSL "https://github.com/max-sixty/worktrunk/releases/download/v$(WT_VERSION)/worktrunk-$$(uname -m)-unknown-linux-musl.tar.xz" \
+	    | tar -xJ -C "$$tmp"; \
+	  mkdir -p ~/.local/bin; \
+	  install -m 755 "$$tmp"/worktrunk-*/wt ~/.local/bin/wt; \
+	  install -m 755 "$$tmp"/worktrunk-*/git-wt ~/.local/bin/git-wt; \
+	  rm -rf "$$tmp"; \
+	}
 
 macos-defaults: ## Apply macOS accent/highlight colour defaults
 	defaults write NSGlobalDomain AppleAccentColor -int -1
 	defaults write NSGlobalDomain AppleHighlightColor -string "1.000000 0.937255 0.690196 Yellow"
+
+# --- Raspberry Pi (Raspberry Pi OS / Debian) targets ---
+
+apt: ## Install Debian packages from apt/pkglist.txt
+	sudo apt-get update
+	grep -vE '^\s*(#|$$)' apt/pkglist.txt | xargs -r sudo apt-get install -y
+
+node: ## Install Node LTS via n (N_PREFIX=~/.n) + pure-prompt
+	mkdir -p ~/.local/bin "$(N_PREFIX)"
+	@# n is a single script, so no node is needed to bootstrap it
+	curl -fsSL -o ~/.local/bin/n https://raw.githubusercontent.com/tj/n/master/bin/n
+	chmod +x ~/.local/bin/n
+	N_PREFIX="$(N_PREFIX)" ~/.local/bin/n install lts
+	@# the prompt ~/.zshrc expects (brew's `pure` on the Mac)
+	PATH="$(N_PREFIX)/bin:$$PATH" npm install -g --prefix ~/.npm-global pure-prompt
+
+rpi: apt node zsh vim nvim tmux z git worktrunk pi ## Raspberry Pi coding setup (shell, editor, tmux, node, pi)
+	sudo chsh -s "$$(command -v zsh)" "$$(whoami)"
 
 # --- Arch targets ---
 

@@ -4,7 +4,7 @@ Multiplatform, AI-enabled, keyboard-driven dev setup.
 ##### 🔧 Setup
 Makefile symlinks config into place.
 
-`make install` (Mac), `make arch`, `make wsl`, or `make common` for just
+`make install` (Mac), `make arch`, `make wsl`, `make rpi`, or `make common` for just
 the shared config.
 
 Platform targets run common setup plus extras;
@@ -24,6 +24,10 @@ differences handled with conditional sourcing in shared files.
 ##### 🐧 Arch
 `sway/`, `konsole/`, `mako/`, `wallpapers/`.
 `arch/` — install notes. `pacman/` for package lists.
+
+##### 🍓 Raspberry Pi
+`rpi` — apt packages plus shell/editor/agent config for a headless Pi.
+`apt/` for the package list.
 
 ##### ⌨️ Keyboard
 `keyboard/` — ZSA Voyager layout (QMK source + firmware from Oryx).

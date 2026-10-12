@@ -24,7 +24,7 @@ Dotfiles for a minimal, keyboard-driven dev setup. Public repo.
 - `pi/` — pi coding agent settings, models, extensions (symlinked to `~/.pi/agent/`); local model Modelfiles
 - `worktrunk/` — git worktree management (symlinked to `~/.config/worktrunk/`)
 - `keyboard/` — ZSA Voyager layout: QMK source and firmware (repo is source of truth; flashed, not symlinked) + session-leds tooling
-- `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch)
+- `brew/` — Brewfile (macOS), `pacman/` — package lists (Arch), `apt/` — package list (Raspberry Pi OS/Debian)
 - `arch/` — Arch/sway install notes, `screenshots/` — repo screenshots
 - `scripts/` — helpers shared by make targets (e.g. the settings merge)
 - Platform-specific stuff lives in overlays or conditional blocks, not separate copies.
