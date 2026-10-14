@@ -76,7 +76,10 @@ when its optional messaging extension is available and needed.
 
 ## Brief
 
-Include: the user's own words for the goal, what done looks like, where the
+Include: the user's own words for the goal with the spawn request itself
+removed ("open a worker to purge X" becomes "purge X"; the worker is the
+result of that request, so repeating it makes the worker spawn another),
+what done looks like, where the
 work happens (cwd, branch), who to report to (your own name) and how (your
 native tool if the worker runs your CLI, else `amx msg <your name>`), and
 anything the worker must not touch.

@@ -208,7 +208,9 @@ running.
 
    What goes in:
    - What the user said, in their framing: quoted, trimmed or pasted
-     whole.
+     whole. Drop the spawn request itself ("spawn a worker to X" becomes
+     "X"): the worker is that request's result, and a brief that repeats
+     it tells the worker to spawn another.
    - The pointer they named (ticket, PR, doc, thread): the link, not a
      summary of it. Your link check was a skim for sizing, so anything
      you say about the content is a guess, and the worker reads it
