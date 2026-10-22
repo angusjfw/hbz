@@ -390,7 +390,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
         self.assertEqual(self.cm.resolve_target("work-server")["harness"], "command")
         self.assertTrue(all(not p["dead"] for p in after))
 
-    def test_shutdown_and_wrap_refuse_while_a_pane_is_busy(self):
+    def test_busy_pane_shows_in_ls_and_blocks_shutdown_and_wrap(self):
         self.spawn()
         self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review"])
         lead, review = (p["pane_id"] for p in self.cm.inspect_panes("work"))
@@ -405,6 +405,9 @@ class MixedTmuxTests(IsolatedTmuxCase):
             self.assertIn("work-review (working)", err.getvalue())
         self.assertTrue(self.cm.has_session("work"))
         self.assertIsNone(self.cm.Registry.load().entry("work").get("shutdown"))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.cm.main(["ls"])
+        self.assertEqual(out.getvalue().split("\t")[3], "needs_input+working")
         # the caller's own pane is mid-turn running the command
         (self.cm.AGENT_STATUS / "work.json").write_text(json.dumps(
             {"state": "working", "claudes": {"a": {"state": "working", "pane_id": lead}}}))

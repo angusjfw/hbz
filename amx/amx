@@ -1958,7 +1958,11 @@ def cmd_ls(a):
         d = e.as_dict()
         if (a.harness and a.harness not in entry_harnesses(e)) or (d.get("auto") and not a.all):
             continue
-        busy = store(d["tmux_session"]).get("state", "") if d.get("tmux_session") else ""
+        st = store(d["tmux_session"]) if d.get("tmux_session") else {}
+        busy = st.get("state", "")
+        # the session state ranks needs_input above working; don't let it hide a turn
+        if busy != "working" and any(c.get("state") == "working" for c in st.get("claudes", {}).values()):
+            busy += "+working"
         print("\t".join([e.name, harness_of(e), entry_state(d) + (" auto" if d.get("auto") else ""),
                          busy or "-", d.get("ticket") or "-", d.get("cwd") or "-",
                          ",".join(sorted(entry_harnesses(e)))]))

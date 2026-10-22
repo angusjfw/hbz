@@ -106,7 +106,9 @@ Derived from which fields are present:
 
 Any state can also carry `auto`. `amx ls` prints the state per entry
 (`-a` includes auto ones). Its columns are id, primary harness, state,
-busy, ticket, cwd and member harnesses. `--harness` matches any recorded
+busy, ticket, cwd and member harnesses. Busy is the session-level
+agent state; `+working` means some pane is mid-turn behind a
+higher-ranked state such as `needs_input`. `--harness` matches any recorded
 member, including pane metadata and saved resume_state when available.
 A wrapped entry is gone from the registry and
 kept in the session log; `amx log --removed [id]` shows how it went and
