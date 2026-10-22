@@ -486,6 +486,23 @@ class MixedTmuxTests(IsolatedTmuxCase):
         self.assertFalse(pane["dead"])
         self.assertEqual(self.cm.resolve_target("work")["harness"], "pi")
 
+    def test_rebuild_by_reopen_tag_brings_back_only_that_set(self):
+        for name in ("work", "other", "older"):
+            self.cm.main(["spawn", "--harness", "pi", "--id", name, "--cwd", str(self.root)])
+            self.save_pi_transcripts(name)
+        self.cm.main(["shutdown", "older"])
+        self.cm.main(["shutdown", "work", "--tag", "reboot"])
+        self.cm.main(["shutdown", "other", "--tag", "reboot"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.cm.main(["rebuild", "work", "--tag", "reboot"])
+        self.cm.main(["rebuild", "--tag", "reboot"])
+        self.assertTrue(self.cm.has_session("work") and self.cm.has_session("other"))
+        self.assertFalse(self.cm.has_session("older"))
+        self.assertIsNone(self.cm.Registry.load().entry("work").get("reopen"))
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            self.cm.main(["rebuild", "--tag", "reboot"])
+        self.assertIn("no shut-down entries tagged reboot", err.getvalue())
+
     def test_generic_parent_can_host_recognized_agent(self):
         self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", "sleep 120"])
         self.cm.main(["spawn", "--into", "generic", "--harness", "pi", "--label", "agent"])

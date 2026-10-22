@@ -354,6 +354,10 @@ item, record its primary/worker ID in the registry, and rerun normal
 shutdown. Don't force away an unknown conversation. Set the task
 prefix to `[shutdown]`.
 
+Shutting several down to bring them back together (before a reboot):
+pass the same `--tag <tag>` to each, then `amx rebuild --tag <tag>`
+reopens that set and nothing older.
+
 ## Cold resume
 
 `amx rebuild <id>`. It rebuilds windows, panes and layout from the

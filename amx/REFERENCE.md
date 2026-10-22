@@ -89,6 +89,10 @@ Entry fields (all optional; unknown fields and prose are kept):
   consult `amx panes` or `amx resolve` before resuming or messaging.
 - `snapshot`, `resume_state`: paths written at shutdown or wrap.
 - `resume_target`: expected resume date, free-form.
+- `reopen`: a tag set by `amx shutdown <id> --tag <tag>`, so a set shut
+  down together (before a reboot, say) comes back with
+  `amx rebuild --tag <tag>` without older shut-down entries. Rebuild
+  clears it; an entry that fails keeps it, so rerunning retries just those.
 - `wrap_requested`: only on entries from before workers wrapped
   themselves; the wrap is unfinished.
 - `notes`: text, or a path to a notes file.
