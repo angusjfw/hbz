@@ -416,6 +416,76 @@ class MixedTmuxTests(IsolatedTmuxCase):
         self.cm.main(["shutdown", "work", "--force"])
         self.assertIsNotNone(self.cm.Registry.load().entry("work").get("shutdown"))
 
+    def shell_pane(self, typed):
+        """A plain shell window running a command, as the zsh preexec hook records it."""
+        pane = self.tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", "=work:", "-n", "shell",
+                         "-c", str(self.root)).stdout.strip()
+        self.tmux("send-keys", "-t", pane, "sleep 120", "Enter")
+        self.tmux("set-option", "-p", "-t", pane, "@amx_shell_cmd", typed)
+        for _ in range(50):
+            if self.tmux("display", "-p", "-t", pane, "#{pane_current_command}").stdout.strip() == "sleep":
+                return pane
+            time.sleep(0.1)
+        self.fail("shell pane never ran its command")
+
+    def rebuilt_shell(self):
+        pane = next(p for p in self.cm.inspect_panes("work") if p["window_name"] == "shell")
+        for _ in range(50):
+            screen = self.tmux("capture-pane", "-p", "-J", "-t", pane["pane_id"]).stdout
+            if "sleep 120" in screen:
+                break
+            time.sleep(0.1)
+        time.sleep(0.3)
+        return pane, screen, self.tmux("display", "-p", "-t", pane["pane_id"], "#{pane_current_command}").stdout.strip()
+
+    def test_shell_command_is_recorded_as_typed_and_typed_back_not_run(self):
+        self.spawn()
+        self.shell_pane("sleep 120 | cat")
+        self.save_pi_transcripts("work")
+        self.cm.main(["shutdown", "work"])
+        entry = self.cm.Registry.load().entry("work")
+        saved = self.cm.parse_resume_state(Path(entry.get("resume_state")).read_text())["windows"][1]["panes"][0]
+        self.assertEqual((saved["command"], saved["shell"]), ("sleep 120 | cat", "sh"))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.cm.main(["rebuild", "work"])
+        self.assertIn("typed, not run: sleep 120 | cat", err.getvalue())
+        pane, screen, current = self.rebuilt_shell()
+        self.assertIn("sleep 120 | cat", screen)
+        self.assertNotEqual(current, "sleep")
+        self.assertEqual(pane["kind"], "idle")
+
+    def test_shell_command_on_the_autorun_list_reruns(self):
+        self.cm.AUTORUN = self.root / "autorun"
+        self.cm.AUTORUN.write_text("# dev servers\n^sleep \n")
+        self.spawn()
+        self.shell_pane("sleep 120")
+        self.save_pi_transcripts("work")
+        self.cm.main(["shutdown", "work"])
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.cm.main(["rebuild", "work"])
+        self.assertEqual(err.getvalue(), "")
+        for _ in range(50):
+            if self.rebuilt_shell()[2] == "sleep":
+                break
+        self.assertEqual(self.rebuilt_shell()[2], "sleep")
+
+    def test_failed_command_pane_leaves_a_shell_not_a_failed_rebuild(self):
+        self.spawn()
+        self.cm.main(["spawn", "--into", "work", "--label", "server", "--window", "shell", "--command", "sleep 120"])
+        self.save_pi_transcripts("work")
+        self.cm.main(["shutdown", "work"])
+        resume = Path(self.cm.Registry.load().entry("work").get("resume_state"))
+        broken = "echo Environment variable BINDIR is not set; exit 1"
+        resume.write_text(resume.read_text().replace("command: sleep 120", f"command: {broken}"))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.cm.main(["rebuild", "work"])
+        self.assertIn("BINDIR is not set; left typed at a shell prompt", err.getvalue())
+        self.assertTrue(self.cm.has_session("work"))
+        pane, screen, _ = self.rebuilt_shell()
+        self.assertIn(broken, screen)
+        self.assertFalse(pane["dead"])
+        self.assertEqual(self.cm.resolve_target("work")["harness"], "pi")
+
     def test_generic_parent_can_host_recognized_agent(self):
         self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", "sleep 120"])
         self.cm.main(["spawn", "--into", "generic", "--harness", "pi", "--label", "agent"])

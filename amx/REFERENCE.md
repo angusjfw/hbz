@@ -292,6 +292,15 @@ the zsh preexec hook in `zsh/.zshrc` keeps in the pane option
 `@amx_shell_cmd`. Without it (another shell, or one started before the
 hook) it falls back to the child's argv, which loses the rest of a
 pipeline and is rewritten by exec wrappers (`mix` shows as `beam.smp`).
+Rebuild brings such a pane back as a shell with the command typed at the
+prompt and runs it only if it matches a regex in `~/.config/amx/autorun`
+(one per line, `#` comments). Without that file only viewers rerun: vim,
+less, more, man, tail, top, htop.
+
+A secondary command pane whose command exits during rebuild is left as a
+shell with the command typed, and rebuild warns rather than failing.
+A failing agent pane, or a command session's primary command, still
+aborts the rebuild and kills the half-built session.
 
 ### Codex identity
 

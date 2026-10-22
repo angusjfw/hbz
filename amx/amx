@@ -36,6 +36,9 @@ LAST_WRITER = STATE / ".last-writer"
 AGENT_STATUS = Path(os.environ.get("AMX_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
 # pi's session-control extension (agent-stuff control.ts): one socket per session
 PI_CONTROL = Path(os.environ.get("AMX_PI_CONTROL_DIR", Path.home() / ".pi/session-control"))
+# rebuild reruns a shell pane's command only when it matches one of these regexes
+AUTORUN = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "amx/autorun"
+AUTORUN_DEFAULT = (r"^(n?vim?|view|less|more|man|tail|top|htop)( |$)",)
 # the tmux-interaction skill, in this repo's shared skills dir
 INPUT_BOX = Path(__file__).resolve().parents[1] / "agents/skills/tmux-interaction/scripts/read-input-box.py"
 
@@ -1346,6 +1349,45 @@ def start_pane(pane_id, cwd, line, harness, sid, agent_args=(), command="", labe
         time.sleep(0.1)
 
 
+def autorun_patterns():
+    try:
+        lines = AUTORUN.read_text().splitlines()
+    except OSError:
+        return AUTORUN_DEFAULT
+    return tuple(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
+
+
+def autoruns(command):
+    return any(re.search(pattern, command) for pattern in autorun_patterns())
+
+
+def type_at_prompt(pane_id, command, run_it):
+    """Type a command into a fresh shell, and run it only if asked. Typing waits for
+    the prompt to draw, so a slow shell start can't drop or garble the keys."""
+    end = time.monotonic() + 10
+    while not tmux("capture-pane", "-p", "-t", pane_id, check=False).stdout.strip() and time.monotonic() < end:
+        time.sleep(0.1)
+    tmux("send-keys", "-t", pane_id, "-l", command)
+    if run_it:
+        tmux("send-keys", "-t", pane_id, "Enter")
+
+
+def restore_shell(pane_id, cwd, command):
+    """A command that wouldn't restart: back to a plain shell with it typed, not run."""
+    tail = [line for line in tmux("capture-pane", "-p", "-J", "-S", "-50", "-t", pane_id, check=False).stdout.splitlines()
+            if line.strip() and not line.startswith("Pane is dead")]
+    for key in ("harness", "session_id", "command"):
+        tmux("set-option", "-p", "-t", pane_id, f"@amx_{key}", "")
+    clear_pane_settings(pane_id)
+    # without a command, respawn-pane would repeat the one that just failed
+    shell = tmux("show-options", "-gv", "default-shell").stdout.strip() or os.environ.get("SHELL", "/bin/sh")
+    tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, f"exec {shlex.quote(shell)} -l")
+    # only once it's live: tmux closes a dead pane as soon as remain-on-exit goes
+    tmux("set-option", "-pu", "-t", pane_id, "remain-on-exit", check=False)
+    type_at_prompt(pane_id, command, False)
+    return tail[-1].strip() if tail else ""
+
+
 def wait_for_start(pane_id, timeout, settle=2.0):
     """Observe a continuous running interval, not readiness or a hook acknowledgement."""
     end = time.monotonic() + timeout
@@ -1569,6 +1611,7 @@ def cmd_rebuild(a):
     if problems:
         die("not rebuilding; fix these first:\n  " + "\n  ".join(problems))
 
+    warnings = []
     try:
         for wi, (w, panes) in enumerate(plan):
             first_cwd = panes[0][1] if panes else os.getcwd()
@@ -1592,10 +1635,25 @@ def cmd_rebuild(a):
                     start_pane(pid, cwd, cmd, p["harness"], p["session_id"], agent_arguments(p["agent_args"]),
                                label=p.get("label", ""), model=p.get("model"), effort=p.get("effort"), primary=p["primary"])
                     wait_for_start(pid, 30)
+                elif cmd and p.get("shell"):
+                    run_it = autoruns(cmd)
+                    type_at_prompt(pid, cmd, run_it)
+                    if not run_it:
+                        warnings.append(f"window {w['index']} pane {p['index']}: typed, not run: {cmd}")
                 elif cmd:
-                    start_pane(pid, cwd, launch_line("command", "", command=cmd), "command", "",
-                               command=cmd, label=p.get("label", ""), primary=p["primary"])
-                    wait_for_start(pid, 30)
+                    try:
+                        start_pane(pid, cwd, launch_line("command", "", command=cmd), "command", "",
+                                   command=cmd, label=p.get("label", ""), primary=p["primary"])
+                        wait_for_start(pid, 30)
+                    except CmError as error:
+                        # a command session without its command is nothing; a side pane's
+                        # failure mustn't take the resumed agents down with it
+                        if p["primary"]:
+                            raise
+                        output = restore_shell(pid, cwd, cmd)
+                        warnings.append(f"window {w['index']} pane {p['index']}: {cmd}: "
+                                        f"{str(error).replace('; pane retained', '')}"
+                                        f"{': ' + output if output else ''}; left typed at a shell prompt")
     except CmError as error:
         failure = STATE / "snapshots" / f"{a.id}-rebuild-failed.txt"
         message = str(error).replace("; pane retained", "")
@@ -1616,6 +1674,8 @@ def cmd_rebuild(a):
         b.set("last_touched", now_str())
     mutate(fn)
     print(f"rebuilt {session}: {len(plan)} window(s)")
+    for warning in warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
 
 
 def cmd_kill(a):

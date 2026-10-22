@@ -359,10 +359,14 @@ prefix to `[shutdown]`.
 `amx rebuild <id>`. It rebuilds windows, panes and layout from the
 resume_state, resumes every agent pane by id and restarts other panes'
 commands. Review generic commands first: restarting can repeat side effects;
-it does not restore tool/application state. It checks everything first and creates nothing if a cwd or a
-pi transcript is missing; on a failure midway it kills the half-built
-session. Either way the entry stays shut down. Show the error and let
-the user decide. On success, set the task prefix to `[active]`.
+it does not restore tool/application state. Commands typed into a shell
+come back typed at the prompt, not run, unless `~/.config/amx/autorun`
+lists them. It checks everything first and creates nothing if a cwd or a
+pi transcript is missing; if an agent pane fails midway it kills the
+half-built session and the entry stays shut down. Show the error and let
+the user decide. A side command pane that fails is left as a shell with
+the command typed, and rebuild prints a WARNING; pass those on, along
+with any "typed, not run" panes. On success, set the task prefix to `[active]`.
 
 Without a resume_state, entries with worker records cannot be rebuilt
 as primary-only sessions. Recover the per-pane state first; do not drop
