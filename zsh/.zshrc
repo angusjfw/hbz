@@ -60,6 +60,24 @@ BASE16_SHELL=$HOME/.config/base16-shell/
 # set up TMUXPWD vars for opening new splits in the current directory
 PS=1"$PS1"'$([ -n "$TMUX" ] && tmux setenv TMUXPWD_$(tmux display -p "#D" | tr -d %) "$PWD")'
 
+# record the command line running in each tmux pane, so amx shutdown saves
+# what was typed (pipes, wrapper scripts) rather than the process's argv
+if [[ -n $TMUX && -n $TMUX_PANE ]]; then
+  autoload -Uz add-zsh-hook
+  _amx_preexec() {
+    local line=${1:-$3}
+    [[ $line == *$'\n'* ]] && return  # amx records one line per pane
+    tmux set -p -t "$TMUX_PANE" @amx_shell_cmd "$line" 2>/dev/null && _amx_cmd_set=1
+  }
+  _amx_precmd() {
+    [[ -n $_amx_cmd_set ]] || return
+    tmux set -pu -t "$TMUX_PANE" @amx_shell_cmd 2>/dev/null
+    unset _amx_cmd_set
+  }
+  add-zsh-hook preexec _amx_preexec
+  add-zsh-hook precmd _amx_precmd
+fi
+
 # fzf
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='ag --hidden --ignore .git -g ""'

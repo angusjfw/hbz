@@ -226,7 +226,9 @@ session_id: 7f1c9e02-…
 
 ### pane 1
 cwd: /home/me/code/repo
-command: yarn dev
+command: yarn dev | tee dev.log
+harness: command
+shell: zsh
 ```
 
 - One `## window <n>: <name>` block per window, in order, with `layout:`.
@@ -235,7 +237,8 @@ command: yarn dev
   `session_id:`, `label:` plus recorded `model:`, `effort:` and `agent_args:`.
   Legacy files without `primary:` use the first pane of the first window.
   Managed command panes retain their launch cwd even if the process
-  changes directory.
+  changes directory. `shell:` marks a command typed into a shell rather
+  than launched by amx.
 - Old files use `claude_session_id:`; it reads as `session_id:` with
   harness `claude`.
 - Any other `## ` section is prose for the reader.
@@ -283,6 +286,12 @@ Generic panes' labels and exact commands survive shutdown.
 Commands run with the launch environment; amx does not snapshot secrets
 or arbitrary environment variables. Restarting a command may repeat its
 side effects. Review the recorded command before rebuilding.
+
+For a shell running a command, shutdown records the line as typed, which
+the zsh preexec hook in `zsh/.zshrc` keeps in the pane option
+`@amx_shell_cmd`. Without it (another shell, or one started before the
+hook) it falls back to the child's argv, which loses the rest of a
+pipeline and is rewritten by exec wrappers (`mix` shows as `beam.smp`).
 
 ### Codex identity
 

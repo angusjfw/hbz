@@ -399,7 +399,8 @@ def pane_rows(target=None):
                      "#{pane_current_path}", "#{pane_title}", "#{pane_dead}", "#{pane_dead_status}",
                      "#{@amx_harness}", "#{@amx_session_id}", "#{@amx_agent_args}",
                      "#{@amx_command}", "#{@amx_label}", "#{@amx_launch_cwd}",
-                     "#{@amx_model}", "#{@amx_effort}", "#{@amx_primary}"])
+                     "#{@amx_model}", "#{@amx_effort}", "#{@amx_primary}",
+                     "#{@amx_shell_cmd}"])  # last: a typed command line may hold tabs
     args = ["list-panes", "-F", fmt]
     args += ["-s", "-t", f"={target}:"] if target else ["-a"]
     r = tmux(*args, check=False)
@@ -415,7 +416,8 @@ def pane_rows(target=None):
                          tty=f[7].replace("/dev/", ""), cwd=f[8], title=f[9], dead=f[10] == "1",
                          exit_status=f[11], managed_harness=f[12], managed_id=f[13], agent_args=f[14],
                          managed_command=f[15], managed_label=f[16], launch_cwd=f[17],
-                         managed_model=f[18], managed_effort=f[19], managed_primary=f[20]))
+                         managed_model=f[18], managed_effort=f[19], managed_primary=f[20],
+                         shell_cmd="\t".join(f[21:])))
     return rows
 
 
@@ -795,15 +797,20 @@ def inspect_panes(session, reg=None):
                 fg = args
                 break
         own = next((a for pid, _, _, a in procs if pid == r["pane_pid"]), "")
+        # a shell running something: what was typed, per the zsh preexec hook, beats the
+        # child's argv, which loses the rest of a pipeline and is rewritten by exec wrappers
+        shell = os.path.basename(own.split()[0].lstrip("-")) if fg and is_shell(own) and own else None
         if classify(own) in AGENTS or (not fg and not is_shell(own)):
-            fg = own
+            fg, shell = own, None
         managed = r.get("managed_harness")
         # A tool/subagent child cannot contradict an opaque managed parent's type.
         observed = classify(own) if managed in AGENTS and not is_shell(own) else classify(fg)
         conflict = managed in AGENTS and observed in AGENTS and managed != observed
         kind = observed if conflict else (managed or observed)
         if kind == "command":
-            kind, fg = "cmd", r.get("managed_command") or fg
+            kind, fg, shell = "cmd", r.get("managed_command") or fg, None
+        elif kind == "cmd" and shell and r.get("shell_cmd"):
+            fg = r["shell_cmd"]
         sid, src = None, None
         primary = primary_pane(r, rows)
         primary_entry = entry if primary and entry and harness_of(entry) == kind else None
@@ -838,7 +845,8 @@ def inspect_panes(session, reg=None):
             saved = {}
         label = r.get("managed_label") or saved.get("label")
         name = (entry.name if primary else f"{entry.name}-{label}" if label else None) if entry else None
-        out.append(dict(r, kind=kind, command=fg, session_id=sid, id_source=src,
+        out.append(dict(r, kind=kind, command=fg, shell=shell if kind == "cmd" else None,
+                        session_id=sid, id_source=src,
                         primary=primary, state=st.get(r["pane_id"], (None, None))[1], label=label,
                         name=name or r["pane_id"], entry=entry.name if entry else None,
                         entry_harness=harness_of(entry) if entry else None, harness_conflict=conflict,
@@ -1258,6 +1266,8 @@ def write_resume_state(session, out, reg=None):
             elif p["kind"] == "cmd":
                 lines.append(f"command: {p['command']}")
                 lines.append("harness: command")
+                if p.get("shell"):
+                    lines.append(f"shell: {p['shell']}")
             else:
                 lines.append("command:")
             if p["label"]:
