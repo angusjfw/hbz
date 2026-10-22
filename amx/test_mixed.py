@@ -454,6 +454,18 @@ class MixedTmuxTests(IsolatedTmuxCase):
         self.assertNotEqual(current, "sleep")
         self.assertEqual(pane["kind"], "idle")
 
+    def test_pipeline_pane_keeps_its_cwd_after_the_head_exits(self):
+        self.spawn()
+        pane = self.tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", "=work:", "-n", "pipe",
+                         "-c", str(self.bin)).stdout.strip()
+        self.tmux("send-keys", "-t", pane, "true | sleep 120", "Enter")
+        for _ in range(50):
+            p = next(p for p in self.cm.inspect_panes("work") if p["pane_id"] == pane)
+            if p["kind"] == "cmd":
+                break
+            time.sleep(0.1)
+        self.assertEqual(p["cwd"], str(self.bin))
+
     def test_shell_command_on_the_autorun_list_reruns(self):
         self.cm.AUTORUN = self.root / "autorun"
         self.cm.AUTORUN.write_text("# dev servers\n^sleep \n")

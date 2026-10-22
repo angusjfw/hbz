@@ -781,6 +781,17 @@ def unresolved_workers(workers, panes):
     return retained
 
 
+def process_cwd(pid):
+    if Path(f"/proc/{pid}/cwd").exists():
+        return os.readlink(f"/proc/{pid}/cwd")
+    lsof = shutil.which("lsof") or "/usr/sbin/lsof"  # macOS keeps it off a minimal PATH
+    try:
+        r = run([lsof, "-a", "-p", str(pid), "-d", "cwd", "-Fn"], check=False)
+    except OSError:
+        return ""
+    return next((line[1:] for line in r.stdout.splitlines() if line.startswith("n")), "")
+
+
 def inspect_panes(session, reg=None):
     reg = reg or Registry.load()
     rows = pane_rows(session)
@@ -792,6 +803,10 @@ def inspect_panes(session, reg=None):
     out = []
     tty_of = {pid: tty for pid, _, tty, _ in procs}
     for r in rows:
+        if not r["cwd"] and not r["dead"]:
+            # tmux reads the foreground process group, whose leader is gone once the
+            # head of a pipeline exits (`git log | less`); the shell still knows
+            r = dict(r, cwd=process_cwd(r["pane_pid"]))
         fg = ""
         # compare ps with ps: macOS ps abbreviates ttys (s003 for /dev/ttys003)
         pane_tty = tty_of.get(r["pane_pid"], r["tty"])
@@ -1692,7 +1707,7 @@ def rebuild_entry(a):
             b.unset(k)
         b.set("last_touched", now_str())
     mutate(fn)
-    print(f"rebuilt {session}: {len(plan)} window(s)")
+    print(f"rebuilt {session}: {len(plan)} window(s)", flush=True)
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
 
