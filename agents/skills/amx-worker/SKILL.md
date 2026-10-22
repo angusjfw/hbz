@@ -61,6 +61,9 @@ Keeps the entry so the session can be brought back later.
    ```
 
    This kills your own tmux session, so it must be your last action.
+   It refuses with "busy: …" while another agent pane in the session is
+   mid-turn or waiting on the user. Tell the user which; force only on
+   their say-so.
 3. If it stops with "no session id for …": try `amx identify <entry>`.
    Otherwise find the full native ID using the agent's session browser
    or `amx transcripts <harness> <cwd>`. Bind the full ID to its pane with
@@ -87,6 +90,9 @@ Final: the entry is removed and the tmux session killed.
    ```
 
    This kills your own tmux session, so it must be your last action.
+   It refuses with "busy: …" while another agent pane in the session is
+   mid-turn or waiting on the user. Tell the user which; force only on
+   their say-so.
 
 ## If something fails
 

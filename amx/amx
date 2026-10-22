@@ -1856,10 +1856,34 @@ def guard_secondary(entry, whole_session=False):
             "Finish only this worker instead, or obtain user agreement and pass --whole-session.")
 
 
+BUSY_STATES = ("working", "needs_input")
+
+
+def guard_busy(session, force, need_ids=False):
+    """Refuse to end a session while one of its agents is mid-turn or waiting
+    on the user. The caller's own pane is exempt: it runs this command."""
+    if force:
+        return
+    own = my_pane_quiet()
+    panes = inspect_panes(session)
+    busy = [f"window {p['window']} pane {p['pane']} {p['name']} ({p['state']})"
+            for p in panes if p["state"] in BUSY_STATES and p["pane_id"] != own]
+    if not busy:
+        return
+    # --force covers both, so name every problem it would skip
+    missing = [f"window {p['window']} pane {p['pane']} ({p['kind']})"
+               for p in panes if need_ids and p["kind"] in AGENTS and not p["session_id"]]
+    die("busy: " + "; ".join(busy) + ". Wait for them to finish, or look at the panes and rerun with "
+        "--force (an interrupted turn leaves `working` stale)." +
+        (" Also no session id for: " + "; ".join(missing) + "." if missing else "") +
+        " Nothing written or killed.")
+
+
 def cmd_shutdown(a):
     reg = Registry.load()
     e, ts = live_entry(reg, a.id)
     guard_secondary(e, a.whole_session)
+    guard_busy(ts, a.force, need_ids=True)
     snap = STATE / "snapshots" / f"{a.id}.txt"
     snapshot_session(ts, snap, 500)
     rs, missing, panes = write_resume_state(ts, STATE / "resume" / f"{a.id}.md", reg)
@@ -1897,6 +1921,7 @@ def cmd_wrap(a):
     snap = None
     if live:
         guard_secondary(e, a.whole_session)
+        guard_busy(ts, a.force)
         snap = STATE / "snapshots" / f"{a.id}.txt"
         panes = snapshot_session(ts, snap, 500)
 
@@ -2448,13 +2473,15 @@ def main(argv=None):
     p = sub.add_parser("shutdown", help="snapshot, write resume_state, mark shutdown, park the LED key, kill tmux")
     p.add_argument("id")
     p.add_argument("--resume-target")
-    p.add_argument("--force", action="store_true", help="proceed even if some agent pane has no session id")
+    p.add_argument("--force", action="store_true",
+                   help="proceed even if an agent pane is busy or has no session id")
     p.add_argument("--whole-session", action="store_true", help="allow a secondary pane to shut down its entire container")
     p.set_defaults(fn=cmd_shutdown)
 
     p = sub.add_parser("wrap", help="final: snapshot, remove the entry (logged), release LED key, kill tmux (guarded)")
     p.add_argument("id")
     p.add_argument("--notes", help="one line kept with the entry in the session log")
+    p.add_argument("--force", action="store_true", help="proceed even if an agent pane is busy")
     p.add_argument("--whole-session", action="store_true", help="allow a secondary pane to wrap its entire container")
     p.set_defaults(fn=cmd_wrap)
 

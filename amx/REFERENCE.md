@@ -124,6 +124,10 @@ its notes.
   shutdown and wrap affect the whole entry, regardless of harness.
   Shutdown/wrap from a secondary pane require `--whole-session`, only
   after the user explicitly agrees to affect the entire container.
+  Both refuse while any other agent pane in the session is `working` or
+  `needs_input`, naming each one; `--force` overrides, after looking at
+  the panes. Only hook-fed (Claude) panes have a busy state; pi and Codex
+  panes are not checked.
   A manager targeting another session is not subject to that caller guard.
 - The manager owns the header, spawn and cold resume.
 - Coordination skills add and drop `worker:` lines on the entry of the

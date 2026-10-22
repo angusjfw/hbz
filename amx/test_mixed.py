@@ -390,6 +390,29 @@ class MixedTmuxTests(IsolatedTmuxCase):
         self.assertEqual(self.cm.resolve_target("work-server")["harness"], "command")
         self.assertTrue(all(not p["dead"] for p in after))
 
+    def test_shutdown_and_wrap_refuse_while_a_pane_is_busy(self):
+        self.spawn()
+        self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review"])
+        lead, review = (p["pane_id"] for p in self.cm.inspect_panes("work"))
+        self.cm.AGENT_STATUS.mkdir(parents=True, exist_ok=True)
+        # the session-level state outranks working, as agent-status aggregates it
+        (self.cm.AGENT_STATUS / "work.json").write_text(json.dumps(
+            {"state": "needs_input", "claudes": {"a": {"state": "working", "pane_id": review}}}))
+        self.save_pi_transcripts("work")
+        for command in ("shutdown", "wrap"):
+            with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+                self.cm.main([command, "work"])
+            self.assertIn("work-review (working)", err.getvalue())
+        self.assertTrue(self.cm.has_session("work"))
+        self.assertIsNone(self.cm.Registry.load().entry("work").get("shutdown"))
+        # the caller's own pane is mid-turn running the command
+        (self.cm.AGENT_STATUS / "work.json").write_text(json.dumps(
+            {"state": "working", "claudes": {"a": {"state": "working", "pane_id": lead}}}))
+        with patch.object(self.cm, "my_pane_quiet", return_value=lead):
+            self.cm.guard_busy("work", False)
+        self.cm.main(["shutdown", "work", "--force"])
+        self.assertIsNotNone(self.cm.Registry.load().entry("work").get("shutdown"))
+
     def test_generic_parent_can_host_recognized_agent(self):
         self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", "sleep 120"])
         self.cm.main(["spawn", "--into", "generic", "--harness", "pi", "--label", "agent"])

@@ -345,7 +345,10 @@ amx-worker skill.
 `amx shutdown <id> [--resume-target <date>]`. It snapshots every pane,
 writes the resume_state, records ids and worker lines, parks the LED
 key, moves attached clients off and kills the tmux session (unless it's
-shared, which it leaves running and says so). If it stops
+shared, which it leaves running and says so). If it stops with
+"busy: …", a pane is mid-turn or waiting on the user: tell the user which,
+and wait or ask; don't `--force` because the session-level busy column
+looked idle. If it stops
 with "no session id for …", resolve that pane per the `no-id` reconcile
 item, record its primary/worker ID in the registry, and rerun normal
 shutdown. Don't force away an unknown conversation. Set the task
