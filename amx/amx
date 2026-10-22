@@ -449,7 +449,7 @@ def whoami_pane():
 # Built-in adapters. Unknown CLIs can use command sessions without pretending
 # that restarting their command resumes an agent conversation.
 AGENTS = {
-    "claude": re.compile(r"(^|/)claude(-code)?( |$)|node\b.*\bclaude"),
+    "claude": re.compile(r"(^|/)claude(-code)?( |$)|node\b.*(@anthropic-ai/claude-code/|[ /]claude(-code)?( |$))"),
     "pi": re.compile(r"^pi\s*$|^pi |(^|/)bin/pi( |$)|node\b.*pi-coding-agent"),
     "codex": re.compile(r"(^|/)codex( |$)|node\b.*(?:@openai/codex|/bin/codex)"),
 }
