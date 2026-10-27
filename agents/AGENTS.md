@@ -46,6 +46,7 @@ When drafting messages from me (Slack, comments, reviews, etc):
 - Surgical commits. Each one coherent and meaningful. One logical change per commit.
 - Commit early and often, before starting unrelated changes. It's easier to combine commits later than split them apart.
 - Review the diff before committing or pushing. If something looks off, fix it first.
+- Stage explicit paths. Never `git commit -a`, `git add -A`, `git add .` or `git add -u`; they sweep in changes from other sessions.
 - For partial staging prefer `git-surgeon` (consult the skill) over `git add -p` or manual patches.
 - Use amends, fixup commits and rebases to keep history legible for reviewers. Update commit messages as necessary. Autosquash fixups directly; open a tmux pane for rebases that need user input.
 - Don't amend or fixup commits from other authors unless explicitly asked.
