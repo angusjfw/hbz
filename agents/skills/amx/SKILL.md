@@ -93,14 +93,15 @@ secondary worker does not finish its parent session.
 
 ## On invocation
 
-1. `amx whoami`. Note `pane`, `address` and `session`. Your harness is the
-   one you are running in.
+1. `amx whoami`. Note `pane`, `address`, `session` and `harness`. The
+   `harness=` value is your harness; step 6 passes it verbatim as the
+   worker harness unless the user names another.
 2. If `session` is a bare number (tmux auto-named it), rename it to
    `amx-<harness>` unless that name is taken, then clear the old
    name's LED state:
 
    ```bash
-   tmux has-session -t '=amx-claude' 2>/dev/null || { tmux rename-session -t '=0' amx-claude && agent-status clear 0; }
+   tmux has-session -t '=amx-<harness>' 2>/dev/null || { tmux rename-session -t '=0' 'amx-<harness>' && agent-status clear 0; }
    ```
 
    (Substitute the real number and harness. Quote `=` targets: zsh
@@ -231,8 +232,13 @@ running.
    If the brief carries anything beyond the user's words, say so when
    you report the spawn. A "blank" or "empty" spawn gets no brief.
    Write the brief to a file.
-6. **Pick the worker harness**, then model and effort. Honor the user's
-   harness choice; otherwise default to your own supported agent harness.
+6. **Pick the worker harness**, then model and effort. The harness is
+   not a judgement: pass your own from step 1 (`amx whoami`'s `harness=`)
+   unless the user names another. Registry entries, project history and
+   model aliases offered by other CLIs are not harness signals — a prior
+   lane on `claude` does not make claude the default, and an unfamiliar
+   model list is not a reason to switch. If the user names a harness, use
+   it.
    For an additional pane, `--into` defaults to the entry's harness but
    accepts another supported agent harness. For a generic CLI/tool, record its explicit
    command instead; don't invent model, effort or conversation-resume
@@ -241,13 +247,17 @@ running.
    and ambiguity. Model follows capability need, effort follows size.
    Lean powerful: work is usually bigger than its ticket reads, so
    between two sizes take the bigger. Guidelines are in `HARNESSES.md`.
-   If the choice isn't obvious, ask. The choice never goes in the brief.
+   If the model choice isn't obvious, use the harness's default model and
+   say so, or ask the user; never change harness to get a model you
+   recognise. The choice never goes in the brief.
 7. Spawn:
 
    ```bash
    amx spawn --harness <harness> --id <id> --cwd <dir> --model <m> --effort <e> \
      [--brief-file <file>] [--ticket …] [--worktree …] [--branch …]
    ```
+
+   `<harness>` is yours from step 1 — a pi manager passes `--harness pi`.
 
    `amx` checks for a name collision, creates the tmux session detached,
    records the entry and launches the agent with the brief. A collision

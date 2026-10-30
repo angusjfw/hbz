@@ -48,7 +48,8 @@ Header lines (before the first `## `):
 Entry fields (all optional; unknown fields and prose are kept):
 
 - `harness`: the primary/default harness: `claude`, `pi`, `codex` or
-  `command`. Absent means `claude`. It does not restrict other panes.
+  `command`. Absent means `claude` for legacy records; new spawns use the
+  manager's own harness. It does not restrict other panes.
 - `command`: the shell command for a generic session. Restarted as written
   by `/bin/sh`; no agent session ID or conversation-resume semantics.
 - `auto`: `true` on an entry the session hooks created. It goes away on

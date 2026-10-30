@@ -9,11 +9,18 @@ The entry's harness is its primary/default; each agent worker records its
 own harness. A manager can manage and spawn any supported harness. Use the worker's section
 for models, launch and resume; use the manager's section for watch,
 task-list and subagent capabilities. Honor an explicit worker harness
-choice. For a new session, default to the manager's supported harness;
-for `--into`, default to the entry's harness. Keep the requested container
-and pane/window placement; ask before changing either.
+choice. A new session runs the manager's own harness (`amx whoami`'s
+`harness=`) unless the user names another; for `--into`, default to the
+entry's harness. That default is not a preference to weigh against
+history: existing entries, prior lanes and the model aliases another CLI
+offers do not make it that CLI's turn. Model choice never changes the
+harness; if the ranking is unclear, use the harness's default or ask.
+Keep the requested container and pane/window placement; ask before
+changing either.
 
 ## Claude Code
+
+Read this when Claude is the chosen harness, not as a reason to choose it.
 
 - Models: use the installed Claude CLI's model choices, not the
   manager's own model list. Check `claude --help` for supported aliases
@@ -51,7 +58,9 @@ and pane/window placement; ask before changing either.
   - Most work → the default model.
   - Design, debugging, review → the strongest enabled model.
   - Mechanical, mostly invoking a skill → a small or local model.
-  - If the names don't make the ranking obvious, ask the user.
+  - If the names don't make the ranking obvious, use `defaultModel` and
+    say so, or ask the user. Don't switch to another harness for a model
+    you recognise.
 - Effort is pi's thinking level (`off`, `minimal`, `low`, `medium`,
   `high`, `xhigh`, `max`), passed as `--effort` to `amx`. Same sizing as
   Claude.

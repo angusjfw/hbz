@@ -16,8 +16,8 @@ description: >-
 
 Workers are full agent sessions in panes of the user's tmux server, visible
 and steerable by the user. A pane is the unit; a window just holds panes.
-A worker may run a different agent CLI from yours (`claude`, `pi`, `codex`);
-mixed teams are normal.
+A worker normally runs your own agent CLI; a different one (`claude`,
+`pi`, `codex`) only when the user asks for it. Mixed teams are fine then.
 
 pane-team is part of amx. It builds on tmux interaction, each harness's
 native messaging and pi's session-control extension. A manager session is
@@ -45,16 +45,16 @@ shut down and resumed:
 
 ```bash
 amx spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
-  [--harness <claude|pi|codex>] [--model <model>] [--window <name>]
+  [--harness <h>] [--model <model>] [--window <name>]
 ```
 
 It splits beside the active pane (or opens a window with `--window`) and
 prints `pane=`, `name=` and `session_id=`. The printed name
 (`<entry>-<label>`) is the worker's address; keep the `session_id` for
-Finish. `--harness` defaults to the entry's. For pi socket messaging, first
-verify its session-control extension is available, then add
-`--agent-arg=--session-control`. Without it, `amx msg` types into its pane;
-plain pi needs no extension to be managed.
+Finish. `--harness` defaults to the entry's; don't pass another unless the user
+asks. For pi socket messaging, first verify its session-control extension
+is available, then add `--agent-arg=--session-control`. Without it, `amx
+msg` types into its pane; plain pi needs no extension to be managed.
 
 A pane or window the user asked for goes into the current tmux session
 (`--into`, `--window`). Never turn it into a new session.
@@ -66,7 +66,9 @@ tmux split-window -d -P -F '#{pane_id}' -c "$cwd" \
   "<agent> --name $name \"\$(cat $brief_file)\""
 ```
 
-where `<agent>` is `claude` or `pi`. Add `--session-control` to pi only
+where `<agent>` is your own CLI, not a pick from a menu: run `amx whoami`
+and use its `harness=` (`pi` in a pi session). Use another harness only
+when the user names one. Add `--session-control` to pi only
 when its optional messaging extension is available and needed.
 
 - Split beside your own pane, or use `new-window -d` when the window is full.
