@@ -2,7 +2,7 @@ DIR=$(shell pwd)
 N_PREFIX ?= $(HOME)/.n
 WT_VERSION ?= 0.80.0
 
-.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude browser worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-daemon apt node rpi firmware help
+.PHONY: install mac arch wsl common zsh vim nvim tmux ghostty ai claude browser worktrunk npm pi pi-local brew brew-check git vscode macos-defaults z dircolors sway konsole mako wallpapers session-leds agent-deck agent-deck-windows agent-deck-daemon apt node rpi firmware help
 
 install: mac ## Default target: full macOS install
 
@@ -69,6 +69,12 @@ agent-deck: ## Build + install the direct-HID session LED daemon (needs rust)
 	mkdir -p ~/.local/bin
 	install -m 755 ${DIR}/keyboard/session-leds/agent-deck/target/release/agent-deck \
 	  ~/.local/bin/agent-deck
+
+agent-deck-windows: ## Cross-build + install the daemon as a native Windows binary (from WSL)
+	cd ${DIR}/keyboard/session-leds/agent-deck && cargo build --release --target x86_64-pc-windows-gnu
+	mkdir -p /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/.local/bin
+	install -m 755 ${DIR}/keyboard/session-leds/agent-deck/target/x86_64-pc-windows-gnu/release/agent-deck.exe \
+	  /mnt/c/Users/$$(cmd.exe /c echo %USERNAME% 2>/dev/null | tr -d '\r')/.local/bin/agent-deck.exe
 
 agent-deck-daemon: agent-deck ## Install + start launchd agent for agent-deck (macOS)
 	@# clear the retired agent-leds unit, on a machine that still carries it

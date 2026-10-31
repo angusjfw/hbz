@@ -2,7 +2,7 @@
 
 Claude Code session status on the Voyager — one key per session,
 Codex-Micro style, lit on the base layer so the board is a glance at
-what every session is doing. **Option-Space** summons the same list on
+what every session is doing. **Ctrl-Alt-Space** summons the same list on
 screen as a switcher: type a session's key to switch the tmux client to
 it. The board's bottom-right key sends that chord, so it's one switcher
 whether you reach for the keyboard or the shortcut. Spec and design
@@ -66,19 +66,24 @@ error).
 ##### 📋 Requirements
 - Hooks wired in Claude settings (`make claude`) and the status CLI
   symlinked (`make session-leds`, included in `make common`)
-- A rust toolchain (Brewfile) to build `agent-deck`
-- Keymapp (Brewfile) only to flash firmware, and only while the daemon
-  is paused — nothing needs it running otherwise
+- A rust toolchain to build `agent-deck` (Brewfile on macOS; on WSL a
+  mingw-w64 toolchain cross-builds the native Windows binary)
+- Keymapp only to flash firmware, and only while the daemon is paused —
+  nothing needs it running otherwise
 
-New machine: `make common agent-deck-daemon`, flash the firmware. No
-accessibility or automation permissions needed — Option-Space is one
-registered chord, not a tap, and nothing reads the OS keyboard.
+New machine (macOS): `make common agent-deck-daemon`, flash the
+firmware. Windows/WSL: `make agent-deck-windows`, flash the firmware,
+and a logon task starts the daemon. No accessibility or automation
+permissions needed — Ctrl-Alt-Space is one registered chord, not a tap,
+and nothing reads the OS keyboard.
 
 ##### 🚀 Run
-`make agent-deck-daemon` builds it, installs the launchd agent and
-starts it (macOS; logs to `~/.local/state/agent-status/agent-deck.log`),
-or run `agent-deck` directly in a pane. `agent-status list` shows
-tracked sessions; `set`/`slot`/`clear` for manual control.
+macOS: `make agent-deck-daemon` builds it, installs the launchd agent
+and starts it (logs to `~/.local/state/agent-status/agent-deck.log`).
+Windows: `make agent-deck-windows` builds the native binary and installs
+it to `%USERPROFILE%\.local\bin`; the `agent-deck` logon task starts it
+at login. Either way `agent-status list` shows tracked sessions;
+`set`/`slot`/`clear` for manual control.
 
 `agent-deck pause` goes fully silent and closes the HID device, which
 is what frees the board for flashing firmware; `resume` and `status`
@@ -94,8 +99,8 @@ The daemon needs the HID interface to itself, and Keymapp claims it
 exclusively — so quit Keymapp before starting agent-deck, and pause
 agent-deck before reaching for Keymapp.
 
-With the daemon down the bottom-right key types an Option-Space
-non-breaking space into whatever has focus, which is easy to miss in a
+With the daemon down the bottom-right key types a Ctrl-Alt-Space into
+whatever has focus (a non-breaking space on macOS), easy to miss in a
 prompt or a commit message.
 
 ##### 🖥️ Desktop

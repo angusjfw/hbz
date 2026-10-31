@@ -9,10 +9,8 @@
 //! reads as "the terminal came forward but tmux didn't move", so every
 //! switch is confirmed, and a phantom found in the way is cleared.
 
-use std::process::Command;
 use std::thread;
 
-use crate::config;
 use crate::overlay::{self, Shared};
 use crate::tmux;
 
@@ -36,12 +34,31 @@ pub fn switch_to(shared: &Shared, session: &str) {
                 overlay::notice(&shared, &format!("tmux didn't switch ({client})"));
             }
         }
-        if cfg!(target_os = "macos") {
-            let _ = Command::new("open")
-                .args(["-a", config::TERMINAL_APP])
-                .status();
-        }
+        focus_terminal();
     });
+}
+
+/// Bring the terminal forward so the switched session is what you're
+/// looking at. tmux does the switching; this only fronts the terminal.
+fn focus_terminal() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .args(["-a", crate::config::TERMINAL_APP])
+            .status();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // Windows Terminal is the terminal; WScript's AppActivate fronts it
+        // by process id without opening a new window.
+        let _ = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "(New-Object -ComObject WScript.Shell).AppActivate((Get-Process WindowsTerminal -ErrorAction SilentlyContinue | Select-Object -First 1).Id)",
+            ])
+            .status();
+    }
 }
 
 /// Switch `client` — or whichever tmux lists as most recently active —
@@ -78,7 +95,7 @@ fn switch_and_confirm(client: &str, session: &str) -> bool {
 /// out of the name lookup. Returns how many went.
 fn clear_suspended(tty: &str) -> usize {
     let device = tty.trim_start_matches("/dev/");
-    let Ok(out) = Command::new("ps")
+    let Ok(out) = crate::wsl::command("ps")
         .args(["-o", "pid=,stat=,comm=", "-t", device])
         .output()
     else {
@@ -87,7 +104,7 @@ fn clear_suspended(tty: &str) -> usize {
     let pids = suspended_pids(&String::from_utf8_lossy(&out.stdout));
     for pid in &pids {
         crate::log(&format!("clearing suspended tmux client {pid} on {tty}"));
-        let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+        let _ = crate::wsl::command("kill").args(["-9", &pid.to_string()]).status();
     }
     pids.len()
 }

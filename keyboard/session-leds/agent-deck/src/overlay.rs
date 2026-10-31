@@ -3,7 +3,7 @@
 //! One transparent, undecorated, always-on-top window covering the
 //! screen, created at startup and shown or hidden as needed, so
 //! summoning it costs nothing. Toasts pass every click through and never
-//! take focus. The switcher (Option-Space, which is also what the
+//! take focus. The switcher (Ctrl-Alt-Space, which is also what the
 //! board's bottom-right key sends) does take key focus, like a launcher:
 //! a session's own key label — or arrows and Enter — switches to it, and
 //! Escape or clicking away hands focus straight back.
@@ -308,6 +308,12 @@ fn drive_switcher(
 /// egui's bundled font has no keycap symbols (⇧ ⇥ ⌃), which the key column
 /// needs, so fall back to a platform font that does.
 fn add_keycap_glyphs(ctx: &egui::Context) {
+    #[cfg(target_os = "windows")]
+    const CANDIDATES: [&str; 2] = [
+        r"C:\Windows\Fonts\seguisym.ttf",
+        r"C:\Windows\Fonts\segoeui.ttf",
+    ];
+    #[cfg(not(target_os = "windows"))]
     const CANDIDATES: [&str; 3] = [
         "/System/Library/Fonts/Apple Symbols.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",

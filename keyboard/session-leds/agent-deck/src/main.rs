@@ -17,6 +17,7 @@ mod overlay;
 mod render;
 mod store;
 mod tmux;
+mod wsl;
 
 use std::collections::BTreeMap;
 use std::fs;

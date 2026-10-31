@@ -2,7 +2,6 @@
 //! Short-lived CLI calls, as in the status CLI.
 
 use std::collections::{HashMap, HashSet};
-use std::process::Command;
 
 pub enum Panes {
     /// What's running in the session's panes.
@@ -14,7 +13,7 @@ pub enum Panes {
 }
 
 pub fn pane_commands(session: &str) -> Panes {
-    let out = Command::new("tmux")
+    let out = crate::wsl::command("tmux")
         .args([
             "list-panes",
             "-s",
@@ -39,7 +38,7 @@ pub fn pane_commands(session: &str) -> Panes {
 /// Session name to creation order. tmux session ids increment, so this is
 /// the order the switcher lists them in.
 pub fn creation_order() -> HashMap<String, u32> {
-    let Ok(out) = Command::new("tmux")
+    let Ok(out) = crate::wsl::command("tmux")
         .args(["list-sessions", "-F", "#{session_id} #{session_name}"])
         .output()
     else {
@@ -57,7 +56,7 @@ pub fn creation_order() -> HashMap<String, u32> {
 /// The most recently active attached client, which is the one a switch
 /// should move. `switch-client` needs it named explicitly.
 pub fn latest_client() -> Option<String> {
-    let out = Command::new("tmux")
+    let out = crate::wsl::command("tmux")
         .args(["list-clients", "-F", "#{client_activity} #{client_tty}"])
         .output()
         .ok()?;
@@ -72,7 +71,7 @@ pub fn latest_client() -> Option<String> {
 /// be accepted and still not land, so the caller confirms with
 /// `client_session` (see `input`).
 pub fn switch_client(client: &str, session: &str) {
-    let _ = Command::new("tmux")
+    let _ = crate::wsl::command("tmux")
         .args(["switch-client", "-c", client, "-t", &format!("={session}")])
         .status();
 }
@@ -81,7 +80,7 @@ pub fn switch_client(client: &str, session: &str) {
 /// when it lists none there — a suspended client never appears, which is
 /// exactly what makes it worth asking.
 pub fn client_session(tty: &str) -> Option<String> {
-    let out = Command::new("tmux")
+    let out = crate::wsl::command("tmux")
         .args(["list-clients", "-F", "#{client_tty} #{client_session}"])
         .output()
         .ok()?;
@@ -94,7 +93,7 @@ pub fn client_session(tty: &str) -> Option<String> {
 
 /// Sessions an attached client is currently looking at.
 pub fn focused_sessions() -> HashSet<String> {
-    let Ok(out) = Command::new("tmux")
+    let Ok(out) = crate::wsl::command("tmux")
         .args(["list-clients", "-F", "#{client_session}"])
         .output()
     else {
@@ -106,10 +105,10 @@ pub fn focused_sessions() -> HashSet<String> {
         .collect()
 }
 
-/// Claude Code panes report the CLI's version string (e.g. "2.1.220") as
-/// pane_current_command; claude and node are fallbacks.
+/// Agent panes report the CLI's version string (e.g. "2.1.220") as
+/// pane_current_command; claude, node and pi are the named fallbacks.
 pub fn looks_like_claude(cmd: &str) -> bool {
-    if cmd == "claude" || cmd == "node" {
+    if cmd == "claude" || cmd == "node" || cmd == "pi" {
         return true;
     }
     let mut parts = cmd.split('.');
@@ -130,7 +129,9 @@ mod tests {
         assert!(looks_like_claude("2.1.220"));
         assert!(looks_like_claude("claude"));
         assert!(looks_like_claude("node"));
+        assert!(looks_like_claude("pi"));
         assert!(!looks_like_claude("zsh"));
+        assert!(!looks_like_claude("pico"));
         assert!(!looks_like_claude("2.1"));
         assert!(!looks_like_claude("2.1.220.1"));
         assert!(!looks_like_claude("2.1.x"));

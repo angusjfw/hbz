@@ -3,7 +3,6 @@
 //! Config is constants in code, as in the scripts this replaces; a file
 //! only if it ever hurts.
 
-use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -146,6 +145,7 @@ pub fn slot_key(n: u32) -> &'static str {
 
 /// What to bring forward after a switch. tmux does the session switching,
 /// so this only has to be the terminal.
+#[cfg(target_os = "macos")]
 pub const TERMINAL_APP: &str = "Ghostty";
 
 /// How long a toast stays up.
@@ -168,12 +168,28 @@ pub const READ_TIMEOUT_MS: i32 = 50;
 /// Loop pacing with no board to read from.
 pub const IDLE_WAIT: Duration = Duration::from_millis(500);
 
+#[cfg(not(target_os = "windows"))]
 fn home() -> PathBuf {
-    PathBuf::from(env::var("HOME").unwrap_or_else(|_| "/".into()))
+    PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".into()))
 }
 
 pub fn state_dir() -> PathBuf {
-    home().join(".local/state/agent-status")
+    #[cfg(target_os = "windows")]
+    {
+        // The store lives in WSL, so on Windows it's the distro's home over
+        // the 9P mount, not the Windows user's profile.
+        let home = crate::wsl::home(); // e.g. /home/angus
+        PathBuf::from(format!(
+            "\\\\wsl.localhost\\{}\\{}",
+            crate::wsl::DISTRO,
+            home.trim_start_matches('/').replace('/', "\\"),
+        ))
+        .join(".local/state/agent-status")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        home().join(".local/state/agent-status")
+    }
 }
 
 /// The pause marker, named for the binary that honours it.

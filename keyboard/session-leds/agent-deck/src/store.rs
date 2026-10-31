@@ -8,7 +8,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Instant;
@@ -169,7 +168,7 @@ pub fn demote_done_on_focus(done: &[Done]) {
 fn ask(args: &[&str]) {
     let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
     thread::spawn(
-        move || match Command::new("agent-status").args(&args).status() {
+        move || match crate::wsl::agent_status().args(&args).status() {
             Ok(status) if status.success() => {}
             Ok(status) => crate::log(&format!(
                 "agent-status {} failed ({status})",
