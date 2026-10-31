@@ -19,7 +19,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TAB,         KC_Q,           KC_W,           KC_E,           KC_R,           KC_T,                                           KC_Y,           KC_U,           KC_I,           KC_O,           KC_P,           KC_BSLS,        
     KC_LEFT_CTRL,   KC_A,           KC_S,           KC_D,           KC_F,           KC_G,                                           KC_H,           KC_J,           KC_K,           KC_L,           KC_SCLN,        KC_QUOTE,       
     KC_LEFT_SHIFT,  KC_Z,           KC_X,           KC_C,           KC_V,           KC_B,                                           KC_N,           KC_M,           KC_COMMA,       KC_DOT,         KC_SLASH,       KC_RIGHT_SHIFT, 
-    MO(2),          MO(5),          KC_RIGHT_ALT,   KC_ESCAPE,      KC_LEFT_GUI,    KC_LEFT_ALT,                                    KC_DELETE,      KC_BSPC,        KC_DOWN,        KC_UP,          KC_RIGHT,       LALT(KC_SPACE),
+    MO(2),          MO(5),          KC_RIGHT_ALT,   KC_ESCAPE,      KC_LEFT_GUI,    KC_LEFT_ALT,                                    KC_DELETE,      KC_BSPC,        KC_DOWN,        KC_UP,          KC_RIGHT,       LCTL(LALT(KC_SPACE)),
                                                     KC_SPACE,       MO(1),                                          KC_ENTER,       MO(1)
   ),
   [1] = LAYOUT_voyager(
@@ -36,7 +36,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
-  // Unused. The bottom-right key sends Option-Space, which summons the
+  // Unused. The bottom-right key sends Ctrl-Alt-Space, which summons the
   // session switcher on screen (see keyboard/session-leds/) — there's no
   // layer to toggle. The entry stays because 4 and 5 sit above it, and
   // nothing reaches it.

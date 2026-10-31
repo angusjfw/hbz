@@ -11,7 +11,7 @@ Layout "voyup", maintained in [Oryx](https://configure.zsa.io/voyager/layouts/PY
 ##### 🗺️ Layers
 | # | Access | Purpose |
 |---|--------|---------|
-| 0 | base | QWERTY. Ctrl/Shift on left pinky column, Esc·GUI·Alt inner bottom row, Del·Bspc and arrows bottom right, Option-Space on the bottom-right key to summon the session switcher (see `session-leds/`). Green home markers. |
+| 0 | base | QWERTY. Ctrl/Shift on left pinky column, Esc·GUI·Alt inner bottom row, Del·Bspc and arrows bottom right, Ctrl-Alt-Space on the bottom-right key to summon the session switcher (see `session-leds/`). Green home markers. |
 | 1 | hold either inner thumb key | Number row, shifted symbols, brackets/braces. |
 | 2 | hold bottom-left key | F1–F12, volume, RGB brightness/toggle, vim-style arrows on right home row, Caps Lock (red indicator while active). |
 | 3 | unreachable | Unused. Kept because 4 and 5 sit above it. |
