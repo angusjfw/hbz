@@ -10,6 +10,7 @@
 
 mod board;
 mod config;
+mod console;
 mod control;
 mod hotkey;
 mod input;
@@ -42,6 +43,12 @@ fn main() {
     if !args.is_empty() {
         std::process::exit(control::run(&args));
     }
+    // The daemon is the one Windows process the user never launched from a
+    // prompt, so it hides the console window the OS gives it — no empty
+    // terminal sitting beside the overlay. The control subcommands above
+    // keep theirs (they print and return exit codes).
+    #[cfg(target_os = "windows")]
+    console::hide_window();
     // the window's event loop wants the main thread (macOS insists), so the
     // daemon runs beside it; LEDs keep working even if the window can't
     let shared = overlay::shared();
@@ -57,6 +64,26 @@ fn main() {
 
 /// One line per connection change or real failure — this is a daemon log.
 pub fn log(message: &str) {
+    #[cfg(target_os = "windows")]
+    {
+        // No console once the daemon has hidden its window, so the log goes
+        // to a file under the native user state dir (on macOS the launchd
+        // job redirects stdout to the same path). `USERPROFILE`, not WSL's
+        // home: the daemon is a native Windows process and shouldn't reach
+        // into WSL just to write a line.
+        use std::io::Write;
+        let path = std::env::var("USERPROFILE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default()
+            .join(".local/state/agent-status/agent-deck.log");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(file, "agent-deck: {message}");
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
     println!("agent-deck: {message}");
 }
 

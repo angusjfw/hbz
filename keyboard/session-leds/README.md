@@ -82,7 +82,9 @@ macOS: `make agent-deck-daemon` builds it, installs the launchd agent
 and starts it (logs to `~/.local/state/agent-status/agent-deck.log`).
 Windows: `make agent-deck-windows` builds the native binary and installs
 it to `%USERPROFILE%\.local\bin`; the `agent-deck` logon task starts it
-at login. Either way `agent-status list` shows tracked sessions;
+at login. It runs with no window — the daemon hides its console — and
+logs to `%USERPROFILE%\.local\state\agent-status\agent-deck.log`.
+Either way `agent-status list` shows tracked sessions;
 `set`/`slot`/`clear` for manual control.
 
 `agent-deck pause` goes fully silent and closes the HID device, which
