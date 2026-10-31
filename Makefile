@@ -94,8 +94,12 @@ QMK_FORK ?= ~/dev/zsa-qmk
 
 firmware: ## Build Voyager firmware from keyboard/voyager/src (needs qmk CLI + ZSA fork at QMK_FORK)
 	ln -sfn ${DIR}/keyboard/voyager/src $(QMK_FORK)/keyboards/zsa/voyager/keymaps/hbz
+ifeq ($(shell uname),Darwin)
 	cd $(QMK_FORK) && PATH="$$(brew --prefix)/opt/arm-none-eabi-gcc@8/bin:$$(brew --prefix)/opt/arm-none-eabi-binutils/bin:$$PATH" \
 	  qmk compile -kb zsa/voyager -km hbz
+else
+	cd $(QMK_FORK) && qmk compile -kb zsa/voyager -km hbz
+endif
 	cp $(QMK_FORK)/zsa_voyager_hbz.bin ${DIR}/keyboard/voyager/firmware/
 
 vscode: ## Symlink VS Code settings (macOS or Linux path)

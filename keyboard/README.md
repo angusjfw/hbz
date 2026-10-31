@@ -44,12 +44,16 @@ which Oryx can't import back. For big layout edits: edit in Oryx,
 re-export, re-apply the local delta (or adopt
 [ZSA's Oryx+custom-QMK flow](https://blog.zsa.io/oryx-custom-qmk-features/)).
 
-Build: `make firmware` (needs `brew install qmk/qmk/qmk` after trusting
-the qmk/qmk, osx-cross/arm and osx-cross/avr taps, plus
+Build: `make firmware` (needs
 [ZSA's QMK fork](https://github.com/zsa/qmk_firmware) cloned at
-`~/dev/zsa-qmk` — override with `QMK_FORK=`). Flash the built bin from
-`voyager/firmware/` with Keymapp — run `agent-deck pause` first, which
-closes its HID connection so Keymapp can claim the board, then
+`~/dev/zsa-qmk` — override with `QMK_FORK=`). On macOS: `brew install
+qmk/qmk/qmk` after trusting the qmk/qmk, osx-cross/arm and osx-cross/avr
+taps. On WSL/Linux: `apt install gcc-arm-none-eabi dfu-util`,
+`pip install --break-system-packages qmk six`, and clone the fork with
+submodules (`git clone --depth 1 --recurse-submodules
+https://github.com/zsa/qmk_firmware ~/dev/zsa-qmk`). Flash the built bin
+from `voyager/firmware/` with Keymapp — run `agent-deck pause` first,
+which closes its HID connection so Keymapp can claim the board, then
 `agent-deck resume` afterwards.
 
 Keymapp's layout view is not a picture of what's on the board: it
