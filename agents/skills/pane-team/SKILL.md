@@ -44,11 +44,15 @@ through `amx` so the worker is registered and comes back when the session is
 shut down and resumed:
 
 ```bash
-amx spawn --into "$session" --label "$name" --cwd "$cwd" --brief-file "$brief_file" \
-  [--harness <h>] [--model <model>] [--window <name>]
+amx spawn --into "$session" --split "$TMUX_PANE" --label "$name" --cwd "$cwd" \
+  --brief-file "$brief_file" [--harness <h>] [--model <model>] [--window <name>]
 ```
 
-It splits beside the active pane (or opens a window with `--window`) and
+It splits beside your own pane (or opens a window with `--window`). Keep
+`--split "$TMUX_PANE"` on every split: without it, amx splits beside the
+session's active pane, which is whatever window the user last looked at.
+That matters most when a worker spawns its own helper, such as a reviewer.
+Put the same flag in any spawn command you write into a worker's brief. It
 prints `pane=`, `name=` and `session_id=`. The printed name
 (`<entry>-<label>`) is the worker's address; keep the `session_id` for
 Finish. `--harness` defaults to the entry's; don't pass another unless the user
