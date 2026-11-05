@@ -46,6 +46,12 @@ Read this when Claude is the chosen harness, not as a reason to choose it.
 - Busy in a capture: a spinner line with `(<elapsed> · ↓ <n> tokens)`.
   Idle: a past-tense line (`✻ Baked for 4s`) above the input box.
   Blocked: a dialog with numbered options and no input box.
+- Folder trust: a spawn into a path Claude has not seen (a fresh
+  worktree) stops on the "Do you trust this folder?" dialog before the
+  session hooks run, so the pane has no agent-status: `amx ls` shows
+  `-` and agent-deck does not list it. Capture the pane after a spawn
+  into a new worktree; the user answers the dialog (the manager cannot
+  send keys to it).
 
 ## pi
 
