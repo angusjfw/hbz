@@ -157,9 +157,9 @@ endef
 
 ai: claude pi browser ## Set up both coding agents: Claude Code and pi
 
-claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, agents)
+claude: ## Symlink Claude Code config (instructions, settings, hooks, skills)
 	@# instructions
-	mkdir -p ~/.claude/hooks ~/.claude/skills ~/.claude/agents
+	mkdir -p ~/.claude/hooks ~/.claude/skills
 	ln -sf ${DIR}/agents/AGENTS.md ~/.claude/CLAUDE.md
 	@# settings — live file is gitignored (Claude Code and local edits write to it); three-way merge
 	@# the committed baseline into it, so baseline changes land and local changes survive
@@ -168,8 +168,6 @@ claude: ## Symlink Claude Code config (instructions, settings, hooks, skills, ag
 	@# hooks
 	for f in ${DIR}/claude/hooks/*; do ln -sf "$$f" ~/.claude/hooks/; done
 	$(call link-skills,~/.claude/skills)
-	@# personal agents (each .md under claude/agents/ becomes ~/.claude/agents/<name>.md)
-	for f in ${DIR}/claude/agents/*.md; do ln -sf "$$f" ~/.claude/agents/; done
 	@# external skills + tools
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
