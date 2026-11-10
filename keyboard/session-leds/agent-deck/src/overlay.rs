@@ -3,8 +3,8 @@
 //! One transparent, undecorated, always-on-top window covering the
 //! screen, created at startup and shown or hidden as needed, so
 //! summoning it costs nothing. Toasts pass every click through and never
-//! take focus. The switcher (Ctrl-Alt-Space, which is also what the
-//! board's bottom-right key sends) does take key focus, like a launcher:
+//! take focus. The switcher (Ctrl-Alt-Super-Space, which is also what
+//! the board's bottom-right key sends) does take key focus, like a launcher:
 //! a session's own key label — or arrows and Enter — switches to it, and
 //! Escape or clicking away hands focus straight back.
 

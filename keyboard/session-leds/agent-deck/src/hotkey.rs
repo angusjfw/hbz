@@ -1,8 +1,10 @@
-//! Ctrl-Alt-Space (Control-Option-Space on macOS), for when the board
-//! isn't around: summons the HUD as a keyboard switcher. Registered with
-//! the OS as a single global chord (RegisterEventHotKey on macOS,
-//! RegisterHotKey on Windows, via the global-hotkey crate) — no event
-//! tap, no accessibility permission, and nothing but this one
+//! Ctrl-Alt-Super-Space (Control-Option-Command-Space on macOS,
+//! Ctrl-Alt-Win-Space on Windows), for when the board isn't around:
+//! summons the HUD as a keyboard switcher. Super is in the chord because
+//! macOS input-source switching can be bound to Control-Option-Space.
+//! Registered with the OS as a single global chord (RegisterEventHotKey
+//! on macOS, RegisterHotKey on Windows, via the global-hotkey crate) — no
+//! event tap, no accessibility permission, and nothing but this one
 //! combination is ever delivered to us.
 
 use global_hotkey::hotkey::{Code, HotKey, Modifiers};
@@ -17,7 +19,10 @@ use crate::overlay::{self, Shared};
 pub fn register(shared: &Shared) -> Option<GlobalHotKeyManager> {
     let manager = GlobalHotKeyManager::new()
         .and_then(|manager| {
-            manager.register(HotKey::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space))?;
+            manager.register(HotKey::new(
+                Some(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER),
+                Code::Space,
+            ))?;
             Ok(manager)
         })
         .map_err(|e| crate::log(&format!("no global hotkey ({e})")))
@@ -28,6 +33,6 @@ pub fn register(shared: &Shared) -> Option<GlobalHotKeyManager> {
             overlay::toggle_switcher(&shared);
         }
     }));
-    crate::log("Ctrl-Alt-Space registered");
+    crate::log("Ctrl-Alt-Super-Space registered");
     Some(manager)
 }

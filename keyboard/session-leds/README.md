@@ -2,10 +2,11 @@
 
 Claude Code session status on the Voyager — one key per session,
 Codex-Micro style, lit on the base layer so the board is a glance at
-what every session is doing. **Ctrl-Alt-Space** summons the same list on
-screen as a switcher: type a session's key to switch the tmux client to
-it. The board's bottom-right key sends that chord, so it's one switcher
-whether you reach for the keyboard or the shortcut. Spec and design
+what every session is doing. **Ctrl-Alt-Super-Space** (Ctrl-Opt-Cmd-Space
+on macOS) summons the same list on screen as a switcher: type a
+session's key to switch the tmux client to it. The board's bottom-right
+key sends that chord, so it's one switcher whether you reach for the
+keyboard or the shortcut. Spec and design
 decisions: `docs/specs/2026-08-02-agent-session-leds.md`, and
 `docs/specs/2026-08-04-direct-hid-renderer.md` for the daemon.
 
@@ -74,7 +75,7 @@ error).
 New machine (macOS): `make common agent-deck-daemon`, flash the
 firmware. Windows/WSL: `make agent-deck-windows`, flash the firmware,
 and a logon task starts the daemon. No accessibility or automation
-permissions needed — Ctrl-Alt-Space is one registered chord, not a tap,
+permissions needed — the switcher is one registered chord, not a tap,
 and nothing reads the OS keyboard.
 
 ##### 🚀 Run
@@ -101,9 +102,8 @@ The daemon needs the HID interface to itself, and Keymapp claims it
 exclusively — so quit Keymapp before starting agent-deck, and pause
 agent-deck before reaching for Keymapp.
 
-With the daemon down the bottom-right key types a Ctrl-Alt-Space into
-whatever has focus (a non-breaking space on macOS), easy to miss in a
-prompt or a commit message.
+With the daemon down the bottom-right key sends a stray
+Ctrl-Alt-Super-Space to whatever has focus.
 
 ##### 🖥️ Desktop
 The switcher lists every tracked session with its label, state and key,
