@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code statusLine.
-# Layout: cwd · branch · ctx% · model · effort · [style]
+# Layout: [name] · cwd · branch · ctx% · model · effort · [style]
 #
 # Effort comes from the statusLine JSON (.effort.level); fallbacks for
 # older versions: CLAUDE_CODE_EFFORT_LEVEL env → effortLevel in
@@ -19,11 +19,13 @@ pct=$(jqr '.context_window.used_percentage')
 pct=${pct%%.*}
 pct=${pct:-0}
 style=$(jqr '.output_style.name')
+name=$(jqr '.session_name')   # set by --name or /rename
 
 D=$'\033[2m'; B=$'\033[1m'
 C=$'\033[36m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; M=$'\033[35m'
 RST=$'\033[0m'
 DIR=$D      # cwd colour
+NAME=$B     # session name colour
 PREFIX=""   # drawn before the cwd
 # local theme overlay, if one is installed: may override any of the above
 [ -f "$HOME/.claude/statusline-colours.sh" ] && . "$HOME/.claude/statusline-colours.sh"
@@ -52,7 +54,9 @@ if [ -z "$effort" ]; then
   esac
 fi
 
-line="${PREFIX}${DIR}${disp_cwd}${RST}"
+line="${PREFIX}"
+[ -n "$name" ] && line+="${NAME}${name}${RST}${SEP}"
+line+="${DIR}${disp_cwd}${RST}"
 [ -n "$branch" ] && line+="${SEP}${G}${branch}${RST}"
 line+="${SEP}${ctx}"
 [ -n "$model" ]  && line+="${SEP}${B}${C}${model}${RST}"
