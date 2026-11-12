@@ -375,6 +375,23 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(self.cm.resume_line("pi", "u1", agent_args=["--session-control"]),
                          "pi --session-id u1 --session-control")
 
+    def test_memory_budget(self):
+        real = self.cm.free_memory_bytes
+        try:
+            self.cm.free_memory_bytes = lambda: 4 * 2**30
+            with self.assertRaises(self.cm.CmError):
+                self.cm.check_memory_budget(False)
+            self.cm.check_memory_budget(True)  # --force
+            os.environ["AMX_MIN_FREE_GB"] = "3"
+            self.cm.check_memory_budget(False)
+            self.cm.free_memory_bytes = lambda: None  # unknown platform: no check
+            os.environ["AMX_MIN_FREE_GB"] = "6"
+            self.cm.check_memory_budget(False)
+        finally:
+            self.cm.free_memory_bytes = real
+            os.environ.pop("AMX_MIN_FREE_GB", None)
+        self.assertGreater(real() or 1, 0)
+
     def test_mcp_agent_args(self):
         optional = Path(tempfile.mkdtemp())
         (optional / "chrome-devtools.json").write_text('{"mcpServers": {}}')

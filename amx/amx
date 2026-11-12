@@ -1441,6 +1441,45 @@ def report_start(pane_id, timeout):
         sys.exit(3)
 
 
+def free_memory_bytes():
+    """Memory the system could hand out now, or None where amx can't tell.
+
+    macOS: kern.memorystatus_level, the free percentage memory_pressure reports,
+    times physical memory. Linux: MemAvailable.
+    """
+    try:
+        if sys.platform == "darwin":
+            level, total = (int(subprocess.run(["sysctl", "-n", key], capture_output=True, text=True,
+                                               check=True).stdout) for key in ("kern.memorystatus_level", "hw.memsize"))
+            return total * level // 100
+        meminfo = Path("/proc/meminfo")
+        if meminfo.exists():
+            for line in meminfo.read_text().splitlines():
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        pass
+    return None
+
+
+def check_memory_budget(force):
+    """Refuse a new session or pane when free memory is under AMX_MIN_FREE_GB (default 6).
+
+    The headroom is for what sessions run, such as a test suite, not the
+    sessions themselves, which are small now that MCP servers are shared.
+    """
+    if force:
+        return
+    try:
+        minimum = float(os.environ.get("AMX_MIN_FREE_GB", "6"))
+    except ValueError:
+        die("AMX_MIN_FREE_GB must be a number of GB")
+    free = free_memory_bytes()
+    if free is not None and free < minimum * 2**30:
+        die(f"only {free / 2**30:.1f} GB of memory free, under the {minimum:g} GB budget "
+            "(AMX_MIN_FREE_GB): close or shut down something first, or pass --force")
+
+
 def mcp_agent_args(harness, names):
     """Claude arguments that load the optional MCP servers in `names`.
 
@@ -1484,6 +1523,7 @@ def cmd_spawn(a):
         a.harness = "command"
     if a.harness == "command" and (a.model or a.effort or a.brief_file or a.agent_arg or a.mcp):
         die("command sessions use --command, not model, effort, brief, agent arguments or MCP servers")
+    check_memory_budget(a.force)
     if a.into:
         return spawn_into(a)
     if not (a.id and a.cwd and a.harness):
@@ -2584,6 +2624,8 @@ def main(argv=None):
     p.add_argument("--window", metavar="NAME", help="--into: new window instead of a split")
     p.add_argument("--split", metavar="PANE", help="--into: pane to split (default: active pane)")
     p.add_argument("--timeout", type=float, default=30)
+    p.add_argument("--force", action="store_true",
+                   help="spawn even with less free memory than AMX_MIN_FREE_GB (default 6)")
     p.set_defaults(fn=cmd_spawn)
 
     p = sub.add_parser("identify", help="record native IDs, or explicitly bind a full session ID to a pane")

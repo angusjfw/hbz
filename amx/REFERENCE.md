@@ -140,6 +140,9 @@ its notes.
   panes are not checked.
   A manager targeting another session is not subject to that caller guard.
 - The manager owns the header, spawn and cold resume.
+- `spawn`, including `--into` panes, refuses when free memory is under
+  `AMX_MIN_FREE_GB` (default 6). That's the free percentage `memory_pressure`
+  reports on macOS, or `MemAvailable` on Linux. `--force` skips the check.
 - Coordination skills add and drop `worker:` lines on the entry of the
   session they run in (`amx spawn --into`, `amx reg worker drop`).
 
