@@ -172,7 +172,7 @@ claude: ## Symlink Claude Code config (instructions, settings, hooks, skills)
 	curl -fsSL https://raw.githubusercontent.com/raine/git-surgeon/main/scripts/install.sh | bash
 	git-surgeon install-skill --claude
 
-browser: ## Register browser MCPs for Claude Code + pi (agents get their own Chrome window); on macOS, start the stray agent-browser reaper
+browser: ## Browser MCPs: shared Playwright server under launchd, chrome-devtools opt-in for Claude (amx spawn --mcp); on macOS, start the stray agent-browser reaper
 	${DIR}/browser/install-mcp.py
 	mkdir -p ~/.local/bin ~/.local/state
 	ln -sf ${DIR}/browser/reap-agent-browsers ~/.local/bin/reap-agent-browsers

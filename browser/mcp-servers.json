@@ -4,12 +4,15 @@
     "args": ["--autoConnect"]
   },
   "playwright": {
+    "port": 8768,
     "command": "npx",
     "args": [
       "-y", "@playwright/mcp@0.0.83",
       "--headless", "--isolated", "--browser", "chromium",
-      "--idle-timeout", "600",
-      "--output-dir", "__HOME__/.cache/playwright-mcp"
+      "--idle-timeout", "600000",
+      "--output-dir", "__HOME__/.cache/playwright-mcp",
+      "--host", "127.0.0.1", "--port", "8768",
+      "--allowed-hosts", "127.0.0.1:8768,localhost:8768"
     ]
   }
 }
