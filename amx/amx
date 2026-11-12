@@ -36,6 +36,8 @@ LAST_WRITER = STATE / ".last-writer"
 AGENT_STATUS = Path(os.environ.get("AMX_AGENT_STATUS_DIR", Path.home() / ".local/state/agent-status"))
 # pi's session-control extension (agent-stuff control.ts): one socket per session
 PI_CONTROL = Path(os.environ.get("AMX_PI_CONTROL_DIR", Path.home() / ".pi/session-control"))
+# Claude MCP configs for servers that aren't loaded by default, one <name>.json each
+OPTIONAL_MCP = Path(os.environ.get("AMX_OPTIONAL_MCP_DIR", Path.home() / ".claude/mcp"))
 # rebuild reruns a shell pane's command only when it matches one of these regexes
 AUTORUN = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "amx/autorun"
 AUTORUN_DEFAULT = (r"^(n?vim?|view|less|more|man|tail|top|htop)( |$)",)
@@ -1439,6 +1441,26 @@ def report_start(pane_id, timeout):
         sys.exit(3)
 
 
+def mcp_agent_args(harness, names):
+    """Claude arguments that load the optional MCP servers in `names`.
+
+    Uses --mcp-config=FILE: the option takes several values, so a separate
+    value would also take the brief that follows the agent arguments.
+    """
+    if not names:
+        return []
+    if harness != "claude":
+        die("--mcp is for Claude sessions; pi starts its optional MCP servers on first use")
+    args = []
+    for name in names:
+        config = OPTIONAL_MCP / f"{name}.json"
+        if not config.is_file():
+            have = ", ".join(sorted(p.stem for p in OPTIONAL_MCP.glob("*.json"))) or "none"
+            die(f"no optional MCP config {config} (available: {have})")
+        args.append(f"--mcp-config={config}")
+    return args
+
+
 def write_brief(name, text_or_file):
     if not text_or_file:
         return None
@@ -1460,12 +1482,13 @@ def cmd_spawn(a):
         if a.harness and a.harness != "command":
             die("--command cannot be combined with an agent harness")
         a.harness = "command"
-    if a.harness == "command" and (a.model or a.effort or a.brief_file or a.agent_arg):
-        die("command sessions use --command, not model, effort, brief or agent arguments")
+    if a.harness == "command" and (a.model or a.effort or a.brief_file or a.agent_arg or a.mcp):
+        die("command sessions use --command, not model, effort, brief, agent arguments or MCP servers")
     if a.into:
         return spawn_into(a)
     if not (a.id and a.cwd and a.harness):
         die("spawn needs --harness, --id and --cwd (or --into)")
+    a.agent_arg = mcp_agent_args(a.harness, a.mcp) + a.agent_arg
     cwd = str(Path(a.cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         die(f"cwd {cwd} doesn't exist (create the worktree first)")
@@ -1516,6 +1539,7 @@ def spawn_into(a):
     harness = a.harness or harness_of(entry)
     if harness == "command" and not a.command:
         die("command panes need --command")
+    a.agent_arg = mcp_agent_args(harness, a.mcp) + a.agent_arg
     if not a.label or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", a.label):
         die("--into needs --label (letters, digits, . _ -)")
     cwd = str(Path(a.cwd or entry.get("cwd") or ".").expanduser().resolve())
@@ -2549,6 +2573,8 @@ def main(argv=None):
     p.add_argument("--effort", help="Claude --effort, pi --thinking, or Codex model_reasoning_effort")
     p.add_argument("--agent-arg", action="append", default=[], metavar="ARG",
                    help="extra agent argument, repeatable; e.g. --agent-arg=--session-control (pi extension required)")
+    p.add_argument("--mcp", action="append", default=[], metavar="NAME",
+                   help="Claude: also load an MCP server that isn't on by default, from ~/.claude/mcp/NAME.json; repeatable")
     p.add_argument("--brief-file")
     p.add_argument("--ticket")
     p.add_argument("--worktree")

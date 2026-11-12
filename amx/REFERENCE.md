@@ -64,7 +64,10 @@ Entry fields (all optional; unknown fields and prose are kept):
 - `agent_args`: JSON array of explicit extra CLI arguments for the primary
   agent, passed with repeatable `spawn --agent-arg=ARG`. For example,
   `--agent-arg=--session-control` opts into pi's separately installed
-  messaging extension; it is not part of the default launch. Commands and
+  messaging extension; it is not part of the default launch. `spawn --mcp NAME`
+  (Claude, repeatable) adds `--mcp-config=~/.claude/mcp/NAME.json` here, for an
+  MCP server that isn't loaded by default, such as chrome-devtools. Like the
+  rest of `agent_args`, it is reapplied on resume. Commands and
   arguments are stored as plaintext; do not put credentials in them.
 - `started`, `last_touched`, `shutdown`, `paused`: timestamps. Always set
   from the clock (`k=now` / `k=today`), never typed.

@@ -375,6 +375,23 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(self.cm.resume_line("pi", "u1", agent_args=["--session-control"]),
                          "pi --session-id u1 --session-control")
 
+    def test_mcp_agent_args(self):
+        optional = Path(tempfile.mkdtemp())
+        (optional / "chrome-devtools.json").write_text('{"mcpServers": {}}')
+        self.cm.OPTIONAL_MCP = optional
+        self.assertEqual(self.cm.mcp_agent_args("claude", []), [])
+        self.assertEqual(self.cm.mcp_agent_args("pi", []), [])
+        self.assertEqual(self.cm.mcp_agent_args("claude", ["chrome-devtools"]),
+                         [f"--mcp-config={optional / 'chrome-devtools.json'}"])
+        with self.assertRaises(self.cm.CmError):
+            self.cm.mcp_agent_args("claude", ["missing"])
+        with self.assertRaises(self.cm.CmError):
+            self.cm.mcp_agent_args("pi", ["chrome-devtools"])
+        # the brief comes after the agent arguments and must stay the prompt
+        line = self.cm.launch_line("claude", "u1", brief="/b.md",
+                                   agent_args=self.cm.mcp_agent_args("claude", ["chrome-devtools"]))
+        self.assertIn(f"--mcp-config={optional / 'chrome-devtools.json'} \"$(cat /b.md)\"", line)
+
 
 if __name__ == "__main__":
     unittest.main()
