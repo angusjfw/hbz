@@ -12,6 +12,7 @@
 - Never commit secrets, tokens, API keys, or personal paths that leak info.
 - Don't print commands for the user to run. Run them directly, or in a tmux pane if interaction is needed. If unsure whether to proceed, ask first.
 - Work autonomously until user input is genuinely needed. Check settings to know whether an action requires approval (don't infer). At those checkpoints, offer interactive options (open diff in a pane, run in a pane, open in nvim).
+- The chrome-devtools MCP (driving my own Chrome) isn't loaded by default. When a task needs it, say so, then spawn a worker that has it (`amx spawn --mcp chrome-devtools`), or I'll start the session with it.
 - Never send messages as the user without explicit approval (review comments, Slack, issues, email etc). Present comments and wait for confirmation.
 - Don't treat my edits or pushback as final. If a revision could still be improved, say so.
 
