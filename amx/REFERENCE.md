@@ -364,6 +364,11 @@ shutdown; the launch ID alone cannot follow a new conversation. Use
 correct a pane's identity, rather than merely adding a second worker line.
 When installed, session-start hooks update each pane's ID, harness and
 role on switches without changing a secondary's parent identity.
+A pane amx didn't launch (a conversation resumed by hand in a new pane)
+takes its role from its session ID: the entry's `resumed_session_id`
+makes it the primary, a recorded worker ID makes it that worker, and
+otherwise a retained exited pane that ran the same ID passes on its role
+and settings. Only then does pane position decide.
 Mixed membership is valid. `reconcile` reports `harness-conflict` only
 when pane metadata disagrees with an observed agent process; inspect and
 explicitly correct the pane identity before saving it.

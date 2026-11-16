@@ -2292,12 +2292,27 @@ def handle_hook(harness, ev):
     primary = primary_pane(row, session_rows)
     reason = ev.get("reason") or ""
     changed_harness = bool(row.get("managed_harness")) and row["managed_harness"] != harness
+    # A pane amx didn't launch has no role of its own. It may be a conversation
+    # resumed from an exited pane, so the session ID decides before pane position.
+    fresh = event == "start" and row.get("managed_primary") not in ("0", "1")
+    prior = next((r for r in session_rows if fresh and r["pane_id"] != pane and r.get("dead")
+                  and r.get("managed_id") == sid and (r.get("managed_harness") or harness) == harness), None)
+    if prior:
+        primary = primary_pane(prior, session_rows)
+        row = dict(row, **{k: prior.get(k) or "" for k in ("managed_label", "managed_model",
+                                                           "managed_effort", "agent_args")})
 
     def fn(reg):
+        nonlocal primary
         entries = reg.by_tmux_session(session)
         if len(entries) > 1:
             return None
         b = entries[0] if entries else None
+        if fresh and b:
+            if (harness, sid) == (harness_of(b), b.get("resumed_session_id")):
+                primary = True
+            elif any(worker_key(w) == (harness, sid) for w in worker_records(b)):
+                primary = False
         if event == "start":
             if b is None:
                 if not primary or reg.entry(session):
@@ -2344,6 +2359,12 @@ def handle_hook(harness, ev):
             # Keep each pane's identity and role current, regardless of the entry default.
             for key, value in (("session_id", sid), ("harness", harness), ("primary", "1" if primary else "0")):
                 tmux("set-option", "-p", "-t", pane, f"@amx_{key}", value, check=False)
+            if fresh:
+                saved = e.as_dict() if primary else next(
+                    (w for w in worker_records(e) if worker_key(w) == (harness, sid)), {})
+                for key in ("label", "model", "effort", "agent_args"):
+                    if saved.get(key) and not (primary and key == "label"):
+                        tmux("set-option", "-p", "-t", pane, f"@amx_{key}", saved[key], check=False)
     append_log(rec)
 
 

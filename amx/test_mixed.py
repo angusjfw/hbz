@@ -129,6 +129,48 @@ class MixedIdentityTests(unittest.TestCase):
         self.cm.main(["reg", "worker", "drop", "work", SID, "--harness", "pi"])
         self.assertEqual([w["harness"] for w in self.workers()], ["claude", "codex"])
 
+    def unmanaged(self, pane):
+        row = self.row(pane, "", "")
+        row.update(managed_primary="", managed_model="", managed_effort="", agent_args="", pane=len(self.rows))
+        self.rows.append(row)
+        return row
+
+    def test_primary_resumed_in_a_new_pane_stays_primary(self):
+        # the exited primary pane is retained, still marked primary
+        self.rows[0].update(dead=True, managed_effort="high")
+        self.cm.main(["reg", "set", "work", "effort=high"])
+        new = self.unmanaged("%3")
+        self.fire("%3", "claude", "SessionStart", "lead", source="resume")
+        self.assertEqual(new["managed_primary"], "1")
+        self.assertEqual(new["managed_effort"], "high")
+        self.assertEqual(self.workers(), [])
+        self.rows.remove(self.rows[0])
+        self.assertTrue(self.cm.resolve_target("%3")["primary"])
+
+    def test_worker_resumed_in_a_new_pane_keeps_its_settings(self):
+        self.rows[1].update(managed_harness="claude", managed_model="sonnet", managed_effort="low")
+        self.cm.main(["reg", "worker", "add", "work", SID, "harness=claude", "label=review",
+                      "model=sonnet", "effort=low", "agent_args=[]"])
+        self.fire("%2", "claude", "SessionEnd", SID, reason="prompt_input_exit")
+        self.assertEqual(self.workers(), [])  # exit drops the record; the dead pane keeps its options
+        self.rows[1]["dead"] = True
+        new = self.unmanaged("%3")
+        self.fire("%3", "claude", "SessionStart", SID, source="resume")
+        self.assertEqual(new["managed_primary"], "0")
+        self.assertEqual((new["managed_label"], new["managed_model"], new["managed_effort"]),
+                         ("review", "sonnet", "low"))
+        self.assertEqual([(w["session_id"], w.get("label"), w.get("model")) for w in self.workers()],
+                         [(SID, "review", "sonnet")])
+
+    def test_recorded_worker_in_a_new_pane_is_not_taken_for_primary(self):
+        self.cm.main(["reg", "worker", "add", "work", SID, "harness=claude", "label=review", "effort=low"])
+        self.rows[:] = []  # every old pane is gone, so position alone would say primary
+        new = self.unmanaged("%3")
+        new["pane"] = 0
+        self.fire("%3", "claude", "SessionStart", SID, source="resume")
+        self.assertEqual((new["managed_primary"], new["managed_label"]), ("0", "review"))
+        self.assertEqual(self.cm.Registry.load().entry("work").get("resumed_session_id"), "lead")
+
     def test_primary_harness_change_keeps_legacy_worker_namespace(self):
         self.cm.REGISTRY.write_text(self.cm.REGISTRY.read_text() + "worker: old cwd=/work\n")
         self.fire("%1", "pi", "SessionStart", "new-lead")
