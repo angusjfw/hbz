@@ -142,3 +142,7 @@ alias ag="ag --hidden"
 
 # pi sessions open a control socket, so other pi sessions can message them
 alias pi="pi --session-control"
+
+# amx: when an agent exits, its pane becomes this shell with the resume command typed
+[[ -n $AMX_RESUME ]] && print -z -- "$AMX_RESUME"
+unset AMX_RESUME
