@@ -171,6 +171,18 @@ class MixedIdentityTests(unittest.TestCase):
         self.assertEqual((new["managed_primary"], new["managed_label"]), ("0", "review"))
         self.assertEqual(self.cm.Registry.load().entry("work").get("resumed_session_id"), "lead")
 
+    def test_resume_line_is_built_from_the_panes_current_identity(self):
+        self.rows[0]["managed_effort"] = "high"
+        lines = []
+        for target in ("%1", "work-review"):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.cm.main(["resume-line", target])
+            lines.append(out.getvalue().strip())
+        self.assertEqual(lines, ["claude --effort high --resume lead --name work", f"pi --session-id {SID}"])
+        self.rows[1]["managed_harness"] = "command"
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.cm.main(["resume-line", "%2"])
+
     def test_primary_harness_change_keeps_legacy_worker_namespace(self):
         self.cm.REGISTRY.write_text(self.cm.REGISTRY.read_text() + "worker: old cwd=/work\n")
         self.fire("%1", "pi", "SessionStart", "new-lead")

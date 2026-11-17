@@ -999,6 +999,15 @@ def cmd_resolve(a):
     print_identity(resolve_target(a.target), a.json)
 
 
+def cmd_resume_line(a):
+    """The command that resumes a pane's conversation in place, from its current identity."""
+    info = resolve_target(a.pane or whoami_pane())
+    if info["harness"] not in AGENTS or not info["session_id"]:
+        die(f"{info['pane_id']} has no conversation to resume")
+    name = info["name"] if info["entry"] and info["name"] != info["pane_id"] else None
+    print(resume_line(info["harness"], info["session_id"], info["effort"], name, info["agent_args"]))
+
+
 def cmd_whoami(a):
     info = resolve_target(whoami_pane())
     info.update(pane=info["pane_id"], session=info["tmux_session"])
@@ -1344,20 +1353,44 @@ def mint_id():
         return str(uuid.uuid4())
 
 
+def user_shell():
+    return tmux("show-options", "-gv", "default-shell").stdout.strip() or os.environ.get("SHELL", "/bin/sh")
+
+
+# Runs an agent under a small sh that outlives it. An exit during startup observation
+# leaves the pane dead with its status; after that (@amx_started), the pane becomes
+# the user's login shell with the resume command offered. The launch line comes in
+# through the environment, so this process's argv never looks like an agent.
+AGENT_WRAPPER = """l=$AMX_LAUNCH; unset AMX_LAUNCH; eval "$l"; s=$?
+[ "$({tmux} show-options -pqv -t "$TMUX_PANE" @amx_started 2>/dev/null)" = 1 ] || exit "$s"
+[ "$s" -eq 0 ] || echo "agent exited with status $s"
+AMX_RESUME=$({amx} resume-line "$TMUX_PANE" 2>/dev/null) && echo "resume: $AMX_RESUME"
+export AMX_RESUME
+exec {shell} -l"""
+
+
 def start_pane(pane_id, cwd, line, harness, sid, agent_args=(), command="", label="",
                model=None, effort=None, primary=False):
     """tmux owns the command lifetime; a failed launch stays visible, with its status."""
     tmux("set-option", "-p", "-t", pane_id, "remain-on-exit", "on")
     for key, value in (("harness", harness), ("session_id", sid), ("agent_args", json.dumps(list(agent_args))),
                        ("command", command), ("label", label), ("launch_cwd", cwd),
-                       ("model", model or ""), ("effort", effort or ""), ("primary", "1" if primary else "0")):
+                       ("model", model or ""), ("effort", effort or ""), ("primary", "1" if primary else "0"),
+                       ("started", "")):
         tmux("set-option", "-p", "-t", pane_id, f"@amx_{key}", value)
     env = ["-e", f"AMX_STATE_DIR={STATE}", "-e", f"PATH={os.environ.get('PATH', os.defpath)}"]
     for key in ("AMX_AGENT_STATUS_DIR", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "CODEX_HOME", "CODEX_SQLITE_HOME"):
         if key in os.environ:
             env += ["-e", f"{key}={os.environ[key]}"]
+    run = f"exec {line}"
+    if harness in AGENTS:
+        script = AGENT_WRAPPER.format(tmux=shlex.quote(shutil.which("tmux") or "tmux"),
+                                      amx=shlex.quote(str(Path(__file__).resolve())),
+                                      shell=shlex.quote(user_shell()))
+        env += ["-e", f"AMX_LAUNCH={line}"]
+        run = f"exec /bin/sh -c {shlex.quote(script)}"
     for attempt in range(5):
-        result = tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, *env, f"exec {line}", check=False)
+        result = tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, *env, run, check=False)
         if result.returncode == 0:
             return
         # Retry only tmux's pre-exec tty allocation failure, never agent failures.
@@ -1397,8 +1430,7 @@ def restore_shell(pane_id, cwd, command):
         tmux("set-option", "-p", "-t", pane_id, f"@amx_{key}", "")
     clear_pane_settings(pane_id)
     # without a command, respawn-pane would repeat the one that just failed
-    shell = tmux("show-options", "-gv", "default-shell").stdout.strip() or os.environ.get("SHELL", "/bin/sh")
-    tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, f"exec {shlex.quote(shell)} -l")
+    tmux("respawn-pane", "-k", "-t", pane_id, "-c", cwd, f"exec {shlex.quote(user_shell())} -l")
     # only once it's live: tmux closes a dead pane as soon as remain-on-exit goes
     tmux("set-option", "-pu", "-t", pane_id, "remain-on-exit", check=False)
     type_at_prompt(pane_id, command, False)
@@ -1425,6 +1457,8 @@ def wait_for_start(pane_id, timeout, settle=2.0):
             if pid != last_pid:
                 running_since, last_pid = now, pid
             if now - running_since >= settle:
+                # from here on an exit falls back to a shell (AGENT_WRAPPER)
+                tmux("set-option", "-p", "-t", pane_id, "@amx_started", "1", check=False)
                 return "running"
         else:
             running_since, last_pid = None, None
@@ -2600,6 +2634,10 @@ def main(argv=None):
     p = sub.add_parser("whoami", help="own pane, tmux address and registry entry")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_whoami)
+
+    p = sub.add_parser("resume-line", help="print the command that resumes a pane's conversation in place")
+    p.add_argument("pane", nargs="?", help="pane ID, amx name; default: own pane")
+    p.set_defaults(fn=cmd_resume_line)
 
     p = sub.add_parser("resolve", help="resolve an amx name or explicit pane ID to its live identity")
     p.add_argument("target")

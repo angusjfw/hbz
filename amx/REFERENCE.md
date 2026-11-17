@@ -344,11 +344,21 @@ stored transcripts are separate capabilities.
 
 ## Startup observation
 
-`amx spawn` runs the command directly under tmux with `remain-on-exit`.
+`amx spawn` runs the command under tmux with `remain-on-exit`. A generic
+command runs directly; an agent runs under a small `sh` that outlives it.
 It observes the same live pane process for two seconds before reporting
-`startup=running (readiness not verified)`. This is not proof that login,
-model loading or agent initialization has finished. Failures after that
-window remain possible; `amx reconcile` reports retained exited panes.
+`startup=running (readiness not verified)`, then marks the pane
+`@amx_started`. This is not proof that login, model loading or agent
+initialization has finished. An exit before the mark leaves the pane dead
+with its status; `amx reconcile` reports retained exited panes.
+
+An agent that exits after the mark (`/exit`, a crash) turns its pane into
+the user's login shell, printing a non-zero status and
+`resume: <command>`. The pane keeps its id and `@amx_*` options, so
+resuming there keeps its role, label and settings. The wrapper exports
+the command as `AMX_RESUME`; a shell can type it at the prompt (this
+repo's zshrc does, with `print -z`). `amx resume-line [pane]` prints it
+from the pane's current identity.
 
 An early exit (including status 0), missing pane or observation timeout
 returns exit 3. The registry entry and any surviving pane are retained for

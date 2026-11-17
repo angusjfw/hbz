@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -189,6 +190,23 @@ class TmuxStartupTests(IsolatedTmuxCase):
         with contextlib.redirect_stdout(io.StringIO()) as output:
             self.cm.main(["reconcile"])
         self.assertIn("exited\twork", output.getvalue())
+
+    def test_exit_after_startup_falls_back_to_a_shell_with_resume(self):
+        (self.bin / "tmux").symlink_to(self.tmux_bin)  # the wrapper reads @amx_started
+        self.agent.write_text("#!/bin/sh\nsleep 3\nexit 4\n")
+        self.spawn()
+        pane = self.cm.inspect_panes("work")[0]
+        sid = pane["session_id"]
+        for _ in range(100):
+            output = self.tmux("capture-pane", "-p", "-J", "-t", pane["pane_id"]).stdout
+            if "resume:" in output:
+                break
+            time.sleep(0.1)
+        self.assertIn("agent exited with status 4", output)
+        self.assertIn(f"resume: pi --session-id {sid}", output)
+        pane = self.cm.inspect_panes("work")[0]
+        self.assertFalse(pane["dead"])
+        self.assertEqual((pane["primary"], pane["session_id"]), (True, sid))
 
     def test_second_pane_failure(self):
         self.spawn()
