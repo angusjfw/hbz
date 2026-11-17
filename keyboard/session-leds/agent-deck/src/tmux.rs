@@ -3,9 +3,14 @@
 
 use std::collections::{HashMap, HashSet};
 
+pub struct Pane {
+    pub pid: u32,
+    pub command: String,
+}
+
 pub enum Panes {
     /// What's running in the session's panes.
-    Commands(Vec<String>),
+    Commands(Vec<Pane>),
     /// tmux has no such session (or no server at all).
     Missing,
     /// tmux itself wouldn't run.
@@ -20,19 +25,51 @@ pub fn pane_commands(session: &str) -> Panes {
             "-t",
             &format!("={session}"),
             "-F",
-            "#{pane_current_command}",
+            "#{pane_pid} #{pane_current_command}",
         ])
         .output();
     match out {
         Ok(out) if out.status.success() => Panes::Commands(
             String::from_utf8_lossy(&out.stdout)
-                .split_whitespace()
-                .map(str::to_string)
+                .lines()
+                .filter_map(|line| {
+                    let (pid, command) = line.split_once(' ')?;
+                    Some(Pane {
+                        pid: pid.parse().ok()?,
+                        command: command.trim().to_string(),
+                    })
+                })
                 .collect(),
         ),
         Ok(_) => Panes::Missing,
         Err(_) => Panes::Unavailable,
     }
+}
+
+/// Whether an agent runs as a direct child of one of these panes. A
+/// wrapper shell keeps the pane's foreground process group, so tmux
+/// names the shell (amx runs agents under `/bin/sh`, which is bash on
+/// macOS) and the agent only shows up as its child.
+pub fn agent_child(panes: &[Pane]) -> bool {
+    let Ok(out) = crate::wsl::command("ps")
+        .args(["-A", "-o", "ppid=,comm="])
+        .output()
+    else {
+        return false;
+    };
+    let pids: HashSet<u32> = panes.iter().map(|p| p.pid).collect();
+    child_commands(&String::from_utf8_lossy(&out.stdout), &pids)
+        .any(looks_like_claude)
+}
+
+/// Commands of the children of `pids` in a `ps -o ppid=,comm=` listing,
+/// as bare names: macOS gives `comm` as a path when the process ran by one.
+fn child_commands<'a>(listing: &'a str, pids: &'a HashSet<u32>) -> impl Iterator<Item = &'a str> {
+    listing.lines().filter_map(move |line| {
+        let (ppid, comm) = line.trim().split_once(char::is_whitespace)?;
+        pids.contains(&ppid.parse().ok()?)
+            .then(|| comm.trim().rsplit('/').next().unwrap_or(""))
+    })
 }
 
 /// Session name to creation order. tmux session ids increment, so this is
@@ -122,7 +159,18 @@ pub fn looks_like_claude(cmd: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::looks_like_claude;
+    use super::{child_commands, looks_like_claude};
+    use std::collections::HashSet;
+
+    #[test]
+    fn agents_are_found_under_a_wrapper_shell() {
+        let listing =
+            "    1 /sbin/launchd\n62349 claude\n62349 /opt/homebrew/bin/node\n  999 2.1.220\n";
+        let pids = HashSet::from([62349]);
+        let found: Vec<&str> = child_commands(listing, &pids).collect();
+        assert_eq!(found, ["claude", "node"]);
+        assert_eq!(child_commands(listing, &HashSet::from([7])).count(), 0);
+    }
 
     #[test]
     fn claude_panes_are_recognised_by_command() {

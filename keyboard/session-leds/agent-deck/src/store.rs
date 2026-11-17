@@ -225,9 +225,11 @@ impl Health {
 fn probe(session: &str) -> Alive {
     match tmux::pane_commands(session) {
         Panes::Missing => Alive::No,
-        Panes::Commands(cmds) if cmds.iter().any(|c| tmux::looks_like_claude(c)) => {
+        Panes::Commands(panes) if panes.iter().any(|p| tmux::looks_like_claude(&p.command)) => {
             Alive::WithClaude
         }
+        // only when no pane names an agent: it costs a ps listing
+        Panes::Commands(panes) if tmux::agent_child(&panes) => Alive::WithClaude,
         Panes::Commands(_) => Alive::NoClaude,
         // tmux itself wouldn't run: that's no evidence a session died, and
         // GC deletes state, so assume the best
