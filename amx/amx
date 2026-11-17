@@ -1500,6 +1500,38 @@ def mcp_agent_args(harness, names):
     return args
 
 
+def model_guide(harness):
+    if harness == "claude":
+        return ["--model: haiku (mechanical, mostly running a skill), sonnet (clear scope),",
+                "  opus (engineering, design, debugging, non-trivial review; the pick when unsure)",
+                "--effort: low (small), medium (moderate), high, xhigh or max (large, ambiguous, hard)",
+                "thin signal: opus, medium"]
+    if harness == "pi":
+        s = pi_settings()
+        return [f"--model: default is {s.get('defaultModel') or 'unset'}; enabled: "
+                + (", ".join(s.get("enabledModels") or []) or "see pi --list-models"),
+                "  most work: the default; design, debugging, review: the strongest enabled;",
+                "  mechanical: a small or local model",
+                "--effort (thinking level): off, minimal, low, medium, high, xhigh, max, sized to the work;"
+                f" default is {s.get('defaultThinkingLevel') or 'unset'}"]
+    return ["--model: Codex's own (default) unless the user chose one",
+            "--effort: a model_reasoning_effort level the model supports, sized to the work"]
+
+
+def choose_model(harness, a):
+    """An agent spawn must choose model and effort; `default` takes the harness's own."""
+    if harness not in AGENTS:
+        return
+    missing = [f"--{key}" for key in ("model", "effort") if not getattr(a, key)]
+    if missing:
+        die("\n".join([f"choose {' and '.join(missing)} for this {harness} agent, from the task's size and kind,",
+                       "and say which in the spawn report; `default` uses the harness's configured default.",
+                       *model_guide(harness)]))
+    for key in ("model", "effort"):
+        if getattr(a, key) == "default":
+            setattr(a, key, None)
+
+
 def write_brief(name, text_or_file):
     if not text_or_file:
         return None
@@ -1523,11 +1555,12 @@ def cmd_spawn(a):
         a.harness = "command"
     if a.harness == "command" and (a.model or a.effort or a.brief_file or a.agent_arg or a.mcp):
         die("command sessions use --command, not model, effort, brief, agent arguments or MCP servers")
-    check_memory_budget(a.force)
     if a.into:
         return spawn_into(a)
     if not (a.id and a.cwd and a.harness):
         die("spawn needs --harness, --id and --cwd (or --into)")
+    choose_model(a.harness, a)
+    check_memory_budget(a.force)
     a.agent_arg = mcp_agent_args(a.harness, a.mcp) + a.agent_arg
     cwd = str(Path(a.cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
@@ -1579,6 +1612,8 @@ def spawn_into(a):
     harness = a.harness or harness_of(entry)
     if harness == "command" and not a.command:
         die("command panes need --command")
+    choose_model(harness, a)
+    check_memory_budget(a.force)
     a.agent_arg = mcp_agent_args(harness, a.mcp) + a.agent_arg
     if not a.label or not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", a.label):
         die("--into needs --label (letters, digits, . _ -)")
@@ -2630,8 +2665,9 @@ def main(argv=None):
     p.add_argument("--command", help="generic shell command; restarting it is not conversation resume")
     p.add_argument("--id")
     p.add_argument("--cwd")
-    p.add_argument("--model")
-    p.add_argument("--effort", help="Claude --effort, pi --thinking, or Codex model_reasoning_effort")
+    p.add_argument("--model", help="required for agents; `default` uses the harness's configured default")
+    p.add_argument("--effort", help="required for agents; Claude --effort, pi --thinking, or Codex "
+                                    "model_reasoning_effort; `default` as for --model")
     p.add_argument("--agent-arg", action="append", default=[], metavar="ARG",
                    help="extra agent argument, repeatable; e.g. --agent-arg=--session-control (pi extension required)")
     p.add_argument("--mcp", action="append", default=[], metavar="NAME",

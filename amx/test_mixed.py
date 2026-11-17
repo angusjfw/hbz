@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from test_amx import load_cm
+from test_amx import chosen, load_cm
 from test_startup import IsolatedTmuxCase
 
 SID = "11111111-2222-3333-4444-555555555555"
@@ -384,11 +384,11 @@ class MixedTmuxTests(IsolatedTmuxCase):
     def test_all_agent_pairs_and_commands_stay_in_requested_container(self):
         for lead in self.cm.AGENTS:
             with self.subTest(lead=lead):
-                self.cm.main(["spawn", "--harness", lead, "--id", lead, "--cwd", str(self.root)])
+                self.cm.main(chosen(["spawn", "--harness", lead, "--id", lead, "--cwd", str(self.root)]))
                 for worker in self.cm.AGENTS:
-                    self.cm.main(["spawn", "--into", lead, "--harness", worker, "--label", worker,
-                                  "--window", worker])
-                self.cm.main(["spawn", "--into", lead, "--label", "server", "--command", "sleep 120", "--window", "server"])
+                    self.cm.main(chosen(["spawn", "--into", lead, "--harness", worker, "--label", worker,
+                                  "--window", worker]))
+                self.cm.main(chosen(["spawn", "--into", lead, "--label", "server", "--command", "sleep 120", "--window", "server"]))
                 for _ in range(30):
                     panes = self.cm.inspect_panes(lead)
                     if all(p["session_id"] for p in panes if p["kind"] in self.cm.AGENTS):
@@ -407,10 +407,10 @@ class MixedTmuxTests(IsolatedTmuxCase):
 
     def test_mixed_snapshot_rebuild_keeps_ids_settings_roles_and_commands(self):
         self.spawn("--model", "lead-model")
-        self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review",
-                      "--effort", "high", "--model", "review-model", "--agent-arg=--safe-flag"])
-        self.cm.main(["spawn", "--into", "work", "--harness", "codex", "--label", "code", "--window", "code", "--effort", "low"])
-        self.cm.main(["spawn", "--into", "work", "--label", "server", "--window", "server", "--command", "sleep 120"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "claude", "--label", "review",
+                      "--effort", "high", "--model", "review-model", "--agent-arg=--safe-flag"]))
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "codex", "--label", "code", "--window", "code", "--effort", "low"]))
+        self.cm.main(chosen(["spawn", "--into", "work", "--label", "server", "--window", "server", "--command", "sleep 120"]))
         before = self.cm.inspect_panes("work")
         self.save_pi_transcripts("work")
         self.cm.main(["shutdown", "work"])
@@ -434,7 +434,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
 
     def test_busy_pane_shows_in_ls_and_blocks_shutdown_and_wrap(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "claude", "--label", "review"]))
         lead, review = (p["pane_id"] for p in self.cm.inspect_panes("work"))
         self.cm.AGENT_STATUS.mkdir(parents=True, exist_ok=True)
         # the session-level state outranks working, as agent-status aggregates it
@@ -525,7 +525,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
 
     def test_failed_command_pane_leaves_a_shell_not_a_failed_rebuild(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--label", "server", "--window", "shell", "--command", "sleep 120"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--label", "server", "--window", "shell", "--command", "sleep 120"]))
         self.save_pi_transcripts("work")
         self.cm.main(["shutdown", "work"])
         resume = Path(self.cm.Registry.load().entry("work").get("resume_state"))
@@ -542,7 +542,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
 
     def test_rebuild_by_reopen_tag_brings_back_only_that_set(self):
         for name in ("work", "other", "older"):
-            self.cm.main(["spawn", "--harness", "pi", "--id", name, "--cwd", str(self.root)])
+            self.cm.main(chosen(["spawn", "--harness", "pi", "--id", name, "--cwd", str(self.root)]))
             self.save_pi_transcripts(name)
         self.cm.main(["shutdown", "older"])
         self.cm.main(["shutdown", "work", "--tag", "reboot"])
@@ -558,8 +558,8 @@ class MixedTmuxTests(IsolatedTmuxCase):
         self.assertIn("no shut-down entries tagged reboot", err.getvalue())
 
     def test_generic_parent_can_host_recognized_agent(self):
-        self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", "sleep 120"])
-        self.cm.main(["spawn", "--into", "generic", "--harness", "pi", "--label", "agent"])
+        self.cm.main(chosen(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", "sleep 120"]))
+        self.cm.main(chosen(["spawn", "--into", "generic", "--harness", "pi", "--label", "agent"]))
         self.save_pi_transcripts("generic")
         self.cm.main(["shutdown", "generic"])
         self.cm.main(["rebuild", "generic"])
@@ -569,7 +569,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
     def test_identity_and_shutdown_survive_duplicate_native_ids_across_harnesses(self):
         self.cm.mint_id = lambda: SID
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "claude", "--label", "review"]))
         self.cm.main(["identify", "work"])
         self.assertEqual(self.cm.entry_keys(self.cm.Registry.load().entry("work")), [("pi", SID), ("claude", SID)])
         self.save_pi_transcripts("work")
@@ -582,14 +582,14 @@ class MixedTmuxTests(IsolatedTmuxCase):
         anchor = self.cm.pane_rows("anchor")[0]["pane_id"]
         before = len(self.cm.pane_rows())
         with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
-            self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review", "--split", anchor])
+            self.cm.main(chosen(["spawn", "--into", "work", "--harness", "claude", "--label", "review", "--split", anchor]))
         self.assertIn("not in requested session", err.getvalue())
         self.assertEqual(len(self.cm.pane_rows()), before)
 
     def test_launch_settings_fall_back_to_registry_without_pane_options(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review",
-                      "--effort", "high", "--agent-arg=--safe-flag"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "claude", "--label", "review",
+                      "--effort", "high", "--agent-arg=--safe-flag"]))
         pane = self.cm.resolve_target("work-review")["pane_id"]
         for key in ("effort", "agent_args", "label"):
             self.tmux("set-option", "-pu", "-t", pane, f"@amx_{key}")
@@ -601,7 +601,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
         (self.bin / "codex").write_text(f"#!/bin/sh\nprintf '\\033]0;{SID[:29]}...\\007'\nexec sleep 120\n")
         self.cm.codex_ids = lambda cwd, prefix: set()
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--harness", "codex", "--label", "code", "--effort", "low"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "codex", "--label", "code", "--effort", "low"]))
         old = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         self.cm.main(["reg", "worker", "add", "work", old, "harness=codex", "label=code", "custom=keep me"])
         pane = self.cm.resolve_target("work-code")["pane_id"]
@@ -624,7 +624,7 @@ class MixedTmuxTests(IsolatedTmuxCase):
 
     def test_lost_primary_does_not_promote_worker_on_rebuild(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--harness", "claude", "--label", "review"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "claude", "--label", "review"]))
         self.tmux("kill-pane", "-t", self.cm.inspect_panes("work")[0]["pane_id"])
         self.cm.main(["shutdown", "work"])
         self.cm.main(["rebuild", "work"])

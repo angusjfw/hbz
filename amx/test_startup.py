@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from test_amx import load_cm
+from test_amx import chosen, load_cm
 
 
 class StartupTests(unittest.TestCase):
@@ -162,13 +162,13 @@ class IsolatedTmuxCase(unittest.TestCase):
         return r
 
     def spawn(self, *extra):
-        self.cm.main(["spawn", "--harness", "pi", "--id", "work", "--cwd", str(self.root), *extra])
+        self.cm.main(chosen(["spawn", "--harness", "pi", "--id", "work", "--cwd", str(self.root), *extra]))
 
 
 class TmuxStartupTests(IsolatedTmuxCase):
     def test_no_hooks_spawn_and_second_pane(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--label", "second"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--label", "second"]))
         panes = self.cm.inspect_panes("work")
         self.assertEqual(len(panes), 2)
         self.assertTrue(all(p["session_id"] for p in panes))
@@ -194,7 +194,7 @@ class TmuxStartupTests(IsolatedTmuxCase):
         self.spawn()
         self.agent.write_text("#!/bin/sh\nexit 2\n")
         with self.assertRaises(SystemExit) as error:
-            self.cm.main(["spawn", "--into", "work", "--label", "failed"])
+            self.cm.main(chosen(["spawn", "--into", "work", "--label", "failed"]))
         self.assertEqual(error.exception.code, 3)
         self.assertFalse(self.cm.inspect_panes("work")[0]["dead"])
         self.assertTrue(self.cm.inspect_panes("work")[1]["dead"])

@@ -14,7 +14,7 @@ choice. A new session runs the manager's own harness (`amx whoami`'s
 entry's harness. That default is not a preference to weigh against
 history: existing entries, prior lanes and the model aliases another CLI
 offers do not make it that CLI's turn. Model choice never changes the
-harness; if the ranking is unclear, use the harness's default or ask.
+harness; if the ranking is unclear, pass `--model default` and say so.
 Keep the requested container and pane/window placement; ask before
 changing either.
 
@@ -58,14 +58,14 @@ Read this when Claude is the chosen harness, not as a reason to choose it.
 - Models: read `defaultModel`, `defaultThinkingLevel` and
   `enabledModels` from `~/.pi/agent/settings.json` before the first pi
   spawn, regardless of the manager's harness (`pi --list-models <search>`
-  expands a glob). If settings are absent, use the CLI defaults or ask.
+  expands a glob). If settings are absent, use `--model default`.
   The set changes often, so
   there is no fixed table:
   - Most work → the default model.
   - Design, debugging, review → the strongest enabled model.
   - Mechanical, mostly invoking a skill → a small or local model.
-  - If the names don't make the ranking obvious, use `defaultModel` and
-    say so, or ask the user. Don't switch to another harness for a model
+  - If the names don't make the ranking obvious, use `--model default` and
+    say so. Don't switch to another harness for a model
     you recognise.
 - Effort is pi's thinking level (`off`, `minimal`, `low`, `medium`,
   `high`, `xhigh`, `max`), passed as `--effort` to `amx`. Same sizing as

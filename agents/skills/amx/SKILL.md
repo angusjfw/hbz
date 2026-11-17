@@ -247,9 +247,11 @@ running.
    and ambiguity. Model follows capability need, effort follows size.
    Lean powerful: work is usually bigger than its ticket reads, so
    between two sizes take the bigger. Guidelines are in `HARNESSES.md`.
-   If the model choice isn't obvious, use the harness's default model and
-   say so, or ask the user; never change harness to get a model you
-   recognise. The choice never goes in the brief.
+   `amx spawn` refuses an agent without both `--model` and `--effort`, and
+   its refusal lists the choices. Decide yourself; don't ask the user.
+   If the model choice isn't obvious, pass `--model default` (the
+   harness's configured default) and say so; never change harness to get
+   a model you recognise. The choice never goes in the brief.
 7. Spawn:
 
    ```bash

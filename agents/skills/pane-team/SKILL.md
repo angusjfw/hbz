@@ -45,7 +45,7 @@ shut down and resumed:
 
 ```bash
 amx spawn --into "$session" --split "$TMUX_PANE" --label "$name" --cwd "$cwd" \
-  --brief-file "$brief_file" [--harness <h>] [--model <model>] [--window <name>]
+  --brief-file "$brief_file" --model <model> --effort <effort> [--harness <h>] [--window <name>]
 ```
 
 It splits beside your own pane (or opens a window with `--window`). Keep
@@ -55,8 +55,10 @@ That matters most when a worker spawns its own helper, such as a reviewer.
 Put the same flag in any spawn command you write into a worker's brief. It
 prints `pane=`, `name=` and `session_id=`. The printed name
 (`<entry>-<label>`) is the worker's address; keep the `session_id` for
-Finish. `--harness` defaults to the entry's; don't pass another unless the user
-asks. For pi socket messaging, first verify its session-control extension
+Finish. `--model` and `--effort` are required: size them to the worker's
+task, not your own (amx's refusal lists the choices; `default` takes the
+harness's configured default). `--harness` defaults to the entry's; don't
+pass another unless the user asks. For pi socket messaging, first verify its session-control extension
 is available, then add `--agent-arg=--session-control`. Without it, `amx
 msg` types into its pane; plain pi needs no extension to be managed.
 
@@ -77,7 +79,8 @@ when its optional messaging extension is available and needed.
 
 - Split beside your own pane, or use `new-window -d` when the window is full.
   Check the layout first (`tmux list-panes -F '#{pane_id} #{pane_current_command}'`).
-- Add `--model <model>` for a cheaper or stronger worker. Default: yours.
+- Pick `--model` and effort for the worker's task; without them the CLI
+  uses its configured default, not your model.
 - Tell the user the name and pane id.
 
 ## Brief

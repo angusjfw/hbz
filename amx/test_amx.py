@@ -17,6 +17,14 @@ LIVE_STATE = next((p for p in (Path.home() / ".local/state/amx", Path.home() / "
                    if (p / "sessions.md").exists()), Path.home() / ".local/state/amx")
 
 
+def chosen(argv):
+    """Agent spawns must choose model and effort; tests not about that take the defaults."""
+    if "--command" in argv:
+        return argv
+    return argv + [arg for key in ("--model", "--effort") if not any(a == key or a.startswith(key + "=") for a in argv)
+                   for arg in (key, "default")]
+
+
 def load_cm(state_dir, old_state=None):
     os.environ["AMX_STATE_DIR"] = str(state_dir)
     os.environ["AMX_OLD_STATE_DIR"] = str(old_state or Path(state_dir).parent / "no-old-state")

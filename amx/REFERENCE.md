@@ -60,7 +60,9 @@ Entry fields (all optional; unknown fields and prose are kept):
   Present iff the session is alive.
 - `cwd`, `worktree`, `branch`, `ticket`.
 - `model`, `effort`: the spawn choice. For pi, `effort` is the thinking
-  level.
+  level. Agent spawns (including `--into`) refuse without both;
+  `default` leaves that one to the harness's configured default and is
+  not recorded. The refusal lists the harness's choices.
 - `agent_args`: JSON array of explicit extra CLI arguments for the primary
   agent, passed with repeatable `spawn --agent-arg=ARG`. For example,
   `--agent-arg=--session-control` opts into pi's separately installed
@@ -283,7 +285,7 @@ harness adapter functions. Other CLIs can use `command` without an adapter:
 ```bash
 amx spawn --id server --cwd /path/to/project --command 'make dev'
 amx spawn --into task --label logs --command 'tail -f app.log'
-amx spawn --harness codex --id review --cwd /path/to/project
+amx spawn --harness codex --id review --cwd /path/to/project --model default --effort high
 ```
 
 A session can contain any mix of supported agents and generic commands.

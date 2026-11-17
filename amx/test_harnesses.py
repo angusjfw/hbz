@@ -1,5 +1,6 @@
 """Agent adapters and generic commands share tmux lifecycle, not resume semantics."""
 
+import argparse
 import contextlib
 import io
 import json
@@ -11,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from test_amx import load_cm
+from test_amx import chosen, load_cm
 import test_startup
 
 SID = "11111111-2222-3333-4444-555555555555"
@@ -96,8 +97,34 @@ class HarnessTests(unittest.TestCase):
         ]
         for args in invalid:
             with self.subTest(args=args), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
-                self.cm.main(["spawn", "--id", "task", "--cwd", str(self.root), *args])
+                self.cm.main(chosen(["spawn", "--id", "task", "--cwd", str(self.root), *args]))
             self.assertEqual(error.exception.code, 2)
+
+    def test_agent_spawn_must_choose_model_and_effort(self):
+        self.cm.tmux = lambda *args, **kw: self.fail("must refuse before tmux")
+        self.cm.check_memory_budget = lambda force: None
+        for harness, extra, needed in (("claude", [], "--model and --effort"),
+                                       ("pi", ["--model", "default"], "--effort"),
+                                       ("codex", ["--effort", "low"], "--model")):
+            with self.subTest(harness=harness), contextlib.redirect_stderr(io.StringIO()) as err, \
+                    self.assertRaises(SystemExit) as error:
+                self.cm.main(["spawn", "--harness", harness, "--id", "task", "--cwd", str(self.root), *extra])
+            self.assertEqual(error.exception.code, 2)
+            self.assertIn(f"choose {needed} for this {harness} agent", err.getvalue())
+            self.assertIn("`default`", err.getvalue())
+        self.assertIn("opus", "\n".join(self.cm.model_guide("claude")))
+        self.cm.REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+        self.cm.REGISTRY.write_text("# Sessions\n\n## work\nharness: claude\ntmux_session: work\n")
+        self.cm.has_session = lambda name: True
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            self.cm.main(["spawn", "--into", "work", "--label", "api"])
+        self.assertIn("choose --model and --effort for this claude agent", err.getvalue())
+
+    def test_default_model_and_effort_leave_the_harness_choice(self):
+        a = argparse.Namespace(model="default", effort="high")
+        self.cm.choose_model("claude", a)
+        self.assertEqual((a.model, a.effort), (None, "high"))
+        self.assertNotIn("--model", self.cm.launch_line("claude", "sid", a.model, a.effort))
 
     def test_rebuild_rejects_declared_agent_command_without_id(self):
         self.cm.REGISTRY.parent.mkdir(parents=True)
@@ -150,7 +177,7 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
     def test_generic_lifecycle_preserves_shell_semantics(self):
         marker = self.root / "marker with spaces"
         command = f"printf '%s' 'a; $literal' > {shlex.quote(str(marker))}; sleep 60"
-        self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", command])
+        self.cm.main(chosen(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", command]))
         self.assertEqual(marker.read_text(), "a; $literal")
         entry = self.cm.Registry.load().entry("generic")
         self.assertEqual(entry.get("harness"), "command")
@@ -170,8 +197,8 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
 
     def test_generic_restart_uses_launch_cwd_after_command_changes_directory(self):
         (self.root / "child").mkdir()
-        self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root),
-                      "--command", "cd child && exec sleep 60"])
+        self.cm.main(chosen(["spawn", "--id", "generic", "--cwd", str(self.root),
+                      "--command", "cd child && exec sleep 60"]))
         self.assertEqual(self.cm.pane_rows("generic")[0]["cwd"], str(self.root / "child"))
         self.cm.main(["shutdown", "generic"])
         path = self.cm.Registry.load().entry("generic").get("resume_state")
@@ -182,7 +209,7 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
 
     def test_worker_identity_can_be_corrected_without_hooks(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--label", "second"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--label", "second"]))
         pane = self.cm.inspect_panes("work")[1]
         old_id = pane["session_id"]
         self.cm.store_by_pane = lambda _: {pane["pane_id"]: (old_id, "working")}
@@ -200,12 +227,12 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
 
     def test_generic_pane_inside_agent_session(self):
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--label", "server", "--command", "sleep 60"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--label", "server", "--command", "sleep 60"]))
         panes = self.cm.inspect_panes("work")
         self.assertEqual([p["kind"] for p in panes], ["pi", "cmd"])
         self.assertEqual(panes[1]["label"], "server")
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            self.cm.main(["spawn", "--into", "work", "--label", "server", "--command", "sleep 60"])
+            self.cm.main(chosen(["spawn", "--into", "work", "--label", "server", "--command", "sleep 60"]))
         with contextlib.redirect_stdout(io.StringIO()) as output:
             self.cm.main(["reconcile"])
         self.assertNotIn("mixed", output.getvalue())
@@ -217,7 +244,7 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         codex = self.bin / "codex"
         codex.write_text(f"#!/bin/sh\nprintf '\\033]0;{SID}\\007'\nexec sleep 60\n")
         codex.chmod(0o755)
-        self.cm.main(["spawn", "--harness", "codex", "--id", "code", "--cwd", str(self.root)])
+        self.cm.main(chosen(["spawn", "--harness", "codex", "--id", "code", "--cwd", str(self.root)]))
         self.assertEqual(self.cm.Registry.load().entry("code").get("resumed_session_id"), SID)
         self.cm.main(["shutdown", "code"])
         self.cm.main(["rebuild", "code"])
@@ -231,7 +258,7 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         codex.write_text("#!/bin/sh\nexec sleep 60\n")
         codex.chmod(0o755)
         with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
-            self.cm.main(["spawn", "--harness", "codex", "--id", "code", "--cwd", str(self.root)])
+            self.cm.main(chosen(["spawn", "--harness", "codex", "--id", "code", "--cwd", str(self.root)]))
         self.assertIn("session_id=unknown", out.getvalue())
         self.assertIn("not available", err.getvalue())
         self.assertIsNone(self.cm.Registry.load().entry("code").get("resumed_session_id"))
@@ -247,8 +274,8 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         codex = self.bin / "codex"
         codex.write_text(f"#!/bin/sh\ncase \"$TMUX_PANE\" in %1) sid={SID};; *) sid={OTHER};; esac\nprintf '\\033]0;%s\\007' \"$sid\"\nexec sleep 60\n")
         codex.chmod(0o755)
-        self.cm.main(["spawn", "--harness", "codex", "--id", "code", "--cwd", str(self.root)])
-        self.cm.main(["spawn", "--into", "code", "--label", "second"])
+        self.cm.main(chosen(["spawn", "--harness", "codex", "--id", "code", "--cwd", str(self.root)]))
+        self.cm.main(chosen(["spawn", "--into", "code", "--label", "second"]))
         entry = self.cm.Registry.load().entry("code")
         self.assertEqual(entry.get("resumed_session_id"), SID)
         self.assertEqual(self.cm.worker_records(entry),
@@ -258,7 +285,7 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         script = self.bin / "worker"
         script.write_text("#!/bin/sh\nexec sleep 60\n")
         script.chmod(0o755)
-        self.cm.main(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", str(script)])
+        self.cm.main(chosen(["spawn", "--id", "generic", "--cwd", str(self.root), "--command", str(script)]))
         self.cm.main(["shutdown", "generic"])
         recovery = self.cm.Registry.load().entry("generic").get("resume_state")
         before = Path(recovery).read_text()
@@ -277,6 +304,6 @@ class TmuxHarnessTests(test_startup.IsolatedTmuxCase):
         codex.write_text(f"#!/bin/sh\nprintf '\\033]0;{SID}\\007'\nexec sleep 60\n")
         codex.chmod(0o755)
         self.spawn()
-        self.cm.main(["spawn", "--into", "work", "--harness", "codex", "--label", "code"])
+        self.cm.main(chosen(["spawn", "--into", "work", "--harness", "codex", "--label", "code"]))
         self.assertEqual([p["kind"] for p in self.cm.inspect_panes("work")], ["pi", "codex"])
         self.assertEqual(self.cm.worker_records(self.cm.Registry.load().entry("work"))[0]["harness"], "codex")
