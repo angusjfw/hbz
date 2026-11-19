@@ -93,6 +93,10 @@ work happens (cwd, branch), who to report to (your own name) and how (your
 native tool if the worker runs your CLI, else `amx msg <your name>`), and
 anything the worker must not touch.
 
+"What done looks like" is the outcome, not how to check it. Don't tell a
+worker which tests, linters or builds to run unless the user asked for
+them; the worker follows the repo's own rules, and CI runs the full suites.
+
 ## Talk
 
 - Message workers by name with your harness's cross-session messaging tool
