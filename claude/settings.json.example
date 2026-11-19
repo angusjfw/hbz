@@ -3,6 +3,11 @@
     "commit": "",
     "pr": ""
   },
+  "env": {
+    "VITEST_MAX_FORKS": "2",
+    "VITEST_MAX_THREADS": "2",
+    "VITEST_MAX_WORKERS": "2"
+  },
   "hooks": {
     "Notification": [
       {

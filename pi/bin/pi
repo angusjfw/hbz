@@ -2,6 +2,12 @@
 # Run pi on the first node on PATH outside asdf. A project's .tool-versions
 # would otherwise pick pi's Node through the asdf shim, and pi needs 22.19+.
 asdf_dir=${ASDF_DATA_DIR:-$HOME/.asdf}
+# Cap vitest at 2 workers in agent test runs. Its default is one per core,
+# which outgrows this machine's memory on a heavy suite. VITEST_MAX_FORKS and
+# _THREADS are what vitest 3 reads, VITEST_MAX_WORKERS what vitest 5 reads.
+export VITEST_MAX_FORKS=${VITEST_MAX_FORKS:-2}
+export VITEST_MAX_THREADS=${VITEST_MAX_THREADS:-2}
+export VITEST_MAX_WORKERS=${VITEST_MAX_WORKERS:-2}
 set -f
 IFS=:
 for dir in $PATH; do
